@@ -51,6 +51,75 @@
   letter-spacing: 0.05em;
 }
 
+/* Header status area */
+.header-status {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.status-badge {
+  font-size: 0.75rem;
+  padding: 4px 10px;
+  border-radius: 20px;
+  font-weight: 500;
+  animation: fadeIn 0.3s var(--ease-out);
+}
+
+.status-badge.uploading {
+  background: rgba(59, 130, 246, 0.15);
+  color: #60a5fa;
+}
+
+.status-badge.saving {
+  background: rgba(234, 179, 8, 0.12);
+  color: #facc15;
+}
+
+.status-badge.saved {
+  background: rgba(16, 185, 129, 0.12);
+  color: #34d399;
+}
+
+.undo-redo-btns {
+  display: flex;
+  gap: 4px;
+}
+
+.undo-redo-btns button {
+  width: 32px;
+  height: 32px;
+  padding: 0;
+  font-size: 1rem;
+}
+
+.undo-redo-btns button:disabled {
+  opacity: 0.3;
+  cursor: not-allowed;
+}
+
+/* Upload progress bar (top of page) */
+.upload-progress-bar {
+  height: 3px;
+  background: rgba(59, 130, 246, 0.15);
+  overflow: hidden;
+}
+
+.upload-progress-fill {
+  height: 100%;
+  background: linear-gradient(90deg, #3b82f6, #8b5cf6);
+  transition: width 0.3s ease;
+}
+
+/* Restore loading screen */
+.restore-loading {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  min-height: 50vh;
+}
+
 /* ── Main Layout ── */
 .app-main {
   max-width: 1400px;

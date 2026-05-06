@@ -1,11 +1,16 @@
-from flask import Flask, request, jsonify, send_from_directory
+from flask import Flask, request, jsonify, send_from_directory, Response
 from flask_cors import CORS
 import pymysql
 import json
 import os
+import uuid
 import requests
 
+UPLOAD_FOLDER = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'uploads')
+os.makedirs(UPLOAD_FOLDER, exist_ok=True)
+
 app = Flask(__name__, static_folder='../frontend/dist', static_url_path='')
+app.config['MAX_CONTENT_LENGTH'] = 500 * 1024 * 1024  # 500MB
 CORS(app)
 
 # MySQL Configuration
@@ -25,10 +30,11 @@ def get_db():
 
 
 def init_db():
-    """Auto-create table if not exists"""
+    """Auto-create tables if not exists"""
     conn = get_db()
     try:
         with conn.cursor() as cursor:
+            # Legacy table (kept for backward compat)
             cursor.execute('''
                 CREATE TABLE IF NOT EXISTS edit_history (
                     id INT AUTO_INCREMENT PRIMARY KEY,
@@ -41,8 +47,22 @@ def init_db():
                     created_at DATETIME DEFAULT CURRENT_TIMESTAMP
                 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4
             ''')
+
+            # New sessions table
+            cursor.execute('''
+                CREATE TABLE IF NOT EXISTS sessions (
+                    id VARCHAR(36) PRIMARY KEY,
+                    video_filename VARCHAR(512),
+                    video_original_name VARCHAR(255),
+                    scenes JSON,
+                    deleted_ids JSON,
+                    subtitles JSON,
+                    sensitivity FLOAT DEFAULT 2.5,
+                    updated_at DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
+                ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4
+            ''')
         conn.commit()
-        print("✅ Database table 'edit_history' ready.")
+        print("✅ Database tables ready.")
     except Exception as e:
         print(f"❌ Database init error: {e}")
     finally:
@@ -72,7 +92,195 @@ def serve_static(path):
     return send_from_directory(app.static_folder, 'index.html')
 
 
-# ─── History API ───────────────────────────────────────────
+# ─── Video Upload & Serve API ─────────────────────────────
+
+@app.route('/api/video/upload', methods=['POST'])
+def upload_video():
+    if 'file' not in request.files:
+        return jsonify({'error': 'No file part'}), 400
+
+    file = request.files['file']
+    if not file.filename:
+        return jsonify({'error': 'No selected file'}), 400
+
+    # Generate unique filename: uuid_originalname
+    ext = os.path.splitext(file.filename)[1]
+    unique_name = f"{uuid.uuid4().hex[:12]}{ext}"
+    save_path = os.path.join(UPLOAD_FOLDER, unique_name)
+    file.save(save_path)
+
+    file_size = os.path.getsize(save_path)
+    print(f"📁 Video uploaded: {unique_name} ({file_size} bytes)")
+
+    return jsonify({
+        'filename': unique_name,
+        'originalName': file.filename,
+        'size': file_size,
+        'url': f'/api/video/{unique_name}'
+    }), 201
+
+
+@app.route('/api/video/<string:filename>', methods=['GET'])
+def serve_video(filename):
+    """Serve uploaded video file with proper headers"""
+    file_path = os.path.join(UPLOAD_FOLDER, filename)
+    if not os.path.exists(file_path):
+        return jsonify({'error': 'Video not found'}), 404
+    return send_from_directory(UPLOAD_FOLDER, filename)
+
+
+# ─── Session API ──────────────────────────────────────────
+
+@app.route('/api/session/save', methods=['POST'])
+def save_session():
+    data = request.get_json()
+    session_id = data.get('sessionId')
+    if not session_id:
+        return jsonify({'error': 'sessionId is required'}), 400
+
+    conn = get_db()
+    try:
+        with conn.cursor() as cursor:
+            cursor.execute('SELECT id FROM sessions WHERE id = %s', (session_id,))
+            exists = cursor.fetchone()
+
+            if exists:
+                cursor.execute('''
+                    UPDATE sessions SET
+                        video_filename = %s,
+                        video_original_name = %s,
+                        scenes = %s,
+                        deleted_ids = %s,
+                        subtitles = %s,
+                        sensitivity = %s,
+                        updated_at = NOW()
+                    WHERE id = %s
+                ''', (
+                    data.get('videoFilename', ''),
+                    data.get('videoOriginalName', ''),
+                    json.dumps(data.get('scenes', []), ensure_ascii=False),
+                    json.dumps(data.get('deletedIds', []), ensure_ascii=False),
+                    json.dumps(data.get('subtitles', []), ensure_ascii=False),
+                    data.get('sensitivity', 2.5),
+                    session_id
+                ))
+            else:
+                cursor.execute('''
+                    INSERT INTO sessions (id, video_filename, video_original_name, scenes, deleted_ids, subtitles, sensitivity)
+                    VALUES (%s, %s, %s, %s, %s, %s, %s)
+                ''', (
+                    session_id,
+                    data.get('videoFilename', ''),
+                    data.get('videoOriginalName', ''),
+                    json.dumps(data.get('scenes', []), ensure_ascii=False),
+                    json.dumps(data.get('deletedIds', []), ensure_ascii=False),
+                    json.dumps(data.get('subtitles', []), ensure_ascii=False),
+                    data.get('sensitivity', 2.5),
+                ))
+        conn.commit()
+        return jsonify({'sessionId': session_id, 'message': 'Saved'}), 200
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+    finally:
+        conn.close()
+
+
+@app.route('/api/session/latest', methods=['GET'])
+def get_latest_session():
+    conn = get_db()
+    try:
+        with conn.cursor() as cursor:
+            cursor.execute('SELECT * FROM sessions ORDER BY updated_at DESC LIMIT 1')
+            row = cursor.fetchone()
+            if not row:
+                return jsonify(None), 200
+            return jsonify(_parse_session_row(row))
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+    finally:
+        conn.close()
+
+
+@app.route('/api/session/list', methods=['GET'])
+def list_sessions():
+    conn = get_db()
+    try:
+        with conn.cursor() as cursor:
+            cursor.execute('''
+                SELECT id, video_original_name, sensitivity, updated_at
+                FROM sessions ORDER BY updated_at DESC LIMIT 50
+            ''')
+            rows = cursor.fetchall()
+            for row in rows:
+                if row.get('updated_at'):
+                    row['updated_at'] = row['updated_at'].isoformat()
+            return jsonify(rows)
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+    finally:
+        conn.close()
+
+
+@app.route('/api/session/<string:session_id>', methods=['GET'])
+def get_session(session_id):
+    conn = get_db()
+    try:
+        with conn.cursor() as cursor:
+            cursor.execute('SELECT * FROM sessions WHERE id = %s', (session_id,))
+            row = cursor.fetchone()
+            if not row:
+                return jsonify({'error': 'Not found'}), 404
+            return jsonify(_parse_session_row(row))
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+    finally:
+        conn.close()
+
+
+@app.route('/api/session/<string:session_id>', methods=['DELETE'])
+def delete_session(session_id):
+    conn = get_db()
+    try:
+        with conn.cursor() as cursor:
+            # Get video filename before deleting
+            cursor.execute('SELECT video_filename FROM sessions WHERE id = %s', (session_id,))
+            row = cursor.fetchone()
+            video_filename = row.get('video_filename') if row else None
+
+            cursor.execute('DELETE FROM sessions WHERE id = %s', (session_id,))
+
+            # Clean up video file if no other session uses it
+            if video_filename:
+                cursor.execute('SELECT COUNT(*) as cnt FROM sessions WHERE video_filename = %s', (video_filename,))
+                count = cursor.fetchone()['cnt']
+                if count == 0:
+                    video_path = os.path.join(UPLOAD_FOLDER, video_filename)
+                    if os.path.exists(video_path):
+                        os.remove(video_path)
+                        print(f"🗑️ Deleted orphan video: {video_filename}")
+
+        conn.commit()
+        return jsonify({'message': 'Deleted successfully'})
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+    finally:
+        conn.close()
+
+
+def _parse_session_row(row):
+    """Parse JSON fields in a session row"""
+    if row.get('updated_at'):
+        row['updated_at'] = row['updated_at'].isoformat()
+    for field in ('scenes', 'deleted_ids', 'subtitles'):
+        if isinstance(row.get(field), str):
+            try:
+                row[field] = json.loads(row[field])
+            except json.JSONDecodeError:
+                row[field] = []
+    return row
+
+
+# ─── Legacy History API (backward compat) ──────────────────
 
 @app.route('/api/history/save', methods=['POST'])
 def save_history():
@@ -153,6 +361,7 @@ def delete_history(history_id):
         return jsonify({'error': str(e)}), 500
     finally:
         conn.close()
+
 
 # ─── Whishper Proxy API ────────────────────────────────────
 
@@ -235,7 +444,6 @@ def download_translation(job_id, file_name):
         response = requests.get(f"{LLM_SUBTRANS_API_URL}/download/{job_id}/{file_name}", stream=True)
         response.raise_for_status()
         
-        from flask import Response
         return Response(
             response.iter_content(chunk_size=8192),
             content_type=response.headers.get('Content-Type', 'text/plain'),

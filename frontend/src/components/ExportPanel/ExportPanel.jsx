@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useCallback } from 'react';
 import './ExportPanel.css';
 
 function formatFileSize(bytes) {
@@ -35,16 +35,12 @@ export default function ExportPanel({
   exportSize,
   videoName,
   onExport,
-  onSaveSession,
   onLoadHistoryList,
   onLoadSession,
   onDeleteSession,
   historyList,
 }) {
-  const [showSave, setShowSave] = useState(false);
-  const [saveName, setSaveName] = useState('');
   const [showHistory, setShowHistory] = useState(false);
-  const [saveStatus, setSaveStatus] = useState('');
 
   const hasScenes = scenes && scenes.length > 0;
   const hasDeletedScenes = deletedSceneIds && deletedSceneIds.size > 0;
@@ -52,20 +48,6 @@ export default function ExportPanel({
 
   const handleExport = () => {
     if (canExport) onExport();
-  };
-
-  const handleSave = async () => {
-    if (!saveName.trim()) return;
-    setSaveStatus('saving');
-    const result = await onSaveSession(saveName.trim());
-    if (result) {
-      setSaveStatus('saved');
-      setShowSave(false);
-      setSaveName('');
-      setTimeout(() => setSaveStatus(''), 2000);
-    } else {
-      setSaveStatus('error');
-    }
   };
 
   const handleToggleHistory = useCallback(async () => {
@@ -102,15 +84,8 @@ export default function ExportPanel({
         <div className="export-actions">
           <button
             className="btn btn-ghost btn-sm"
-            onClick={() => setShowSave(!showSave)}
-            title="Lưu lịch sử"
-          >
-            💾 Lưu session
-          </button>
-          <button
-            className="btn btn-ghost btn-sm"
             onClick={handleToggleHistory}
-            title="Xem lịch sử"
+            title="Xem lịch sử phiên làm việc"
           >
             📋 Lịch sử
           </button>
@@ -124,29 +99,6 @@ export default function ExportPanel({
           </button>
         </div>
       </div>
-
-      {/* Save dialog */}
-      {showSave && (
-        <div className="save-dialog">
-          <input
-            type="text"
-            className="save-input"
-            placeholder="Tên session (VD: Edit lần 1)"
-            value={saveName}
-            onChange={(e) => setSaveName(e.target.value)}
-            onKeyDown={(e) => e.key === 'Enter' && handleSave()}
-            autoFocus
-          />
-          <button className="btn btn-primary btn-sm" onClick={handleSave} disabled={!saveName.trim()}>
-            {saveStatus === 'saving' ? '...' : 'Lưu'}
-          </button>
-        </div>
-      )}
-      {saveStatus === 'saved' && (
-        <div style={{ fontSize: '0.75rem', color: 'var(--success)', marginTop: '6px' }}>
-          ✅ Đã lưu thành công!
-        </div>
-      )}
 
       {/* Export Progress */}
       {isExporting && (
@@ -176,21 +128,21 @@ export default function ExportPanel({
         </div>
       )}
 
-      {/* History */}
+      {/* History (sessions) */}
       {showHistory && (
         <div className="history-section">
           <div className="history-title">
-            <span>📋 Lịch sử chỉnh sửa</span>
+            <span>📋 Các phiên làm việc</span>
             <button className="btn btn-ghost btn-sm" onClick={onLoadHistoryList}>🔄</button>
           </div>
           {historyList && historyList.length > 0 ? (
             <div className="history-list">
               {historyList.map((item) => (
                 <div key={item.id} className="history-item">
-                  <div onClick={() => onLoadSession(item.id)} style={{ flex: 1 }}>
-                    <div className="history-item-name">{item.name}</div>
+                  <div onClick={() => onLoadSession(item.id)} style={{ flex: 1, cursor: 'pointer' }}>
+                    <div className="history-item-name">{item.video_original_name || 'Untitled'}</div>
                     <div className="history-item-date">
-                      {item.video_name} • {item.created_at ? new Date(item.created_at).toLocaleString('vi-VN') : ''}
+                      {item.updated_at ? new Date(item.updated_at).toLocaleString('vi-VN') : ''}
                     </div>
                   </div>
                   <div className="history-item-actions">
@@ -214,7 +166,7 @@ export default function ExportPanel({
             </div>
           ) : (
             <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)', textAlign: 'center', padding: '16px' }}>
-              Chưa có lịch sử
+              Chưa có phiên nào được lưu
             </div>
           )}
         </div>
