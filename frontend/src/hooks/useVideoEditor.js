@@ -1,8 +1,8 @@
 import { useState, useCallback, useMemo, useRef, useEffect } from 'react';
 import { detectScenes, generateThumbnail } from '../utils/sceneDetection';
 import { exportVideo, isFFmpegReady, getFFmpeg } from '../utils/ffmpegManager';
-import { transcribeVideo } from '../utils/audioExtractor';
-import { translateSubtitles } from '../utils/subtitleUtils';
+import { transcribeVideo, resumeTranscription } from '../utils/audioExtractor';
+import { translateSubtitles, resumeTranslation } from '../utils/subtitleUtils';
 import { useUndoHistory } from './useUndoHistory';
 
 export function useVideoEditor() {
@@ -36,9 +36,11 @@ export function useVideoEditor() {
   const [subtitles, setSubtitles] = useState([]);
   const [isTranscribing, setIsTranscribing] = useState(false);
   const [transcribeProgress, setTranscribeProgress] = useState(null);
+  const [transcriptionJobId, setTranscriptionJobId] = useState(null);
 
   const [isTranslating, setIsTranslating] = useState(false);
   const [translateProgress, setTranslateProgress] = useState(null);
+  const [translationJobId, setTranslationJobId] = useState(null);
 
   // ── Export ──
   const [isExporting, setIsExporting] = useState(false);
@@ -87,7 +89,7 @@ export function useVideoEditor() {
   }), [scenes, deletedSceneIds, subtitles]);
 
   // ── Auto-Save Logic ──
-  const performAutoSave = useCallback(async (scenesData, deletedIdsData, subtitlesData) => {
+  const performAutoSave = useCallback(async (scenesData, deletedIdsData, subtitlesData, transJobId, translJobId) => {
     const sid = sessionIdRef.current;
     if (!sid || !videoFilename) return;
 
@@ -104,6 +106,8 @@ export function useVideoEditor() {
           deletedIds: deletedIdsData,
           subtitles: subtitlesData,
           sensitivity,
+          transcriptionJobId: transJobId,
+          translationJobId: translJobId,
         }),
       });
       setAutoSaveStatus('saved');
@@ -123,13 +127,13 @@ export function useVideoEditor() {
       clearTimeout(autoSaveTimerRef.current);
     }
     autoSaveTimerRef.current = setTimeout(() => {
-      performAutoSave(scenes, Array.from(deletedSceneIds), subtitles);
+      performAutoSave(scenes, Array.from(deletedSceneIds), subtitles, transcriptionJobId, translationJobId);
     }, 2000);
 
     return () => {
       if (autoSaveTimerRef.current) clearTimeout(autoSaveTimerRef.current);
     };
-  }, [scenes, deletedSceneIds, subtitles, sessionId, videoFilename, isRestoring, performAutoSave]);
+  }, [scenes, deletedSceneIds, subtitles, sessionId, videoFilename, isRestoring, performAutoSave, transcriptionJobId, translationJobId]);
 
   // ── Upload Video to Server ──
   const uploadVideo = useCallback(async (file) => {
@@ -219,6 +223,12 @@ export function useVideoEditor() {
     setCurrentTime(0);
     setDetectProgress(0);
     setAutoSaveStatus('');
+    setIsTranscribing(false);
+    setTranscribeProgress(null);
+    setTranscriptionJobId(null);
+    setIsTranslating(false);
+    setTranslateProgress(null);
+    setTranslationJobId(null);
     resetHistory();
   }, [videoUrl, exportUrl, resetHistory]);
 
@@ -323,6 +333,7 @@ export function useVideoEditor() {
   // ── Transcription (with undo) ──
   const startTranscription = useCallback(async () => {
     if (!videoFile) return;
+    const currentSessionId = sessionIdRef.current;
     pushState(getCurrentSnapshot());
     setIsTranscribing(true);
     setTranscribeProgress({ phase: 'Đang tải bộ công cụ...', percent: 0 });
@@ -333,36 +344,68 @@ export function useVideoEditor() {
         ffmpeg,
         videoFile,
         videoDuration,
-        setTranscribeProgress
+        setTranscribeProgress,
+        (jobId) => {
+          if (sessionIdRef.current !== currentSessionId) return;
+          setTranscriptionJobId(jobId);
+          // Force immediate save to DB so F5 doesn't lose it
+          performAutoSave(scenes, Array.from(deletedSceneIds), subtitles, jobId, translationJobId);
+        }
       );
+      if (sessionIdRef.current !== currentSessionId) return;
       setSubtitles(subs);
+      setTranscriptionJobId(null); // Clear on success
+      performAutoSave(scenes, Array.from(deletedSceneIds), subs, null, translationJobId);
     } catch (error) {
+      if (sessionIdRef.current !== currentSessionId) return;
       console.error(error);
       alert('Lỗi tạo phụ đề: ' + error.message);
+      setTranscriptionJobId(null);
     } finally {
-      setIsTranscribing(false);
-      setTranscribeProgress(null);
+      if (sessionIdRef.current === currentSessionId) {
+        setIsTranscribing(false);
+        setTranscribeProgress(null);
+      }
     }
-  }, [videoFile, videoDuration, pushState, getCurrentSnapshot]);
+  }, [videoFile, videoDuration, pushState, getCurrentSnapshot, scenes, deletedSceneIds, subtitles, translationJobId, performAutoSave]);
 
   // ── Translation (with undo) ──
   const startTranslation = useCallback(async (targetLanguage) => {
     if (!subtitles || subtitles.length === 0) return;
+    const currentSessionId = sessionIdRef.current;
     pushState(getCurrentSnapshot());
     setIsTranslating(true);
     setTranslateProgress({ phase: 'Khởi tạo dịch...', percent: 0 });
 
     try {
-      const newSubs = await translateSubtitles(subtitles, targetLanguage, setTranslateProgress);
+      const newSubs = await translateSubtitles(
+        subtitles, 
+        targetLanguage, 
+        setTranslateProgress,
+        (reqId, outName) => {
+          if (sessionIdRef.current !== currentSessionId) return;
+          const jobId = `${reqId}|${outName}`;
+          setTranslationJobId(jobId);
+          // Force immediate save
+          performAutoSave(scenes, Array.from(deletedSceneIds), subtitles, transcriptionJobId, jobId);
+        }
+      );
+      if (sessionIdRef.current !== currentSessionId) return;
       setSubtitles(newSubs);
+      setTranslationJobId(null); // Clear on success
+      performAutoSave(scenes, Array.from(deletedSceneIds), newSubs, transcriptionJobId, null);
     } catch (error) {
+      if (sessionIdRef.current !== currentSessionId) return;
       console.error(error);
       alert('Lỗi dịch phụ đề: ' + error.message);
+      setTranslationJobId(null);
     } finally {
-      setIsTranslating(false);
-      setTranslateProgress(null);
+      if (sessionIdRef.current === currentSessionId) {
+        setIsTranslating(false);
+        setTranslateProgress(null);
+      }
     }
-  }, [subtitles, pushState, getCurrentSnapshot]);
+  }, [subtitles, pushState, getCurrentSnapshot, scenes, deletedSceneIds, transcriptionJobId, performAutoSave]);
 
   // ── Update subtitle (with undo) ──
   const updateSubtitle = useCallback((id, newText) => {
@@ -430,6 +473,54 @@ export function useVideoEditor() {
       if (data.deleted_ids) setDeletedSceneIds(new Set(data.deleted_ids));
       if (data.subtitles) setSubtitles(data.subtitles);
       if (data.sensitivity) setSensitivity(data.sensitivity);
+      
+      if (data.transcription_job_id) {
+        setTranscriptionJobId(data.transcription_job_id);
+        setIsTranscribing(true);
+        resumeTranscription(data.transcription_job_id, setTranscribeProgress)
+          .then(subs => {
+            if (sessionIdRef.current !== data.id) return;
+            setSubtitles(subs);
+            setTranscriptionJobId(null);
+            setIsTranscribing(false);
+            setTranscribeProgress(null);
+            performAutoSave(data.scenes || [], Array.from(new Set(data.deleted_ids || [])), subs, null, data.translation_job_id);
+          })
+          .catch(err => {
+            if (sessionIdRef.current !== data.id) return;
+            console.error('Lỗi resume tạo phụ đề:', err);
+            setTranscriptionJobId(null);
+            setIsTranscribing(false);
+            setTranscribeProgress(null);
+            performAutoSave(data.scenes || [], Array.from(new Set(data.deleted_ids || [])), data.subtitles || [], null, data.translation_job_id);
+          });
+      }
+
+      if (data.translation_job_id) {
+        const [reqId, outName] = data.translation_job_id.split('|');
+        if (reqId && outName) {
+          setTranslationJobId(data.translation_job_id);
+          setIsTranslating(true);
+          resumeTranslation(reqId, outName, setTranslateProgress)
+            .then(subs => {
+              if (sessionIdRef.current !== data.id) return;
+              setSubtitles(subs);
+              setTranslationJobId(null);
+              setIsTranslating(false);
+              setTranslateProgress(null);
+              performAutoSave(data.scenes || [], Array.from(new Set(data.deleted_ids || [])), subs, data.transcription_job_id, null);
+            })
+            .catch(err => {
+              if (sessionIdRef.current !== data.id) return;
+              console.error('Lỗi resume dịch phụ đề:', err);
+              setTranslationJobId(null);
+              setIsTranslating(false);
+              setTranslateProgress(null);
+              performAutoSave(data.scenes || [], Array.from(new Set(data.deleted_ids || [])), data.subtitles || [], data.transcription_job_id, null);
+            });
+        }
+      }
+
       resetHistory();
       return data;
     } catch (error) {

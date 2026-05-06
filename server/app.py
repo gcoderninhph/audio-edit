@@ -58,9 +58,21 @@ def init_db():
                     deleted_ids JSON,
                     subtitles JSON,
                     sensitivity FLOAT DEFAULT 2.5,
-                    updated_at DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
+                    updated_at DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+                    transcription_job_id VARCHAR(255) DEFAULT NULL,
+                    translation_job_id VARCHAR(255) DEFAULT NULL
                 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4
             ''')
+            
+            # Add new columns if table already existed without them
+            try:
+                cursor.execute('ALTER TABLE sessions ADD COLUMN transcription_job_id VARCHAR(255) DEFAULT NULL')
+            except Exception:
+                pass
+            try:
+                cursor.execute('ALTER TABLE sessions ADD COLUMN translation_job_id VARCHAR(255) DEFAULT NULL')
+            except Exception:
+                pass
         conn.commit()
         print("✅ Database tables ready.")
     except Exception as e:
@@ -153,6 +165,8 @@ def save_session():
                         deleted_ids = %s,
                         subtitles = %s,
                         sensitivity = %s,
+                        transcription_job_id = %s,
+                        translation_job_id = %s,
                         updated_at = NOW()
                     WHERE id = %s
                 ''', (
@@ -162,12 +176,14 @@ def save_session():
                     json.dumps(data.get('deletedIds', []), ensure_ascii=False),
                     json.dumps(data.get('subtitles', []), ensure_ascii=False),
                     data.get('sensitivity', 2.5),
+                    data.get('transcriptionJobId'),
+                    data.get('translationJobId'),
                     session_id
                 ))
             else:
                 cursor.execute('''
-                    INSERT INTO sessions (id, video_filename, video_original_name, scenes, deleted_ids, subtitles, sensitivity)
-                    VALUES (%s, %s, %s, %s, %s, %s, %s)
+                    INSERT INTO sessions (id, video_filename, video_original_name, scenes, deleted_ids, subtitles, sensitivity, transcription_job_id, translation_job_id)
+                    VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s)
                 ''', (
                     session_id,
                     data.get('videoFilename', ''),
@@ -176,6 +192,8 @@ def save_session():
                     json.dumps(data.get('deletedIds', []), ensure_ascii=False),
                     json.dumps(data.get('subtitles', []), ensure_ascii=False),
                     data.get('sensitivity', 2.5),
+                    data.get('transcriptionJobId'),
+                    data.get('translationJobId'),
                 ))
         conn.commit()
         return jsonify({'sessionId': session_id, 'message': 'Saved'}), 200
