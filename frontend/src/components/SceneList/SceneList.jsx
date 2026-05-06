@@ -128,25 +128,24 @@ export default function SceneList({
       </div>
 
       <div className="scene-list-scroll">
-        {scenes.map((scene, index) => {
-          const isDeleted = deletedSceneIds.has(scene.id);
+        {keptScenes.map((scene, index) => {
           const isActive = currentScene?.id === scene.id;
           const thumb = thumbnails[scene.id];
 
           return (
             <div
               key={scene.id}
-              className={`scene-card ${isDeleted ? 'deleted' : ''} ${isActive ? 'active' : ''}`}
+              className={`scene-card ${isActive ? 'active' : ''}`}
               style={{ animationDelay: `${index * 0.03}s` }}
               id={`scene-card-${scene.id}`}
             >
               <div className="scene-thumbnail" onClick={() => onSeekToScene(scene)}>
                 {thumb ? (
-                  <img src={thumb} alt={`Scene ${scene.id + 1}`} />
+                  <img src={thumb} alt={`Scene ${index + 1}`} />
                 ) : (
                   <div className="scene-thumbnail-placeholder">🎬</div>
                 )}
-                <div className="scene-number-badge">{scene.id + 1}</div>
+                <div className="scene-number-badge">{index + 1}</div>
               </div>
 
               <div className="scene-info" onClick={() => onSeekToScene(scene)}>
@@ -155,24 +154,23 @@ export default function SceneList({
                 </div>
                 <div className="scene-duration">
                   {scene.duration.toFixed(1)}s
-                  {isDeleted && <span className="badge badge-danger" style={{ marginLeft: '6px' }}>Đã xóa</span>}
                 </div>
               </div>
 
-              <div className="scene-card-actions">
+              <div className="scene-actions">
                 <button
                   className="scene-btn scene-btn-play"
-                  onClick={() => onSeekToScene(scene)}
+                  onClick={(e) => { e.stopPropagation(); onSeekToScene(scene); }}
                   title="Phát cảnh này"
                 >
                   ▶
                 </button>
                 <button
-                  className={`scene-btn ${isDeleted ? 'scene-btn-restore' : 'scene-btn-delete'}`}
-                  onClick={() => onToggleDelete(scene.id)}
-                  title={isDeleted ? 'Khôi phục cảnh' : 'Xóa cảnh'}
+                  className="scene-btn scene-btn-delete"
+                  onClick={(e) => { e.stopPropagation(); onToggleDelete(scene.id); }}
+                  title="Xóa cảnh"
                 >
-                  {isDeleted ? '↩' : '🗑️'}
+                  🗑️
                 </button>
               </div>
             </div>

@@ -146,7 +146,8 @@ function App() {
               onDurationChange={editor.setVideoDuration}
               currentScene={editor.currentScene}
               scenes={editor.scenes}
-              subtitles={editor.subtitles}
+              deletedSceneIds={editor.deletedSceneIds}
+              subtitles={editor.filteredSubtitles}
             />
           </div>
 
@@ -190,7 +191,7 @@ function App() {
 
             <div className="editor-right-panel" style={{ display: activeRightTab === 'subtitles' ? 'flex' : 'none', padding: 0 }}>
               <SubtitlePanel
-                subtitles={editor.subtitles}
+                subtitles={editor.filteredSubtitles}
                 currentTime={editor.currentTime}
                 onUpdateSubtitle={editor.updateSubtitle}
                 onSeekToTime={handleSeek}
@@ -214,7 +215,7 @@ function App() {
                 duration={editor.videoDuration}
                 currentScene={editor.currentScene}
                 onSeek={handleSeek}
-                subtitles={editor.subtitles}
+                subtitles={editor.filteredSubtitles}
               />
             </div>
           )}

@@ -98,59 +98,45 @@ export async function exportVideo(inputFile, keptScenes, onProgress = () => {}) 
     onProgress({ phase: 'cutting', percent: 10 });
 
     if (keptScenes.length === 1) {
-      // Single scene — simple trim
+      // Single scene — re-encode to ensure precise keyframe cut and no stuttering
       const scene = keptScenes[0];
       await ffmpeg.exec([
-        '-i', 'input.mp4',
         '-ss', String(scene.start),
-        '-to', String(scene.end),
-        '-c', 'copy',
+        '-i', 'input.mp4',
+        '-t', String(scene.duration),
+        '-c:v', 'libx264',
+        '-preset', 'ultrafast',
+        '-crf', '28',
+        '-c:a', 'aac',
         '-avoid_negative_ts', '1',
         'output.mp4'
       ]);
       onProgress({ phase: 'cutting', percent: 90 });
     } else {
-      // Multiple scenes — cut each, then concatenate
-      const segmentFiles = [];
+      // Multiple scenes — use filter_complex to cut and concatenate with re-encoding
+      const filterSegments = [];
+      const mapSegments = [];
 
-      for (let i = 0; i < keptScenes.length; i++) {
-        const scene = keptScenes[i];
-        const segName = `seg_${i}.mp4`;
-        
-        await ffmpeg.exec([
-          '-i', 'input.mp4',
-          '-ss', String(scene.start),
-          '-to', String(scene.end),
-          '-c', 'copy',
-          '-avoid_negative_ts', '1',
-          segName
-        ]);
-        
-        segmentFiles.push(segName);
-        
-        const cutProgress = 10 + ((i + 1) / keptScenes.length) * 60;
-        onProgress({ phase: 'cutting', percent: Math.round(cutProgress) });
-      }
+      keptScenes.forEach((scene, i) => {
+        filterSegments.push(`[0:v]trim=start=${scene.start}:end=${scene.end},setpts=PTS-STARTPTS[v${i}]; [0:a]atrim=start=${scene.start}:end=${scene.end},asetpts=PTS-STARTPTS[a${i}]`);
+        mapSegments.push(`[v${i}][a${i}]`);
+      });
 
-      // Create concat list
-      const concatContent = segmentFiles.map(f => `file '${f}'`).join('\n');
-      await ffmpeg.writeFile('list.txt', new TextEncoder().encode(concatContent));
+      const filterComplex = `${filterSegments.join('; ')}; ${mapSegments.join('')}concat=n=${keptScenes.length}:v=1:a=1[outv][outa]`;
+      
+      onProgress({ phase: 'merging', percent: 50 });
 
-      // Concatenate segments
-      onProgress({ phase: 'merging', percent: 75 });
       await ffmpeg.exec([
-        '-f', 'concat',
-        '-safe', '0',
-        '-i', 'list.txt',
-        '-c', 'copy',
+        '-i', 'input.mp4',
+        '-filter_complex', filterComplex,
+        '-map', '[outv]',
+        '-map', '[outa]',
+        '-c:v', 'libx264',
+        '-preset', 'ultrafast',
+        '-crf', '28',
+        '-c:a', 'aac',
         'output.mp4'
       ]);
-
-      // Cleanup segments
-      for (const seg of segmentFiles) {
-        try { await ffmpeg.deleteFile(seg); } catch (e) { /* ignore */ }
-      }
-      try { await ffmpeg.deleteFile('list.txt'); } catch (e) { /* ignore */ }
     }
 
     onProgress({ phase: 'reading', percent: 90 });

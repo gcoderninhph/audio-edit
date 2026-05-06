@@ -1,4 +1,5 @@
-import { useRef, useState, useCallback, useEffect } from 'react';
+import { useRef, useState, useCallback, useEffect, useMemo } from 'react';
+import { getKeptScenes, getKeptDuration, mapRealToKeptTime, mapKeptToRealTime } from '../../utils/timeMapping';
 import './VideoPlayer.css';
 
 function formatTime(seconds) {
@@ -8,12 +9,24 @@ function formatTime(seconds) {
   return `${String(mins).padStart(2, '0')}:${String(secs).padStart(2, '0')}`;
 }
 
-export default function VideoPlayer({ videoUrl, videoRef, onTimeUpdate, onDurationChange, currentScene, scenes, subtitles }) {
+export default function VideoPlayer({ videoUrl, videoRef, onTimeUpdate, onDurationChange, currentScene, scenes, deletedSceneIds, subtitles }) {
   const [isPlaying, setIsPlaying] = useState(false);
   const [duration, setDuration] = useState(0);
-  const [currentTime, setCurrentTime] = useState(0);
+  const [realCurrentTime, setRealCurrentTime] = useState(0);
   const [volume, setVolume] = useState(1);
   const seekBarRef = useRef(null);
+
+  const keptScenes = useMemo(() => {
+    return getKeptScenes(scenes, deletedSceneIds);
+  }, [scenes, deletedSceneIds]);
+
+  const keptDuration = useMemo(() => {
+    return getKeptDuration(keptScenes);
+  }, [keptScenes]);
+
+  const displayedTime = useMemo(() => {
+    return mapRealToKeptTime(realCurrentTime, keptScenes);
+  }, [realCurrentTime, keptScenes]);
 
   const handleLoadedMetadata = () => {
     const dur = videoRef.current?.duration || 0;
@@ -22,8 +35,25 @@ export default function VideoPlayer({ videoUrl, videoRef, onTimeUpdate, onDurati
   };
 
   const handleTimeUpdate = () => {
-    const time = videoRef.current?.currentTime || 0;
-    setCurrentTime(time);
+    let time = videoRef.current?.currentTime || 0;
+    
+    if (scenes && deletedSceneIds && videoRef.current && !videoRef.current.paused) {
+      const activeScene = scenes.find(s => time >= s.start && time < s.end);
+      if (activeScene && deletedSceneIds.has(activeScene.id)) {
+        const nextKeptScene = scenes.find(s => s.start >= activeScene.end && !deletedSceneIds.has(s.id));
+        if (nextKeptScene) {
+          videoRef.current.currentTime = nextKeptScene.start + 0.05; // jump slightly into it
+          time = nextKeptScene.start + 0.05;
+        } else {
+          videoRef.current.pause();
+          setIsPlaying(false);
+          videoRef.current.currentTime = duration;
+          time = duration;
+        }
+      }
+    }
+
+    setRealCurrentTime(time);
     onTimeUpdate?.(time);
   };
 
@@ -39,12 +69,17 @@ export default function VideoPlayer({ videoUrl, videoRef, onTimeUpdate, onDurati
   };
 
   const handleSeek = useCallback((e) => {
-    if (!seekBarRef.current || !videoRef.current) return;
+    if (!seekBarRef.current || !videoRef.current || keptDuration <= 0) return;
     const rect = seekBarRef.current.getBoundingClientRect();
     const x = e.clientX - rect.left;
     const percent = Math.max(0, Math.min(1, x / rect.width));
-    videoRef.current.currentTime = percent * duration;
-  }, [duration, videoRef]);
+    
+    // Convert percent of keptDuration to real time
+    const targetKeptTime = percent * keptDuration;
+    const targetRealTime = mapKeptToRealTime(targetKeptTime, keptScenes);
+    
+    videoRef.current.currentTime = targetRealTime;
+  }, [keptDuration, keptScenes, videoRef]);
 
   const handleVolumeChange = (e) => {
     const v = parseFloat(e.target.value);
@@ -66,11 +101,11 @@ export default function VideoPlayer({ videoUrl, videoRef, onTimeUpdate, onDurati
 
   const handleEnded = () => setIsPlaying(false);
 
-  const progress = duration > 0 ? (currentTime / duration) * 100 : 0;
+  const progress = keptDuration > 0 ? (displayedTime / keptDuration) * 100 : 0;
 
   // Find active subtitle
   const activeSubtitle = subtitles?.find(
-    (sub) => currentTime >= sub.start && currentTime <= sub.end
+    (sub) => realCurrentTime >= sub.start && realCurrentTime <= sub.end
   );
 
   return (
@@ -101,7 +136,7 @@ export default function VideoPlayer({ videoUrl, videoRef, onTimeUpdate, onDurati
           )}
         </button>
 
-        <span className="time-display">{formatTime(currentTime)} / {formatTime(duration)}</span>
+        <span className="time-display">{formatTime(displayedTime)} / {formatTime(keptDuration)}</span>
 
         <div className="seek-bar-container" ref={seekBarRef} onClick={handleSeek}>
           <div className="seek-bar-track">
@@ -135,7 +170,7 @@ export default function VideoPlayer({ videoUrl, videoRef, onTimeUpdate, onDurati
 
       {currentScene && (
         <div className="scene-indicator">
-          Cảnh <span className="current-scene-label">#{currentScene.id + 1}</span>
+          Cảnh <span className="current-scene-label">#{keptScenes.findIndex(s => s.id === currentScene.id) + 1}</span>
           {' '}({formatTime(currentScene.start)} - {formatTime(currentScene.end)})
         </div>
       )}

@@ -57,6 +57,7 @@ export function useVideoEditor() {
   const videoRef = useRef(null);
   const autoSaveTimerRef = useRef(null);
   const sessionIdRef = useRef('');
+  const detectAbortControllerRef = useRef(null);
 
   // ── Undo/Redo ──
   const { pushState, undo: undoAction, redo: redoAction, canUndo, canRedo, resetHistory } = useUndoHistory(30);
@@ -80,6 +81,24 @@ export function useVideoEditor() {
   const currentScene = useMemo(() => {
     return scenes.find(s => currentTime >= s.start && currentTime < s.end) || null;
   }, [scenes, currentTime]);
+
+  const filteredSubtitles = useMemo(() => {
+    if (!subtitles || subtitles.length === 0) return [];
+    
+    // Create a fast lookup for whether a time is in a deleted scene
+    const isDeletedAtTime = (time) => {
+      const scene = scenes.find(s => time >= s.start && time <= s.end);
+      return scene ? deletedSceneIds.has(scene.id) : false;
+    };
+
+    return subtitles.filter(sub => {
+      // If both start and end are inside a deleted scene, filter it out
+      const startDeleted = isDeletedAtTime(sub.start);
+      const endDeleted = isDeletedAtTime(sub.end);
+      // We can also check if the entire subtitle is enclosed in deleted scenes
+      return !(startDeleted && endDeleted);
+    });
+  }, [subtitles, scenes, deletedSceneIds]);
 
   // ── Helper: get current snapshot for undo ──
   const getCurrentSnapshot = useCallback(() => ({
@@ -207,6 +226,15 @@ export function useVideoEditor() {
 
   // ── Close project (go back to dashboard) ──
   const closeProject = useCallback(() => {
+    if (isDetecting) {
+      if (!window.confirm("Quá trình cắt cảnh đang diễn ra sẽ bị hủy. Bạn có chắc chắn muốn thoát?")) {
+        return;
+      }
+      if (detectAbortControllerRef.current) {
+        detectAbortControllerRef.current.abort();
+      }
+    }
+
     if (videoUrl) URL.revokeObjectURL(videoUrl);
     if (exportUrl) URL.revokeObjectURL(exportUrl);
     setVideoFileState(null);
@@ -229,12 +257,14 @@ export function useVideoEditor() {
     setIsTranslating(false);
     setTranslateProgress(null);
     setTranslationJobId(null);
+    setIsDetecting(false);
     resetHistory();
-  }, [videoUrl, exportUrl, resetHistory]);
+  }, [videoUrl, exportUrl, resetHistory, isDetecting]);
 
   // ── Scene Detection ──
   const startDetection = useCallback(async () => {
     if (!videoFile) return;
+    const currentSessionId = sessionIdRef.current;
 
     // Push undo snapshot before detection replaces scenes
     if (scenes.length > 0) {
@@ -247,11 +277,21 @@ export function useVideoEditor() {
     setDeletedSceneIds(new Set());
     setThumbnails({});
 
+    if (detectAbortControllerRef.current) {
+      detectAbortControllerRef.current.abort();
+    }
+    detectAbortControllerRef.current = new AbortController();
+
     try {
       const detectedScenes = await detectScenes(videoFile, {
         sensitivity,
-        onProgress: setDetectProgress,
+        signal: detectAbortControllerRef.current.signal,
+        onProgress: (p) => {
+          if (sessionIdRef.current === currentSessionId) setDetectProgress(p);
+        },
       });
+      if (sessionIdRef.current !== currentSessionId) return;
+      
       setScenes(detectedScenes);
       setIsDetecting(false);
 
@@ -259,10 +299,13 @@ export function useVideoEditor() {
       if (videoUrl) {
         (async () => {
           for (const scene of detectedScenes) {
+            if (sessionIdRef.current !== currentSessionId) break;
             const midTime = scene.start + scene.duration / 2;
             try {
               const thumbUrl = await generateThumbnail(videoUrl, midTime);
-              setThumbnails(prev => ({ ...prev, [scene.id]: thumbUrl }));
+              if (sessionIdRef.current === currentSessionId) {
+                setThumbnails(prev => ({ ...prev, [scene.id]: thumbUrl }));
+              }
             } catch (e) {
               console.warn(`Failed to generate thumbnail for scene ${scene.id}`);
             }
@@ -270,6 +313,12 @@ export function useVideoEditor() {
         })();
       }
     } catch (error) {
+      if (error.message === 'Scene detection aborted') {
+        setIsDetecting(false);
+        setDetectProgress(0);
+        return;
+      }
+      if (sessionIdRef.current !== currentSessionId) return;
       console.error('Scene detection failed:', error);
       alert('Scene detection failed: ' + error.message);
       setIsDetecting(false);
@@ -563,7 +612,7 @@ export function useVideoEditor() {
     // Player
     currentTime, setCurrentTime, seekToScene,
     // Subtitles
-    subtitles, isTranscribing, transcribeProgress, startTranscription,
+    subtitles, filteredSubtitles, isTranscribing, transcribeProgress, startTranscription,
     isTranslating, translateProgress, startTranslation, updateSubtitle,
     // Undo/Redo
     undo: performUndo, redo: performRedo, canUndo, canRedo,

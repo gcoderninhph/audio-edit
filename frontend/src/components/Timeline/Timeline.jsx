@@ -1,4 +1,5 @@
 import { useState, useRef, useCallback, useMemo } from 'react';
+import { getKeptScenes, getKeptDuration, mapRealToKeptTime, mapKeptToRealTime } from '../../utils/timeMapping';
 import './Timeline.css';
 
 const SCENE_COLORS = [
@@ -20,14 +21,23 @@ export default function Timeline({ scenes, deletedSceneIds, currentTime, duratio
   const [tooltipX, setTooltipX] = useState(0);
   const barRef = useRef(null);
 
+  const keptScenes = useMemo(() => {
+    return getKeptScenes(scenes, deletedSceneIds);
+  }, [scenes, deletedSceneIds]);
+
+  const keptDuration = useMemo(() => {
+    return getKeptDuration(keptScenes);
+  }, [keptScenes]);
+
   const handleBarClick = useCallback((e) => {
-    if (!barRef.current || !duration) return;
+    if (!barRef.current || keptDuration <= 0) return;
     const rect = barRef.current.getBoundingClientRect();
     const x = e.clientX - rect.left;
-    const percent = x / rect.width;
-    const time = percent * duration;
-    onSeek?.(time);
-  }, [duration, onSeek]);
+    const percent = Math.max(0, Math.min(1, x / rect.width));
+    const timelineTime = percent * keptDuration;
+    const realTime = mapKeptToRealTime(timelineTime, keptScenes);
+    onSeek?.(realTime);
+  }, [keptDuration, keptScenes, onSeek]);
 
   const handleMouseMove = useCallback((e) => {
     if (!barRef.current) return;
@@ -36,9 +46,10 @@ export default function Timeline({ scenes, deletedSceneIds, currentTime, duratio
   }, []);
 
   const playheadPercent = useMemo(() => {
-    if (!duration) return 0;
-    return (currentTime / duration) * 100;
-  }, [currentTime, duration]);
+    if (keptDuration <= 0) return 0;
+    const tTime = mapRealToKeptTime(currentTime, keptScenes);
+    return (tTime / keptDuration) * 100;
+  }, [currentTime, keptDuration, keptScenes]);
 
   if (!scenes || scenes.length === 0) return null;
 
@@ -57,26 +68,25 @@ export default function Timeline({ scenes, deletedSceneIds, currentTime, duratio
         onMouseMove={handleMouseMove}
       >
         <div className="timeline-bar">
-          {scenes.map((scene) => {
-            const widthPercent = duration > 0 ? (scene.duration / duration) * 100 : 0;
-            const isDeleted = deletedSceneIds.has(scene.id);
+          {keptScenes.map((scene, index) => {
+            const widthPercent = keptDuration > 0 ? (scene.duration / keptDuration) * 100 : 0;
             const isActive = currentScene?.id === scene.id;
-            const color = SCENE_COLORS[scene.id % SCENE_COLORS.length];
+            const color = SCENE_COLORS[index % SCENE_COLORS.length];
 
             return (
               <div
                 key={scene.id}
-                className={`timeline-scene-block ${isDeleted ? 'deleted' : ''} ${isActive ? 'active' : ''}`}
+                className={`timeline-scene-block ${isActive ? 'active' : ''}`}
                 style={{
                   width: `${widthPercent}%`,
                   background: `linear-gradient(135deg, ${color}dd, ${color}88)`,
                 }}
                 onMouseEnter={() => setHoveredScene(scene)}
                 onMouseLeave={() => setHoveredScene(null)}
-                title={`Scene ${scene.id + 1}: ${formatTime(scene.start)} - ${formatTime(scene.end)}`}
+                title={`Scene ${index + 1}: ${formatTime(scene.start)} - ${formatTime(scene.end)}`}
               >
                 {widthPercent > 4 && (
-                  <span className="timeline-scene-label">{scene.id + 1}</span>
+                  <span className="timeline-scene-label">{index + 1}</span>
                 )}
               </div>
             );
@@ -92,9 +102,15 @@ export default function Timeline({ scenes, deletedSceneIds, currentTime, duratio
         {/* Subtitles Track */}
         {subtitles && subtitles.length > 0 && (
           <div className="timeline-subtitles-bar">
-            {subtitles.map((sub, index) => {
-              const widthPercent = duration > 0 ? ((sub.end - sub.start) / duration) * 100 : 0;
-              const leftPercent = duration > 0 ? (sub.start / duration) * 100 : 0;
+            {subtitles.map((sub, idx) => {
+              const tStart = mapRealToKeptTime(sub.start, keptScenes);
+              const tEnd = mapRealToKeptTime(sub.end, keptScenes);
+              const tDuration = tEnd - tStart;
+              
+              if (tDuration <= 0.05) return null; // Hide if entirely inside deleted scene
+
+              const widthPercent = keptDuration > 0 ? (tDuration / keptDuration) * 100 : 0;
+              const leftPercent = keptDuration > 0 ? (tStart / keptDuration) * 100 : 0;
               return (
                 <div
                   key={sub.id || index}
@@ -113,8 +129,7 @@ export default function Timeline({ scenes, deletedSceneIds, currentTime, duratio
         {/* Tooltip */}
         {hoveredScene && (
           <div className="timeline-tooltip" style={{ left: tooltipX }}>
-            Scene {hoveredScene.id + 1} | {formatTime(hoveredScene.start)} - {formatTime(hoveredScene.end)} | {hoveredScene.duration.toFixed(1)}s
-            {deletedSceneIds.has(hoveredScene.id) && ' 🗑️'}
+            Scene {keptScenes.findIndex(s => s.id === hoveredScene.id) + 1} | {formatTime(hoveredScene.start)} - {formatTime(hoveredScene.end)} | {hoveredScene.duration.toFixed(1)}s
           </div>
         )}
       </div>

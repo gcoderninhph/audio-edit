@@ -26,6 +26,7 @@ export async function detectScenes(videoFile, options = {}) {
     stepTime = 0.15,
     minSceneDuration = 0.5,
     onProgress = () => { },
+    signal
   } = options;
 
   return new Promise((resolve, reject) => {
@@ -58,11 +59,43 @@ export async function detectScenes(videoFile, options = {}) {
 
       // Start fast playback
       video.playbackRate = 16.0; // Play at 16x speed (max supported by most modern browsers)
+      
+      let isFinished = false;
+      const finishDetection = () => {
+        if (isFinished) return;
+        isFinished = true;
+        video.pause();
+        if (signal) signal.removeEventListener('abort', abortHandler);
+        onProgress(100);
+        const scenes = analyzeSceneChanges(differences, timestamps, duration, sensitivity, minSceneDuration);
+        URL.revokeObjectURL(video.src);
+        resolve(scenes);
+      };
+
+      const abortHandler = () => {
+        if (isFinished) return;
+        isFinished = true;
+        video.pause();
+        URL.revokeObjectURL(video.src);
+        reject(new Error('Scene detection aborted'));
+      };
+
+      if (signal) {
+        signal.addEventListener('abort', abortHandler);
+        if (signal.aborted) {
+          abortHandler();
+          return;
+        }
+      }
+
+      video.addEventListener('ended', finishDetection);
+
       video.play().catch(e => reject(new Error('Playback failed: ' + e.message)));
 
       // Use modern requestVideoFrameCallback for high-speed sequential decoding
       if ('requestVideoFrameCallback' in video) {
         const processFrame = (now, metadata) => {
+          if (isFinished) return;
           if (video.ended || metadata.mediaTime >= duration - 0.1) {
             finishDetection();
             return;
@@ -110,14 +143,6 @@ export async function detectScenes(videoFile, options = {}) {
         timestamps.push(time);
       }
       previousFrameData = currentFrameData;
-    };
-
-    const finishDetection = () => {
-      video.pause();
-      onProgress(100);
-      const scenes = analyzeSceneChanges(differences, timestamps, duration, sensitivity, minSceneDuration);
-      URL.revokeObjectURL(video.src);
-      resolve(scenes);
     };
 
     video.src = URL.createObjectURL(videoFile);
