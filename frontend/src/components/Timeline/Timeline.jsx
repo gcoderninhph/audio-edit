@@ -1,5 +1,6 @@
 import { useState, useRef, useCallback, useMemo } from 'react';
 import { getKeptScenes, getKeptDuration, mapRealToKeptTime, mapKeptToRealTime } from '../../utils/timeMapping';
+import DeveloperLocator from '../DeveloperLocator/DeveloperLocator';
 import './Timeline.css';
 
 const SCENE_COLORS = [
@@ -57,7 +58,8 @@ export default function Timeline({ scenes, deletedSceneIds, currentTime, current
   if (!scenes || scenes.length === 0) return null;
 
   return (
-    <div className="timeline-container" id="timeline">
+    <div className="timeline-container dev-locator-host" id="timeline">
+      <DeveloperLocator code="panel.timeline.content" title="Timeline Content" />
       <div className="timeline-header">
         <span className="timeline-title">Timeline</span>
         <span className="timeline-title" style={{ opacity: 0.6 }}>

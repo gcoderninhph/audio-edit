@@ -1,4 +1,5 @@
 import { useState, useEffect, useRef, useMemo } from 'react';
+import DeveloperLocator from '../DeveloperLocator/DeveloperLocator';
 import './SubtitlePanel.css';
 
 function formatTime(seconds) {
@@ -77,7 +78,8 @@ export default function SubtitlePanel({
   // ── Transcribing / Translating progress screens ──
   if (isTranscribing) {
     return (
-      <div className="subtitle-panel-container">
+      <div className="subtitle-panel-container dev-locator-host">
+        <DeveloperLocator code="panel.subtitle.transcribing" title="Subtitle Progress Panel" />
         <div className="subtitle-panel-progress">
           <div className="detecting-spinner" style={{ borderTopColor: '#10b981' }} />
           <div className="subtitle-progress-text">{transcribeProgress?.phase || 'Đang tạo phụ đề...'}</div>
@@ -94,7 +96,8 @@ export default function SubtitlePanel({
 
   if (isTranslating) {
     return (
-      <div className="subtitle-panel-container">
+      <div className="subtitle-panel-container dev-locator-host">
+        <DeveloperLocator code="panel.subtitle.translating" title="Translation Progress Panel" />
         <div className="subtitle-panel-progress">
           <div className="detecting-spinner" style={{ borderTopColor: '#3b82f6' }} />
           <div className="subtitle-progress-text">{translateProgress?.phase || 'Đang dịch phụ đề...'}</div>
@@ -165,7 +168,8 @@ export default function SubtitlePanel({
   // ── No subtitles yet ──
   if (!hasSubs) {
     return (
-      <div className="subtitle-panel-container">
+      <div className="subtitle-panel-container dev-locator-host">
+        <DeveloperLocator code="panel.subtitle.empty" title="Subtitle Empty Panel" />
         <div className="subtitle-panel-empty-inner">
           <div className="empty-icon">📝</div>
           <div style={{ fontWeight: 600, marginBottom: '4px' }}>Chưa có phụ đề</div>
@@ -180,7 +184,8 @@ export default function SubtitlePanel({
 
   // ── Has subtitles ──
   return (
-    <div className="subtitle-panel-container">
+    <div className="subtitle-panel-container dev-locator-host">
+      <DeveloperLocator code="panel.subtitle.list" title="Subtitle Panel" />
       <div className="subtitle-panel-header">
         <span className="subtitle-panel-title">Phụ đề ({subtitles.length} câu)</span>
       </div>
@@ -197,8 +202,9 @@ export default function SubtitlePanel({
             <div
               key={sub.id}
               ref={isActive ? activeItemRef : null}
-              className={`subtitle-card ${isActive ? 'active' : ''}`}
+              className={`subtitle-card dev-locator-host ${isActive ? 'active' : ''}`}
             >
+              <DeveloperLocator code={`subtitle.card.${sub.id}`} title="Subtitle Card" />
               <div
                 className="subtitle-card-time"
                 onClick={() => onSeekToTime?.(sub.start)}

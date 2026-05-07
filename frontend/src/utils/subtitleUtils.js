@@ -1,5 +1,36 @@
 import { apiFetch } from './runtimeConfig';
 
+function normalizeTranslationErrorMessage(message, fallbackMessage) {
+  const normalizedMessage = String(message || '').trim();
+  if (!normalizedMessage) {
+    return fallbackMessage;
+  }
+
+  if (/No available managed worker/i.test(normalizedMessage)) {
+    return 'Chưa có worker dịch khả dụng. Hãy tạo hoặc khởi động managed worker trong web admin panel của LLM-Subtrans trước khi gửi job dịch.';
+  }
+
+  return normalizedMessage;
+}
+
+async function readApiErrorMessage(response, fallbackMessage) {
+  const responseText = await response.text().catch(() => '');
+
+  if (!responseText) {
+    return fallbackMessage;
+  }
+
+  try {
+    const payload = JSON.parse(responseText);
+    return normalizeTranslationErrorMessage(
+      payload?.detail?.message || payload?.message || payload?.error,
+      fallbackMessage,
+    );
+  } catch {
+    return normalizeTranslationErrorMessage(responseText, fallbackMessage);
+  }
+}
+
 // Chuyển đổi giây thành định dạng thời gian SRT (HH:MM:SS,mmm)
 function formatSrtTime(seconds) {
   const date = new Date(seconds * 1000);
@@ -79,8 +110,7 @@ export async function translateSubtitles(subtitles, targetLanguage, onProgress, 
     });
 
     if (!startRes.ok) {
-      const errorData = await startRes.json().catch(() => ({}));
-      throw new Error(errorData.detail?.message || 'Lỗi khi khởi tạo quá trình dịch');
+      throw new Error(await readApiErrorMessage(startRes, 'Lỗi khi khởi tạo quá trình dịch'));
     }
 
     const startData = await startRes.json();
@@ -119,7 +149,9 @@ async function pollTranslationJob(requestId, outputFileName, onProgress) {
     if (statusRes.status === 404) {
       throw new Error('Tiến trình không tồn tại (Job Not Found)');
     }
-    if (!statusRes.ok) continue;
+    if (!statusRes.ok) {
+      throw new Error(await readApiErrorMessage(statusRes, 'Không thể kiểm tra trạng thái tiến trình dịch'));
+    }
 
     const statusData = await statusRes.json();
     
@@ -137,7 +169,7 @@ async function pollTranslationJob(requestId, outputFileName, onProgress) {
   const downloadRes = await apiFetch(`/api/translation/download/${requestId}/${outputFileName}`);
   
   if (!downloadRes.ok) {
-    throw new Error('Không thể tải file phụ đề sau khi dịch xong');
+    throw new Error(await readApiErrorMessage(downloadRes, 'Không thể tải file phụ đề sau khi dịch xong'));
   }
 
   const translatedSrtText = await downloadRes.text();

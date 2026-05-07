@@ -1,3 +1,4 @@
+import DeveloperLocator from '../DeveloperLocator/DeveloperLocator';
 import './SceneList.css';
 
 function formatTime(seconds) {
@@ -28,7 +29,8 @@ export default function SceneList({
   // Detection in progress
   if (isDetecting) {
     return (
-      <div className="scene-list-container">
+      <div className="scene-list-container dev-locator-host">
+        <DeveloperLocator code="panel.scene-list.detecting" title="Scene List Detecting State" />
         <div className="detecting-container">
           <div className="detecting-spinner" />
           <div className="detecting-text">Đang phân tích video...</div>
@@ -44,7 +46,8 @@ export default function SceneList({
   // No video loaded yet
   if (!videoFile) {
     return (
-      <div className="scene-list-container">
+      <div className="scene-list-container dev-locator-host">
+        <DeveloperLocator code="panel.scene-list.empty-video" title="Scene List Empty State" />
         <div className="scene-list-empty">
           📹 Hãy upload video để bắt đầu
         </div>
@@ -55,7 +58,8 @@ export default function SceneList({
   // Video loaded but no scenes detected yet
   if (scenes.length === 0) {
     return (
-      <div className="scene-list-container">
+      <div className="scene-list-container dev-locator-host">
+        <DeveloperLocator code="panel.scene-list.setup" title="Scene List Setup State" />
         <div className="detecting-container">
           <div style={{ marginBottom: '16px' }}>
             <label style={{ fontSize: '0.75rem', color: 'var(--text-secondary)', display: 'block', marginBottom: '6px' }}>
@@ -88,7 +92,8 @@ export default function SceneList({
 
   // Scenes detected
   return (
-    <div className="scene-list-container" id="scene-list">
+    <div className="scene-list-container dev-locator-host" id="scene-list">
+      <DeveloperLocator code="panel.scene-list" title="Scene List Panel" />
       <div className="scene-list-header">
         <div>
           <div className="scene-list-title">Danh sách cảnh</div>
@@ -134,10 +139,11 @@ export default function SceneList({
           return (
             <div
               key={scene.id}
-              className={`scene-card ${isActive ? 'active' : ''}`}
+              className={`scene-card dev-locator-host ${isActive ? 'active' : ''}`}
               style={{ animationDelay: `${index * 0.03}s` }}
               id={`scene-card-${scene.id}`}
             >
+              <DeveloperLocator code={`scene.card.${scene.id}`} title="Scene Card" />
               <div className="scene-thumbnail" onClick={() => onSeekToScene(scene)}>
                 {thumb ? (
                   <img src={thumb} alt={`Scene ${index + 1}`} />

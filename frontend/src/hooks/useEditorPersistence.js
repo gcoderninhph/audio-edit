@@ -1,11 +1,13 @@
 import { useState, useCallback, useEffect, useRef } from 'react';
 import { resumeTranscription } from '../utils/audioExtractor';
 import { resumeTranslation } from '../utils/subtitleUtils';
+import { DEFAULT_FRAME_BACKGROUND, DEFAULT_FRAME_PRESET_ID } from '../utils/frameComposer';
 import {
   deleteLocalProject,
   getLocalProject,
+  getLocalProjectVideoReference,
   listLocalProjects,
-  readLocalProjectVideo,
+  releaseVideoUrl,
   saveLocalProject,
   saveLocalProjectVideo,
 } from '../utils/projectStorage';
@@ -15,6 +17,8 @@ export function useEditorPersistence({
   sessionIdRef,
   videoFilename,
   videoName,
+  framePresetId,
+  frameBackground,
   sensitivity,
   scenes,
   deletedSceneIds,
@@ -28,6 +32,8 @@ export function useEditorPersistence({
   setVideoUrl,
   setVideoName,
   setSessionId,
+  setFramePresetId,
+  setFrameBackground,
   setScenes,
   setDeletedSceneIds,
   setSubtitles,
@@ -46,6 +52,19 @@ export function useEditorPersistence({
   const [historyList, setHistoryList] = useState([]);
   const autoSaveTimerRef = useRef(null);
 
+  const waitForMediaRelease = useCallback(() => {
+    return new Promise((resolve) => {
+      if (typeof window === 'undefined' || typeof window.requestAnimationFrame !== 'function') {
+        setTimeout(resolve, 50);
+        return;
+      }
+
+      window.requestAnimationFrame(() => {
+        window.requestAnimationFrame(resolve);
+      });
+    });
+  }, []);
+
   const performAutoSave = useCallback(async (scenesData, deletedIdsData, subtitlesData, transJobId, translJobId) => {
     const sid = sessionIdRef.current;
     if (!sid || !videoFilename) return;
@@ -56,6 +75,8 @@ export function useEditorPersistence({
         sessionId: sid,
         videoFilename,
         videoOriginalName: videoName,
+        framePresetId,
+        frameBackground,
         scenes: scenesData,
         deletedIds: deletedIdsData,
         subtitles: subtitlesData,
@@ -69,7 +90,7 @@ export function useEditorPersistence({
       console.error('Auto-save failed:', error);
       setAutoSaveStatus('');
     }
-  }, [sessionIdRef, videoFilename, videoName, sensitivity]);
+  }, [frameBackground, framePresetId, sessionIdRef, sensitivity, videoFilename, videoName]);
 
   useEffect(() => {
     if (autoSaveTimerRef.current) {
@@ -137,14 +158,11 @@ export function useEditorPersistence({
   const restoreVideoState = useCallback(async (projectId, data) => {
     if (!data.video_filename) return;
 
-    const restoredVideo = await readLocalProjectVideo(projectId);
+    const restoredVideo = await getLocalProjectVideoReference(projectId);
     if (!restoredVideo) return;
 
-    if (videoUrl) {
-      URL.revokeObjectURL(videoUrl);
-    }
-
-    setVideoFileState(restoredVideo.file);
+    releaseVideoUrl(videoUrl);
+    setVideoFileState(restoredVideo.source);
     setVideoUrl(restoredVideo.url);
     setVideoName(data.video_original_name || restoredVideo.name || 'video.mp4');
     setVideoFilename(data.video_filename || restoredVideo.storedFileName);
@@ -253,6 +271,8 @@ export function useEditorPersistence({
       await restoreVideoState(id, data);
 
       setSessionId(data.id);
+      setFramePresetId(data.frame_preset_id || DEFAULT_FRAME_PRESET_ID);
+      setFrameBackground(data.frame_background || DEFAULT_FRAME_BACKGROUND);
       setScenes(data.scenes || []);
       setDeletedSceneIds(new Set(data.deleted_ids || []));
       setSubtitles(data.subtitles || []);
@@ -278,6 +298,8 @@ export function useEditorPersistence({
     resumeSavedTranscription,
     resumeSavedTranslation,
     setDeletedSceneIds,
+    setFrameBackground,
+    setFramePresetId,
     setIsRestoring,
     setScenes,
     setSensitivity,
@@ -287,12 +309,65 @@ export function useEditorPersistence({
 
   const deleteSession = useCallback(async (id) => {
     try {
+      if (id === sessionId) {
+        if (autoSaveTimerRef.current) {
+          clearTimeout(autoSaveTimerRef.current);
+          autoSaveTimerRef.current = null;
+        }
+
+        releaseVideoUrl(videoUrl);
+        setAutoSaveStatus('');
+        setVideoFileState(null);
+        setVideoUrl('');
+        setVideoName('');
+        setVideoFilename('');
+        setSessionId('');
+        setFramePresetId(DEFAULT_FRAME_PRESET_ID);
+        setFrameBackground(DEFAULT_FRAME_BACKGROUND);
+        setScenes([]);
+        setDeletedSceneIds(new Set());
+        setSubtitles([]);
+        setSensitivity(2.5);
+        setIsTranscribing(false);
+        setTranscribeProgress(null);
+        setTranscriptionJobId(null);
+        setIsTranslating(false);
+        setTranslateProgress(null);
+        setTranslationJobId(null);
+        resetHistory();
+
+        await waitForMediaRelease()
+      }
+
       await deleteLocalProject(id);
       await loadHistoryList();
     } catch (error) {
       console.error('Delete session failed:', error);
     }
-  }, [loadHistoryList]);
+  }, [
+    loadHistoryList,
+    resetHistory,
+    sessionId,
+    setDeletedSceneIds,
+    setFrameBackground,
+    setFramePresetId,
+    setIsTranscribing,
+    setIsTranslating,
+    setScenes,
+    setSensitivity,
+    setSessionId,
+    setSubtitles,
+    setTranscribeProgress,
+    setTranscriptionJobId,
+    setTranslateProgress,
+    setTranslationJobId,
+    setVideoFileState,
+    setVideoFilename,
+    setVideoName,
+    setVideoUrl,
+    videoUrl,
+    waitForMediaRelease,
+  ]);
 
   return {
     isUploading,

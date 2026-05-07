@@ -1,5 +1,8 @@
 import { useRef, useState, useCallback, useEffect, useMemo } from 'react';
+import { FRAME_BACKGROUND_OPTIONS, FRAME_PRESETS, getFramePresetById } from '../../utils/frameComposer';
+import { drawFrameComposition } from '../../utils/frameCanvasRenderer';
 import { getKeptScenes, getKeptDuration, mapRealToKeptTime, mapKeptToRealTime } from '../../utils/timeMapping';
+import DeveloperLocator from '../DeveloperLocator/DeveloperLocator';
 import './VideoPlayer.css';
 
 function formatTime(seconds) {
@@ -9,12 +12,28 @@ function formatTime(seconds) {
   return `${String(mins).padStart(2, '0')}:${String(secs).padStart(2, '0')}`;
 }
 
-export default function VideoPlayer({ videoUrl, videoRef, onTimeUpdate, onDurationChange, currentScene, scenes, deletedSceneIds, subtitles }) {
+export default function VideoPlayer({
+  videoUrl,
+  videoRef,
+  onTimeUpdate,
+  onDurationChange,
+  framePresetId,
+  onFramePresetChange,
+  frameBackground,
+  onFrameBackgroundChange,
+  currentScene,
+  scenes,
+  deletedSceneIds,
+  subtitles,
+}) {
   const [isPlaying, setIsPlaying] = useState(false);
   const [duration, setDuration] = useState(0);
   const [realCurrentTime, setRealCurrentTime] = useState(0);
   const [volume, setVolume] = useState(1);
   const seekBarRef = useRef(null);
+  const canvasRef = useRef(null);
+  const animationFrameRef = useRef(null);
+  const framePreset = useMemo(() => getFramePresetById(framePresetId), [framePresetId]);
 
   const keptScenes = useMemo(() => {
     return getKeptScenes(scenes, deletedSceneIds);
@@ -57,7 +76,7 @@ export default function VideoPlayer({ videoUrl, videoRef, onTimeUpdate, onDurati
     onTimeUpdate?.(time);
   };
 
-  const handlePlayPause = () => {
+  const handlePlayPause = useCallback(() => {
     if (!videoRef.current) return;
     if (videoRef.current.paused) {
       videoRef.current.play();
@@ -66,7 +85,7 @@ export default function VideoPlayer({ videoUrl, videoRef, onTimeUpdate, onDurati
       videoRef.current.pause();
       setIsPlaying(false);
     }
-  };
+  }, [videoRef]);
 
   const handleSeek = useCallback((e) => {
     if (!seekBarRef.current || !videoRef.current || keptDuration <= 0) return;
@@ -97,7 +116,21 @@ export default function VideoPlayer({ videoUrl, videoRef, onTimeUpdate, onDurati
     };
     window.addEventListener('keydown', handleKeyPress);
     return () => window.removeEventListener('keydown', handleKeyPress);
-  }, []);
+  }, [handlePlayPause]);
+
+  useEffect(() => {
+    const mediaElement = videoRef.current;
+
+    return () => {
+      if (!mediaElement) {
+        return;
+      }
+
+      mediaElement.pause();
+      mediaElement.removeAttribute('src');
+      mediaElement.load();
+    };
+  }, [videoRef]);
 
   const handleEnded = () => setIsPlaying(false);
 
@@ -108,24 +141,98 @@ export default function VideoPlayer({ videoUrl, videoRef, onTimeUpdate, onDurati
     (sub) => realCurrentTime >= sub.start && realCurrentTime <= sub.end
   );
 
-  return (
-    <div className="video-player-container" id="video-player">
-      <video
-        ref={videoRef}
-        src={videoUrl}
-        onLoadedMetadata={handleLoadedMetadata}
-        onTimeUpdate={handleTimeUpdate}
-        onEnded={handleEnded}
-        onClick={handlePlayPause}
-        playsInline
-      />
+  useEffect(() => {
+    const canvasElement = canvasRef.current
+    const videoElement = videoRef.current
+    if (!canvasElement || !videoElement) {
+      return undefined
+    }
 
-      {/* Subtitle Overlay */}
-      {activeSubtitle && (
-        <div className="subtitle-overlay">
-          {activeSubtitle.text}
+    canvasElement.width = framePreset.width
+    canvasElement.height = framePreset.height
+
+    const context = canvasElement.getContext('2d', { alpha: false })
+    if (!context) {
+      return undefined
+    }
+
+    const renderFrame = () => {
+      drawFrameComposition(context, {
+        framePreset,
+        frameBackground,
+        videoElement,
+        subtitleText: activeSubtitle?.text || '',
+      })
+      animationFrameRef.current = window.requestAnimationFrame(renderFrame)
+    }
+
+    renderFrame()
+
+    return () => {
+      if (animationFrameRef.current) {
+        window.cancelAnimationFrame(animationFrameRef.current)
+      }
+    }
+  }, [activeSubtitle?.text, frameBackground, framePreset, videoRef])
+
+  const frameStageStyle = useMemo(() => ({
+    aspectRatio: `${framePreset.width} / ${framePreset.height}`,
+    backgroundColor: frameBackground,
+    maxWidth: `${Math.round((450 * framePreset.width) / framePreset.height)}px`,
+  }), [frameBackground, framePreset.height, framePreset.width]);
+
+  return (
+    <div className="video-player-container dev-locator-host" id="video-player">
+      <DeveloperLocator code="panel.video-player" title="Video Player" />
+      <div className="video-frame-toolbar dev-locator-host">
+        <DeveloperLocator code="panel.video-player.frame-controls" title="Frame Controls" />
+        <div className="video-frame-toolbar-group">
+          <span className="video-frame-toolbar-label">Khung xuất</span>
+          <div className="video-frame-options">
+            {FRAME_PRESETS.map((preset) => (
+              <button
+                key={preset.id}
+                type="button"
+                className={`frame-option-btn ${preset.id === framePresetId ? 'active' : ''}`}
+                onClick={() => onFramePresetChange?.(preset.id)}
+              >
+                {preset.label}
+              </button>
+            ))}
+          </div>
         </div>
-      )}
+        <div className="video-frame-toolbar-group">
+          <span className="video-frame-toolbar-label">Nền bìa</span>
+          <div className="video-frame-options">
+            {FRAME_BACKGROUND_OPTIONS.map((option) => (
+              <button
+                key={option.value}
+                type="button"
+                className={`frame-color-btn ${option.value === frameBackground ? 'active' : ''}`}
+                onClick={() => onFrameBackgroundChange?.(option.value)}
+                title={option.label}
+                aria-label={option.label}
+                style={{ '--frame-swatch': option.value }}
+              />
+            ))}
+          </div>
+        </div>
+      </div>
+
+      <div className="video-frame-preview">
+        <div className="video-frame-stage" style={frameStageStyle}>
+          <canvas ref={canvasRef} className="video-frame-canvas" onClick={handlePlayPause} />
+          <video
+            ref={videoRef}
+            src={videoUrl}
+            onLoadedMetadata={handleLoadedMetadata}
+            onTimeUpdate={handleTimeUpdate}
+            onEnded={handleEnded}
+            onClick={handlePlayPause}
+            playsInline
+          />
+        </div>
+      </div>
 
       <div className="video-controls">
         <button className="control-btn" onClick={handlePlayPause} id="play-pause-btn" title={isPlaying ? 'Tạm dừng' : 'Phát'}>

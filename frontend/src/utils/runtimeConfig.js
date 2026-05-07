@@ -52,3 +52,8 @@ export function buildServerUrl(pathname = '') {
 export function apiFetch(pathname, options) {
   return fetch(buildServerUrl(pathname), options)
 }
+
+export function isDeveloperMode() {
+  const desktopConfig = getDesktopRuntimeConfig()
+  return desktopConfig?.isDeveloper === true
+}

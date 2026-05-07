@@ -23,6 +23,7 @@ This workspace contains:
 - If requirements, inputs, or acceptance criteria are incomplete, ask targeted follow-up questions before coding.
 - Do not start implementation while critical information is missing.
 - Implement in small, verifiable steps and avoid unrelated refactors.
+- When creating or materially updating visible frontend UI, add developer locator markers for each major visible section, state, or repeatable card using the shared developer-marker pattern, and gate them behind the Electron runtime `isDeveloper` flag so normal users can hide them.
 - Keep every source file under 400 lines whenever practical. If a file is already over 400 lines or the planned change is likely to push it over 400, open or update a dedicated refactor item in `TASK.md`, write a split plan, and perform the split in the same session instead of deferring it.
 - When creating a new file or adding a new responsibility to an existing file, update `MAP.md` in the same session. If `MAP.md` does not exist, create it first and backfill the repository map before concluding the task.
 - When a task changes scope, architecture, or follow-up work, update `TASK.md` in the same session. If `TASK.md` does not exist, create it before concluding the task.

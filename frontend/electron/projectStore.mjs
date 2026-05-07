@@ -1,6 +1,8 @@
 import { app } from 'electron'
 import { copyFile, mkdir, readFile, readdir, rm, stat, writeFile } from 'node:fs/promises'
 import path from 'node:path'
+import { appendDebugLog } from './debugLog.mjs'
+import { DEFAULT_FRAME_BACKGROUND, DEFAULT_FRAME_PRESET_ID } from '../src/utils/frameComposer.js'
 
 const PROJECTS_DIR_NAME = 'projects'
 const PROJECT_METADATA_FILE = 'project.json'
@@ -15,6 +17,10 @@ function getProjectDirectory(projectId) {
 
 function getProjectMetadataPath(projectId) {
   return path.join(getProjectDirectory(projectId), PROJECT_METADATA_FILE)
+}
+
+function buildProjectVideoUrl(projectId) {
+  return `project-media://project/${encodeURIComponent(projectId)}`
 }
 
 function assertProjectId(projectId) {
@@ -54,6 +60,14 @@ function toBuffer(bytes) {
   throw new Error('Unsupported video payload received by the desktop project store.')
 }
 
+function wait(milliseconds) {
+  return new Promise((resolve) => setTimeout(resolve, milliseconds))
+}
+
+function isRetryableDeleteError(error) {
+  return error?.code === 'EBUSY' || error?.code === 'EPERM'
+}
+
 async function ensureProjectDirectory(projectId) {
   const projectDirectory = getProjectDirectory(projectId)
   await mkdir(projectDirectory, { recursive: true })
@@ -89,6 +103,8 @@ function buildProjectRecord(projectId, payload, existingRecord = null) {
     video_original_name: payload.videoOriginalName ?? existingRecord?.video_original_name ?? '',
     video_size: payload.videoSize ?? existingRecord?.video_size ?? 0,
     video_mime_type: payload.videoMimeType ?? existingRecord?.video_mime_type ?? '',
+    frame_preset_id: payload.framePresetId ?? existingRecord?.frame_preset_id ?? DEFAULT_FRAME_PRESET_ID,
+    frame_background: payload.frameBackground ?? existingRecord?.frame_background ?? DEFAULT_FRAME_BACKGROUND,
     scenes: Array.isArray(payload.scenes) ? payload.scenes : existingRecord?.scenes ?? [],
     deleted_ids: Array.isArray(payload.deletedIds) ? payload.deletedIds : existingRecord?.deleted_ids ?? [],
     subtitles: Array.isArray(payload.subtitles) ? payload.subtitles : existingRecord?.subtitles ?? [],
@@ -195,26 +211,103 @@ async function getProject(projectId) {
   return projectRecord
 }
 
-async function readProjectVideo(projectId) {
+export async function resolveProjectVideoPath(projectId) {
   const projectRecord = await getProject(projectId)
   if (!projectRecord.video_filename) {
     return null
   }
 
-  const videoPath = path.join(getProjectDirectory(projectRecord.id), projectRecord.video_filename)
-  const videoBytes = await readFile(videoPath)
+  return path.join(getProjectDirectory(projectRecord.id), projectRecord.video_filename)
+}
+
+async function getProjectVideo(projectId) {
+  const projectRecord = await getProject(projectId)
+  if (!projectRecord.video_filename) {
+    return null
+  }
 
   return {
+    projectId: projectRecord.id,
     fileName: projectRecord.video_original_name || projectRecord.video_filename,
     storedFileName: projectRecord.video_filename,
     mimeType: projectRecord.video_mime_type || 'video/mp4',
-    bytes: new Uint8Array(videoBytes),
+    size: projectRecord.video_size || 0,
+    url: buildProjectVideoUrl(projectRecord.id),
+  }
+}
+
+async function readProjectVideoBytes(projectId) {
+  const projectRecord = await getProject(projectId)
+  const videoPath = await resolveProjectVideoPath(projectId)
+  if (!videoPath) {
+    await appendDebugLog({
+      scope: 'project-store',
+      message: 'Project video bytes requested but no video path was found',
+      data: { projectId: projectRecord.id },
+      level: 'warning',
+    })
+    return null
+  }
+
+  await appendDebugLog({
+    scope: 'project-store',
+    message: 'Start reading stored project video bytes',
+    data: {
+      expectedBytes: projectRecord.video_size || 0,
+      projectId: projectRecord.id,
+      videoPath,
+    },
+  })
+
+  try {
+    const videoBytes = await readFile(videoPath)
+
+    await appendDebugLog({
+      scope: 'project-store',
+      message: 'Finished reading stored project video bytes',
+      data: {
+        actualBytes: videoBytes.byteLength,
+        projectId: projectRecord.id,
+      },
+    })
+
+    return {
+      fileName: projectRecord.video_original_name || projectRecord.video_filename,
+      storedFileName: projectRecord.video_filename,
+      mimeType: projectRecord.video_mime_type || 'video/mp4',
+      bytes: new Uint8Array(videoBytes),
+    }
+  } catch (error) {
+    await appendDebugLog({
+      scope: 'project-store',
+      message: 'Failed reading stored project video bytes',
+      data: {
+        projectId: projectRecord.id,
+        videoPath,
+        error,
+      },
+      level: 'error',
+    })
+    throw error
   }
 }
 
 async function deleteProject(projectId) {
   const normalizedProjectId = assertProjectId(projectId)
-  await rm(getProjectDirectory(normalizedProjectId), { recursive: true, force: true })
+  const projectDirectory = getProjectDirectory(normalizedProjectId)
+
+  for (let attempt = 0; attempt < 5; attempt += 1) {
+    try {
+      await rm(projectDirectory, { recursive: true, force: true })
+      break
+    } catch (error) {
+      if (!isRetryableDeleteError(error) || attempt === 4) {
+        throw error
+      }
+
+      await wait(120 * (attempt + 1))
+    }
+  }
 
   return {
     message: 'Deleted successfully',
@@ -226,6 +319,7 @@ export function registerProjectStoreIpc(ipcMain) {
   ipcMain.handle('projects:save-project', (_event, payload) => saveProject(payload))
   ipcMain.handle('projects:list', () => listProjects())
   ipcMain.handle('projects:get', (_event, projectId) => getProject(projectId))
-  ipcMain.handle('projects:read-video', (_event, projectId) => readProjectVideo(projectId))
+  ipcMain.handle('projects:get-video', (_event, projectId) => getProjectVideo(projectId))
+  ipcMain.handle('projects:read-video-bytes', (_event, projectId) => readProjectVideoBytes(projectId))
   ipcMain.handle('projects:delete', (_event, projectId) => deleteProject(projectId))
 }

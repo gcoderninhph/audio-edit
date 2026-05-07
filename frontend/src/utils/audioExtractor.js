@@ -1,4 +1,5 @@
 import { apiFetch } from './runtimeConfig';
+import { materializeVideoFile } from './projectStorage';
 
 export async function transcribeVideo(ffmpeg, videoFile, duration, onProgress, onJobCreated) {
   try {
@@ -7,7 +8,8 @@ export async function transcribeVideo(ffmpeg, videoFile, duration, onProgress, o
     const inputName = 'input_audio_extract.mp4';
     const outputName = 'extracted_audio.mp3';
 
-    const videoData = await videoFile.arrayBuffer();
+    const sourceVideoFile = await materializeVideoFile(videoFile);
+    const videoData = await sourceVideoFile.arrayBuffer();
     await ffmpeg.writeFile(inputName, new Uint8Array(videoData));
 
     // Trích xuất toàn bộ audio

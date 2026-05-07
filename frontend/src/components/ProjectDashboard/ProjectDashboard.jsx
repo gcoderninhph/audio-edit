@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react';
 import { deleteLocalProject, listLocalProjects } from '../../utils/projectStorage';
+import DeveloperLocator from '../DeveloperLocator/DeveloperLocator';
 import './ProjectDashboard.css';
 
 function formatDate(isoString) {
@@ -62,8 +63,10 @@ export default function ProjectDashboard({ onOpenProject, onNewProject }) {
   };
 
   return (
-    <div className="dashboard">
-      <div className="dashboard-header">
+    <div className="dashboard dev-locator-host">
+      <DeveloperLocator code="dashboard.root" title="Project Dashboard" />
+      <div className="dashboard-header dev-locator-host">
+        <DeveloperLocator code="dashboard.header" title="Dashboard Header Section" />
         <div>
           <h1 className="dashboard-title gradient-text">Dự án của tôi</h1>
           <p className="dashboard-subtitle">Chọn một project để tiếp tục hoặc tạo mới</p>
@@ -91,7 +94,8 @@ export default function ProjectDashboard({ onOpenProject, onNewProject }) {
       ) : (
         <div className="project-grid">
           {/* New project card */}
-          <div className="project-card project-card-new" onClick={handleNewProject}>
+          <div className="project-card project-card-new dev-locator-host" onClick={handleNewProject}>
+            <DeveloperLocator code="dashboard.project.new" title="New Project Card" />
             <div className="project-card-new-icon">+</div>
             <div className="project-card-new-label">Tạo mới</div>
           </div>
@@ -100,9 +104,14 @@ export default function ProjectDashboard({ onOpenProject, onNewProject }) {
           {projects.map((project) => (
             <div
               key={project.id}
-              className="project-card"
+              className="project-card dev-locator-host"
               onClick={() => onOpenProject(project.id)}
             >
+              <DeveloperLocator
+                code={`dashboard.project.${project.id}`}
+                title="Saved Project Card"
+                style={{ right: '42px' }}
+              />
               <div className="project-card-thumb">
                 <div className="project-card-play">▶</div>
               </div>

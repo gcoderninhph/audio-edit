@@ -1,12 +1,14 @@
 import { useState, useCallback, useMemo, useRef, useEffect } from 'react';
 import { detectScenes, generateThumbnail } from '../utils/sceneDetection';
-import { exportVideo, isFFmpegReady, getFFmpeg } from '../utils/ffmpegManager';
+import { getFFmpeg } from '../utils/ffmpegManager';
 import { transcribeVideo } from '../utils/audioExtractor';
 import { translateSubtitles } from '../utils/subtitleUtils';
+import { DEFAULT_FRAME_BACKGROUND, DEFAULT_FRAME_PRESET_ID } from '../utils/frameComposer';
 import { getKeptScenes, getKeptDuration } from '../utils/timeMapping';
 import { filterVisibleSubtitles, getCurrentSceneAtTime } from '../utils/editorSelectors';
 import { useUndoHistory } from './useUndoHistory';
 import { useEditorPersistence } from './useEditorPersistence';
+import { useFrameExport } from './useFrameExport';
 
 export function useVideoEditor() {
   // ── Video State ──
@@ -41,12 +43,6 @@ export function useVideoEditor() {
   const [translateProgress, setTranslateProgress] = useState(null);
   const [translationJobId, setTranslationJobId] = useState(null);
 
-  // ── Export ──
-  const [isExporting, setIsExporting] = useState(false);
-  const [exportProgress, setExportProgress] = useState({ phase: '', percent: 0 });
-  const [exportUrl, setExportUrl] = useState(null);
-  const [exportSize, setExportSize] = useState(0);
-
   // ── Player ──
   const [currentTime, setCurrentTime] = useState(0);
 
@@ -63,24 +59,34 @@ export function useVideoEditor() {
   }, [sessionId]);
 
   // ── Computed ──
-  const keptScenes = useMemo(
-    () => getKeptScenes(scenes, deletedSceneIds),
-    [scenes, deletedSceneIds]
-  );
-
-  const keptDuration = useMemo(
-    () => getKeptDuration(keptScenes),
-    [keptScenes]
-  );
+  const keptScenes = useMemo(() => getKeptScenes(scenes, deletedSceneIds), [scenes, deletedSceneIds]);
+  const keptDuration = useMemo(() => getKeptDuration(keptScenes), [keptScenes]);
 
   const currentScene = useMemo(() => getCurrentSceneAtTime(scenes, currentTime), [scenes, currentTime]);
 
-  const filteredSubtitles = useMemo(
-    () => filterVisibleSubtitles(subtitles, scenes, deletedSceneIds),
-    [subtitles, scenes, deletedSceneIds]
-  );
+  const filteredSubtitles = useMemo(() => filterVisibleSubtitles(subtitles, scenes, deletedSceneIds), [subtitles, scenes, deletedSceneIds]);
 
-  // ── Helper: get current snapshot for undo ──
+  const {
+    framePresetId,
+    setFramePresetId,
+    frameBackground,
+    setFrameBackground,
+    framePreset,
+    frameSummary,
+    frameBackgroundLabel,
+    isExporting,
+    exportProgress,
+    exportUrl,
+    exportSize,
+    isFFmpegLoaded,
+    startExport,
+    clearExportResult,
+  } = useFrameExport({
+    videoFile,
+    keptScenes,
+    filteredSubtitles,
+  });
+
   const getCurrentSnapshot = useCallback(() => ({
     scenes,
     deletedIds: Array.from(deletedSceneIds),
@@ -104,6 +110,8 @@ export function useVideoEditor() {
     sessionIdRef,
     videoFilename,
     videoName,
+    framePresetId,
+    frameBackground,
     sensitivity,
     scenes,
     deletedSceneIds,
@@ -117,6 +125,8 @@ export function useVideoEditor() {
     setVideoUrl,
     setVideoName,
     setSessionId,
+    setFramePresetId,
+    setFrameBackground,
     setScenes,
     setDeletedSceneIds,
     setSubtitles,
@@ -129,10 +139,9 @@ export function useVideoEditor() {
     setTranslationJobId,
   });
 
-  // ── Set Video File (user picks new file) ──
   const setVideoFile = useCallback(async (file) => {
     if (videoUrl) URL.revokeObjectURL(videoUrl);
-    if (exportUrl) URL.revokeObjectURL(exportUrl);
+    clearExportResult();
 
     const url = URL.createObjectURL(file);
     const newSessionId = crypto.randomUUID?.() || `${Date.now()}-${Math.random().toString(36).slice(2)}`;
@@ -141,11 +150,11 @@ export function useVideoEditor() {
     setVideoUrl(url);
     setVideoName(file.name);
     setSessionId(newSessionId);
+    setFramePresetId(DEFAULT_FRAME_PRESET_ID);
+    setFrameBackground(DEFAULT_FRAME_BACKGROUND);
     setScenes([]);
     setDeletedSceneIds(new Set());
     setThumbnails({});
-    setExportUrl(null);
-    setExportSize(0);
     setCurrentTime(0);
     setDetectProgress(0);
     setSubtitles([]);
@@ -153,9 +162,8 @@ export function useVideoEditor() {
 
     // Persist the selected source video into the desktop project store in background.
     uploadVideo(newSessionId, file);
-  }, [videoUrl, exportUrl, uploadVideo, resetHistory]);
+  }, [clearExportResult, resetHistory, setFrameBackground, setFramePresetId, uploadVideo, videoUrl]);
 
-  // ── Close project (go back to dashboard) ──
   const closeProject = useCallback(() => {
     if (isDetecting) {
       if (!window.confirm("Quá trình cắt cảnh đang diễn ra sẽ bị hủy. Bạn có chắc chắn muốn thoát?")) {
@@ -167,18 +175,18 @@ export function useVideoEditor() {
     }
 
     if (videoUrl) URL.revokeObjectURL(videoUrl);
-    if (exportUrl) URL.revokeObjectURL(exportUrl);
+    clearExportResult();
     setVideoFileState(null);
     setVideoUrl(null);
     setVideoName('');
     setVideoFilename('');
     setSessionId('');
+    setFramePresetId(DEFAULT_FRAME_PRESET_ID);
+    setFrameBackground(DEFAULT_FRAME_BACKGROUND);
     setScenes([]);
     setDeletedSceneIds(new Set());
     setThumbnails({});
     setSubtitles([]);
-    setExportUrl(null);
-    setExportSize(0);
     setCurrentTime(0);
     setDetectProgress(0);
     setAutoSaveStatus('');
@@ -190,9 +198,8 @@ export function useVideoEditor() {
     setTranslationJobId(null);
     setIsDetecting(false);
     resetHistory();
-  }, [videoUrl, exportUrl, resetHistory, isDetecting, setAutoSaveStatus]);
+  }, [clearExportResult, isDetecting, resetHistory, setAutoSaveStatus, setFrameBackground, setFramePresetId, videoUrl]);
 
-  // ── Scene Detection ──
   const startDetection = useCallback(async () => {
     if (!videoFile) return;
     const currentSessionId = sessionIdRef.current;
@@ -256,7 +263,6 @@ export function useVideoEditor() {
     }
   }, [videoFile, videoUrl, sensitivity, scenes, pushState, getCurrentSnapshot]);
 
-  // ── Scene Management (with undo) ──
   const toggleDeleteScene = useCallback((sceneId) => {
     pushState(getCurrentSnapshot());
     setDeletedSceneIds(prev => {
@@ -268,40 +274,20 @@ export function useVideoEditor() {
       }
       return next;
     });
-    setExportUrl(null);
-  }, [pushState, getCurrentSnapshot]);
+    clearExportResult();
+  }, [clearExportResult, pushState, getCurrentSnapshot]);
 
   const restoreAllScenes = useCallback(() => {
     pushState(getCurrentSnapshot());
     setDeletedSceneIds(new Set());
-    setExportUrl(null);
-  }, [pushState, getCurrentSnapshot]);
+    clearExportResult();
+  }, [clearExportResult, pushState, getCurrentSnapshot]);
 
   const deleteAllScenes = useCallback(() => {
     pushState(getCurrentSnapshot());
     setDeletedSceneIds(new Set(scenes.map(s => s.id)));
-    setExportUrl(null);
-  }, [scenes, pushState, getCurrentSnapshot]);
-
-  // ── Export ──
-  const startExport = useCallback(async () => {
-    if (!videoFile || keptScenes.length === 0) return;
-
-    setIsExporting(true);
-    setExportUrl(null);
-    setExportSize(0);
-
-    try {
-      const result = await exportVideo(videoFile, keptScenes, setExportProgress);
-      setExportUrl(result.url);
-      setExportSize(result.size);
-    } catch (error) {
-      console.error('Export failed:', error);
-      alert('Export failed: ' + error.message);
-    } finally {
-      setIsExporting(false);
-    }
-  }, [videoFile, keptScenes]);
+    clearExportResult();
+  }, [clearExportResult, scenes, pushState, getCurrentSnapshot]);
 
   const seekToScene = useCallback((scene) => {
     if (videoRef.current) {
@@ -310,7 +296,6 @@ export function useVideoEditor() {
     setCurrentTime(scene.start);
   }, []);
 
-  // ── Transcription (with undo) ──
   const startTranscription = useCallback(async () => {
     if (!videoFile) return;
     const currentSessionId = sessionIdRef.current;
@@ -349,7 +334,6 @@ export function useVideoEditor() {
     }
   }, [videoFile, videoDuration, pushState, getCurrentSnapshot, scenes, deletedSceneIds, subtitles, translationJobId, performAutoSave]);
 
-  // ── Translation (with undo) ──
   const startTranslation = useCallback(async (targetLanguage) => {
     if (!subtitles || subtitles.length === 0) return;
     const currentSessionId = sessionIdRef.current;
@@ -387,7 +371,6 @@ export function useVideoEditor() {
     }
   }, [subtitles, pushState, getCurrentSnapshot, scenes, deletedSceneIds, transcriptionJobId, performAutoSave]);
 
-  // ── Update subtitle (with undo) ──
   const updateSubtitle = useCallback((id, newText) => {
     pushState(getCurrentSnapshot());
     setSubtitles(prev => prev.map(sub =>
@@ -395,7 +378,6 @@ export function useVideoEditor() {
     ));
   }, [pushState, getCurrentSnapshot]);
 
-  // ── Undo / Redo ──
   const performUndo = useCallback(() => {
     const snapshot = undoAction(getCurrentSnapshot());
     if (!snapshot) return;
@@ -430,8 +412,10 @@ export function useVideoEditor() {
     thumbnails,
     // Export
     isExporting, exportProgress, exportUrl, exportSize,
-    isFFmpegLoaded: isFFmpegReady,
+    isFFmpegLoaded,
     startExport,
+    framePresetId, setFramePresetId, frameBackground, setFrameBackground,
+    framePreset, frameSummary, frameBackgroundLabel,
     // Player
     currentTime, setCurrentTime, seekToScene,
     // Subtitles

@@ -7,6 +7,7 @@ import Timeline from './components/Timeline/Timeline';
 import SceneList from './components/SceneList/SceneList';
 import SubtitlePanel from './components/SubtitlePanel/SubtitlePanel';
 import ExportPanel from './components/ExportPanel/ExportPanel';
+import DeveloperLocator from './components/DeveloperLocator/DeveloperLocator';
 
 function App() {
   const editor = useVideoEditor();
@@ -79,6 +80,7 @@ function App() {
     <div className="app">
       {/* Header with status */}
       <header className="app-header">
+        <DeveloperLocator code="header.editor" title="Editor Header" />
         <div className="app-logo">
           <div className="app-logo-icon">🎬</div>
           <span className="app-logo-text gradient-text">VideoForge</span>
@@ -135,7 +137,8 @@ function App() {
         <div className="editor-view">
           {/* Left: Video Player */}
           <div className="editor-left">
-            <div className="change-video-area">
+            <div className="change-video-area dev-locator-host">
+              <DeveloperLocator code="editor.video.current-source" title="Current Video Source" />
               <span className="current-video-name">
                 📹 <strong>{editor.videoName}</strong>
               </span>
@@ -145,6 +148,10 @@ function App() {
               videoRef={editor.videoRef}
               onTimeUpdate={editor.setCurrentTime}
               onDurationChange={editor.setVideoDuration}
+              framePresetId={editor.framePresetId}
+              onFramePresetChange={editor.setFramePresetId}
+              frameBackground={editor.frameBackground}
+              onFrameBackgroundChange={editor.setFrameBackground}
               currentScene={editor.currentScene}
               scenes={editor.scenes}
               deletedSceneIds={editor.deletedSceneIds}
@@ -154,7 +161,8 @@ function App() {
 
           {/* Right: Panels */}
           <div className="editor-right">
-            <div className="editor-right-tabs">
+            <div className="editor-right-tabs dev-locator-host">
+              <DeveloperLocator code="editor.tabs.right" title="Editor Right Tabs" />
               <button
                 className={`editor-tab ${activeRightTab === 'scenes' ? 'active' : ''}`}
                 onClick={() => setActiveRightTab('scenes')}
@@ -208,7 +216,8 @@ function App() {
 
           {/* Timeline (full width) */}
           {hasScenes && (
-            <div className="editor-timeline">
+            <div className="editor-timeline dev-locator-host">
+              <DeveloperLocator code="panel.timeline" title="Timeline Panel Wrapper" />
               <Timeline
                 scenes={editor.scenes}
                 deletedSceneIds={editor.deletedSceneIds}
@@ -223,7 +232,8 @@ function App() {
 
           {/* Export Panel (full width) */}
           {hasScenes && (
-            <div className="editor-export">
+            <div className="editor-export dev-locator-host">
+              <DeveloperLocator code="panel.export" title="Export Panel Wrapper" />
               <ExportPanel
                 scenes={editor.scenes}
                 keptScenes={editor.keptScenes}
@@ -234,6 +244,8 @@ function App() {
                 exportUrl={editor.exportUrl}
                 exportSize={editor.exportSize}
                 videoName={editor.videoName}
+                frameSummary={editor.frameSummary}
+                frameBackgroundLabel={editor.frameBackgroundLabel}
                 onExport={editor.startExport}
                 onLoadHistoryList={editor.loadHistoryList}
                 onLoadSession={editor.loadSession}
@@ -251,7 +263,8 @@ function App() {
 // ── Shared Header Component ──
 function Header() {
   return (
-    <header className="app-header">
+    <header className="app-header dev-locator-host">
+      <DeveloperLocator code="header.dashboard" title="Dashboard Header" />
       <div className="app-logo">
         <div className="app-logo-icon">🎬</div>
         <span className="app-logo-text gradient-text">VideoForge</span>

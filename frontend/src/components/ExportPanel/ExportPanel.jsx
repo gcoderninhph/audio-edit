@@ -1,4 +1,5 @@
 import { useState, useCallback } from 'react';
+import DeveloperLocator from '../DeveloperLocator/DeveloperLocator';
 import './ExportPanel.css';
 
 function formatFileSize(bytes) {
@@ -15,13 +16,20 @@ function formatTime(seconds) {
   return `${String(mins).padStart(2, '0')}:${String(secs).padStart(2, '0')}`;
 }
 
+function formatElapsedTime(milliseconds) {
+  if (!milliseconds || milliseconds <= 0) return '00:00';
+  return formatTime(milliseconds / 1000);
+}
+
 const PHASE_LABELS = {
   loading: '⏳ Đang tải engine xử lý video...',
   preparing: '📦 Đang chuẩn bị file...',
   cutting: '✂️ Đang cắt cảnh...',
   merging: '🔗 Đang ghép video...',
+  framing: '🖼️ Đang dựng frame và phụ đề...',
   reading: '📖 Đang đọc kết quả...',
   done: '✅ Hoàn thành!',
+  error: '❌ Export lỗi',
 };
 
 export default function ExportPanel({
@@ -34,6 +42,8 @@ export default function ExportPanel({
   exportUrl,
   exportSize,
   videoName,
+  frameSummary,
+  frameBackgroundLabel,
   onExport,
   onLoadHistoryList,
   onLoadSession,
@@ -70,7 +80,8 @@ export default function ExportPanel({
   if (!hasScenes) return null;
 
   return (
-    <div className="export-panel" id="export-panel">
+    <div className="export-panel dev-locator-host" id="export-panel">
+      <DeveloperLocator code="panel.export.content" title="Export Panel" />
       <div className="export-panel-header">
         <div>
           <div className="export-panel-title">Export Video</div>
@@ -80,6 +91,9 @@ export default function ExportPanel({
               {hasDeletedScenes && ` • ${deletedSceneIds.size} cảnh bị xóa`}
             </div>
           )}
+          <div className="export-frame-info">
+            Khung xuất: <strong>{frameSummary}</strong> • Nền bìa: <strong>{frameBackgroundLabel}</strong>
+          </div>
         </div>
         <div className="export-actions">
           <button
@@ -106,8 +120,36 @@ export default function ExportPanel({
           <div className="export-progress-phase">
             {PHASE_LABELS[exportProgress.phase] || exportProgress.phase}
           </div>
+          <div className="export-progress-meta">
+            <span><strong>{Math.round(exportProgress.percent || 0)}%</strong> tổng</span>
+            <span>{Math.round(exportProgress.stagePercent || 0)}% stage</span>
+            <span>{formatElapsedTime(exportProgress.elapsedMs)}</span>
+            {exportProgress.ffmpegTimeMicroseconds > 0 && (
+              <span>FFmpeg {formatElapsedTime(exportProgress.ffmpegTimeMicroseconds / 1000)}</span>
+            )}
+          </div>
+          {exportProgress.detail && (
+            <div className="export-progress-detail">{exportProgress.detail}</div>
+          )}
           <div className="progress-bar">
             <div className="progress-bar-fill" style={{ width: `${exportProgress.percent}%` }} />
+          </div>
+        </div>
+      )}
+
+      {exportProgress.logs?.length > 0 && (
+        <div className="export-log-panel">
+          <div className="export-log-header">
+            <span>Log export</span>
+            <span>{exportProgress.sceneCount || 0} cảnh • {exportProgress.subtitleCount || 0} subtitle</span>
+          </div>
+          <div className="export-log-list">
+            {exportProgress.logs.map((log, index) => (
+              <div key={`${log.timestamp}-${index}`} className={`export-log-entry ${log.level || 'info'}`}>
+                <span className="export-log-phase">[{log.phase || 'log'}]</span>
+                <span className="export-log-message">{log.message}</span>
+              </div>
+            ))}
           </div>
         </div>
       )}
@@ -138,7 +180,8 @@ export default function ExportPanel({
           {historyList && historyList.length > 0 ? (
             <div className="history-list">
               {historyList.map((item) => (
-                <div key={item.id} className="history-item">
+                <div key={item.id} className="history-item dev-locator-host">
+                  <DeveloperLocator code={`history.item.${item.id}`} title="History Item" />
                   <div onClick={() => onLoadSession(item.id)} style={{ flex: 1, cursor: 'pointer' }}>
                     <div className="history-item-name">{item.video_original_name || 'Untitled'}</div>
                     <div className="history-item-date">

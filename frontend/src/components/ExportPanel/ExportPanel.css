@@ -26,6 +26,16 @@
   color: var(--text-secondary);
 }
 
+.export-frame-info {
+  margin-top: 4px;
+  font-size: 0.72rem;
+  color: var(--text-muted);
+}
+
+.export-frame-info strong {
+  color: var(--text-secondary);
+}
+
 .export-actions {
   display: flex;
   gap: 8px;
@@ -59,6 +69,81 @@
 
 .export-progress-phase strong {
   color: #a78bfa;
+}
+
+.export-progress-meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin-bottom: 8px;
+  font-size: 0.72rem;
+  color: var(--text-muted);
+}
+
+.export-progress-meta strong {
+  color: var(--text-primary);
+}
+
+.export-progress-detail {
+  font-size: 0.75rem;
+  color: var(--text-secondary);
+  margin-bottom: 10px;
+}
+
+.export-log-panel {
+  margin-top: 16px;
+  padding: 12px;
+  border-radius: var(--radius-md);
+  background: var(--bg-secondary);
+  border: 1px solid var(--border-color);
+}
+
+.export-log-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  margin-bottom: 10px;
+  font-size: 0.72rem;
+  color: var(--text-secondary);
+}
+
+.export-log-list {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  max-height: 200px;
+  overflow-y: auto;
+  font-size: 0.7rem;
+}
+
+.export-log-entry {
+  display: flex;
+  gap: 8px;
+  align-items: flex-start;
+  padding: 6px 8px;
+  border-radius: var(--radius-sm);
+  background: rgba(255, 255, 255, 0.03);
+}
+
+.export-log-entry.warning {
+  background: rgba(234, 179, 8, 0.08);
+}
+
+.export-log-entry.error {
+  background: rgba(239, 68, 68, 0.12);
+}
+
+.export-log-phase {
+  color: #93c5fd;
+  font-weight: 700;
+  flex-shrink: 0;
+}
+
+.export-log-message {
+  color: var(--text-secondary);
+  white-space: pre-wrap;
+  word-break: break-word;
 }
 
 /* Download result */

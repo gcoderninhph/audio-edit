@@ -7,6 +7,17 @@ function getProjectStore() {
   return projectStore
 }
 
+function buildStoredVideoSource(videoRecord) {
+  return {
+    kind: 'stored-project-video',
+    projectId: videoRecord.projectId,
+    name: videoRecord.fileName || videoRecord.storedFileName || 'video.mp4',
+    type: videoRecord.mimeType || 'video/mp4',
+    size: videoRecord.size || 0,
+    url: videoRecord.url,
+  }
+}
+
 function normalizeBinaryPayload(bytes) {
   if (!bytes) {
     return new Uint8Array()
@@ -58,8 +69,23 @@ export function getLocalProject(projectId) {
   return getProjectStore().getProject(projectId)
 }
 
-export async function readLocalProjectVideo(projectId) {
-  const videoRecord = await getProjectStore().readProjectVideo(projectId)
+export async function getLocalProjectVideoReference(projectId) {
+  const videoRecord = await getProjectStore().getProjectVideo(projectId)
+  if (!videoRecord) {
+    return null
+  }
+
+  return {
+    name: videoRecord.fileName || videoRecord.storedFileName || 'video.mp4',
+    storedFileName: videoRecord.storedFileName || '',
+    mimeType: videoRecord.mimeType || 'video/mp4',
+    url: videoRecord.url,
+    source: buildStoredVideoSource(videoRecord),
+  }
+}
+
+async function materializeLocalProjectVideo(projectId) {
+  const videoRecord = await getProjectStore().readProjectVideoBytes(projectId)
   if (!videoRecord) {
     return null
   }
@@ -75,6 +101,94 @@ export async function readLocalProjectVideo(projectId) {
     name: file.name,
     storedFileName: videoRecord.storedFileName || '',
     url: URL.createObjectURL(blob),
+  }
+}
+
+export async function materializeVideoFile(videoSource) {
+  if (videoSource instanceof File) {
+    return videoSource
+  }
+
+  if (videoSource instanceof Blob) {
+    return new File([videoSource], 'video.mp4', {
+      type: videoSource.type || 'video/mp4',
+    })
+  }
+
+  if (videoSource?.kind === 'stored-project-video') {
+    const restoredVideo = await materializeLocalProjectVideo(videoSource.projectId)
+    return restoredVideo?.file || null
+  }
+
+  throw new Error('Unsupported video source.')
+}
+
+export async function buildDesktopExportSourceDescriptor(videoSource) {
+  if (!videoSource) {
+    throw new Error('Missing video source for desktop export.')
+  }
+
+  if (videoSource?.kind === 'stored-project-video') {
+    return {
+      kind: 'stored-project-video',
+      projectId: videoSource.projectId,
+      fileName: videoSource.name || 'video.mp4',
+      mimeType: videoSource.type || 'video/mp4',
+    }
+  }
+
+  if (videoSource instanceof File) {
+    if (typeof videoSource.path === 'string' && videoSource.path) {
+      return {
+        kind: 'file-path',
+        sourcePath: videoSource.path,
+        fileName: videoSource.name || 'video.mp4',
+        mimeType: videoSource.type || 'video/mp4',
+      }
+    }
+
+    return {
+      kind: 'file-bytes',
+      fileName: videoSource.name || 'video.mp4',
+      mimeType: videoSource.type || 'video/mp4',
+      bytes: new Uint8Array(await videoSource.arrayBuffer()),
+    }
+  }
+
+  if (videoSource instanceof Blob) {
+    return {
+      kind: 'file-bytes',
+      fileName: 'video.mp4',
+      mimeType: videoSource.type || 'video/mp4',
+      bytes: new Uint8Array(await videoSource.arrayBuffer()),
+    }
+  }
+
+  throw new Error('Unsupported video source for desktop export.')
+}
+
+export function getPlayableVideoUrl(videoSource) {
+  if (!videoSource) {
+    throw new Error('Missing video source.')
+  }
+
+  if (typeof videoSource.url === 'string' && videoSource.url) {
+    return {
+      url: videoSource.url,
+      shouldRevoke: false,
+    }
+  }
+
+  const url = URL.createObjectURL(videoSource)
+  return {
+    url,
+    shouldRevoke: true,
+  }
+}
+
+export function releaseVideoUrl(videoUrl) {
+  if (typeof videoUrl === 'string' && videoUrl.startsWith('blob:')) {
+    URL.revokeObjectURL(videoUrl)
   }
 }
 

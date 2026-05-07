@@ -1,0 +1,36 @@
+.dev-locator-host {
+  position: relative;
+}
+
+.dev-locator-button {
+  position: absolute;
+  top: 8px;
+  right: 8px;
+  width: 24px;
+  height: 24px;
+  border: 1px solid rgba(255, 255, 255, 0.24);
+  border-radius: 999px;
+  background: rgba(10, 14, 20, 0.8);
+  color: rgba(255, 255, 255, 0.86);
+  font-size: 0.72rem;
+  font-weight: 700;
+  line-height: 1;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  z-index: 30;
+  opacity: 0.82;
+  transition: transform 0.15s ease, opacity 0.15s ease, background 0.15s ease;
+}
+
+.dev-locator-button:hover {
+  opacity: 1;
+  transform: scale(1.05);
+  background: rgba(124, 58, 237, 0.88);
+}
+
+.dev-locator-button.is-copied {
+  background: rgba(16, 185, 129, 0.92);
+  border-color: rgba(16, 185, 129, 0.92);
+}

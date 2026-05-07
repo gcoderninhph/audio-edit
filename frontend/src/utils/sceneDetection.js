@@ -10,6 +10,8 @@
  * 6. Merge very short scenes (< 0.5s) into previous scene
  */
 
+import { getPlayableVideoUrl, releaseVideoUrl } from './projectStorage';
+
 /**
  * Detect scenes in a video file
  * @param {File} videoFile - The video file to analyze
@@ -33,6 +35,7 @@ export async function detectScenes(videoFile, options = {}) {
     const video = document.createElement('video');
     video.muted = true;
     video.preload = 'auto';
+    const playbackHandle = getPlayableVideoUrl(videoFile);
 
     const canvas = document.createElement('canvas');
     const ANALYSIS_WIDTH = 160;
@@ -68,7 +71,7 @@ export async function detectScenes(videoFile, options = {}) {
         if (signal) signal.removeEventListener('abort', abortHandler);
         onProgress(100);
         const scenes = analyzeSceneChanges(differences, timestamps, duration, sensitivity, minSceneDuration);
-        URL.revokeObjectURL(video.src);
+        releaseVideoUrl(playbackHandle.shouldRevoke ? playbackHandle.url : '');
         resolve(scenes);
       };
 
@@ -76,7 +79,7 @@ export async function detectScenes(videoFile, options = {}) {
         if (isFinished) return;
         isFinished = true;
         video.pause();
-        URL.revokeObjectURL(video.src);
+        releaseVideoUrl(playbackHandle.shouldRevoke ? playbackHandle.url : '');
         reject(new Error('Scene detection aborted'));
       };
 
@@ -145,7 +148,7 @@ export async function detectScenes(videoFile, options = {}) {
       previousFrameData = currentFrameData;
     };
 
-    video.src = URL.createObjectURL(videoFile);
+    video.src = playbackHandle.url;
   });
 }
 

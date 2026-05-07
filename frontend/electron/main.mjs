@@ -1,10 +1,27 @@
-import { app, BrowserWindow, dialog, ipcMain } from 'electron'
+import { app, BrowserWindow, dialog, ipcMain, net, protocol } from 'electron'
 import { spawn } from 'node:child_process'
 import { createServer } from 'node:http'
 import { readFile, stat } from 'node:fs/promises'
 import path from 'node:path'
-import { fileURLToPath } from 'node:url'
+import { fileURLToPath, pathToFileURL } from 'node:url'
+import { appendDebugLog, getDebugLogFilePath, registerDebugLogIpc } from './debugLog.mjs'
+import { registerNativeExportIpc } from './export/exportCoordinator.mjs'
+import { registerProjectMediaProtocol } from './projectMediaProtocol.mjs'
 import { registerProjectStoreIpc } from './projectStore.mjs'
+import { registerSubtitleFontIpc } from './subtitleFont.mjs'
+
+protocol.registerSchemesAsPrivileged([
+  {
+    scheme: 'project-media',
+    privileges: {
+      standard: true,
+      secure: true,
+      supportFetchAPI: true,
+      stream: true,
+      corsEnabled: true,
+    },
+  },
+])
 
 const __filename = fileURLToPath(import.meta.url)
 const __dirname = path.dirname(__filename)
@@ -13,6 +30,9 @@ const frontendDir = path.resolve(__dirname, '..')
 const workspaceDir = path.resolve(frontendDir, '..')
 const serverDir = path.join(workspaceDir, 'server')
 const distDir = path.join(frontendDir, 'dist')
+const isDeveloper = true
+
+process.env.ELECTRON_IS_DEVELOPER = isDeveloper ? '1' : '0'
 
 const serverPort = Number(process.env.ELECTRON_SERVER_PORT || 5000)
 const serverUrl = process.env.ELECTRON_SERVER_URL || `http://127.0.0.1:${serverPort}`
@@ -34,20 +54,32 @@ const mimeTypes = new Map([
   ['.js', 'text/javascript; charset=utf-8'],
   ['.json', 'application/json; charset=utf-8'],
   ['.map', 'application/json; charset=utf-8'],
+  ['.m4v', 'video/mp4'],
+  ['.mov', 'video/quicktime'],
+  ['.mp4', 'video/mp4'],
   ['.png', 'image/png'],
   ['.svg', 'image/svg+xml'],
   ['.wasm', 'application/wasm'],
+  ['.webm', 'video/webm'],
   ['.webp', 'image/webp'],
   ['.woff', 'font/woff'],
   ['.woff2', 'font/woff2'],
 ])
 
 let backendProcess = null
+let mainWindow = null
 let rendererServer = null
 let rendererStartUrl = null
 let isQuitting = false
 
 registerProjectStoreIpc(ipcMain)
+registerDebugLogIpc(ipcMain)
+registerSubtitleFontIpc(ipcMain)
+registerNativeExportIpc(ipcMain)
+
+function logDesktopEvent(scope, message, data = {}, level = 'info') {
+  void appendDebugLog({ scope, message, data, level })
+}
 
 function delay(ms) {
   return new Promise((resolve) => setTimeout(resolve, ms))
@@ -74,6 +106,7 @@ function logBackendOutput(prefix, data) {
   const output = data.toString().trim()
   if (output) {
     console.log(`${prefix} ${output}`)
+    logDesktopEvent('backend', output, { prefix })
   }
 }
 
@@ -94,9 +127,15 @@ function startBackendProcess() {
     stdio: ['ignore', 'pipe', 'pipe'],
   })
 
+  logDesktopEvent('backend', 'Spawned Flask backend process', {
+    serverDir,
+    serverPort,
+  })
+
   backendProcess.stdout.on('data', (data) => logBackendOutput('[flask]', data))
   backendProcess.stderr.on('data', (data) => logBackendOutput('[flask:error]', data))
   backendProcess.on('error', (error) => {
+    logDesktopEvent('backend', 'Backend startup failed', error, 'error')
     dialog.showErrorBox('Backend startup failed', error.message)
   })
   backendProcess.on('exit', (code, signal) => {
@@ -106,6 +145,7 @@ function startBackendProcess() {
     }
 
     const reason = signal ? `signal ${signal}` : `code ${code}`
+    logDesktopEvent('backend', 'Backend stopped unexpectedly', { code, signal, reason }, 'error')
     dialog.showErrorBox('Backend stopped unexpectedly', `The Flask server exited with ${reason}.`)
     app.quit()
   })
@@ -195,7 +235,7 @@ async function startRendererServer() {
 }
 
 async function createMainWindow() {
-  const window = new BrowserWindow({
+  mainWindow = new BrowserWindow({
     width: 1440,
     height: 920,
     minWidth: 1180,
@@ -211,22 +251,45 @@ async function createMainWindow() {
     },
   })
 
-  window.once('ready-to-show', () => {
-    window.show()
+  mainWindow.on('closed', () => {
+    mainWindow = null
   })
 
-  await window.loadURL(rendererStartUrl)
+  mainWindow.webContents.on('did-fail-load', (_event, errorCode, errorDescription, validatedURL) => {
+    logDesktopEvent('renderer', 'Renderer failed to load', { errorCode, errorDescription, validatedURL }, 'error')
+  })
+  mainWindow.webContents.on('render-process-gone', (_event, details) => {
+    logDesktopEvent('renderer', 'Renderer process gone', details, 'error')
+  })
+  mainWindow.webContents.on('did-finish-load', () => {
+    logDesktopEvent('renderer', 'Renderer finished load', { rendererStartUrl })
+  })
+
+  mainWindow.once('ready-to-show', () => {
+    mainWindow?.show()
+  })
+
+  await mainWindow.loadURL(rendererStartUrl)
 }
 
 async function bootstrapDesktopApp() {
+  logDesktopEvent('desktop-main', 'Desktop bootstrap started', {
+    isDeveloper,
+    logFilePath: getDebugLogFilePath(),
+    rendererDevUrl: rendererDevUrl || null,
+    serverUrl,
+  })
   rendererStartUrl = await startRendererServer()
+  registerProjectMediaProtocol({ getContentType })
   startBackendProcess()
   await waitForBackendReady()
+  logDesktopEvent('desktop-main', 'Backend became ready', { serverUrl })
   await createMainWindow()
 }
 
 function cleanupRuntime() {
   isQuitting = true
+  logDesktopEvent('desktop-main', 'Cleaning up desktop runtime')
 
   if (rendererServer) {
     rendererServer.close()
@@ -245,6 +308,7 @@ app.whenReady().then(async () => {
   try {
     await bootstrapDesktopApp()
   } catch (error) {
+    logDesktopEvent('desktop-main', 'Desktop startup failed', error, 'error')
     dialog.showErrorBox('Desktop startup failed', error.message)
     app.quit()
   }
