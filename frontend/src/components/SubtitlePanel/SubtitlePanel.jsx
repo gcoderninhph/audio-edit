@@ -31,11 +31,6 @@ export default function SubtitlePanel({
 
   const hasSubs = subtitles && subtitles.length > 0;
 
-  // Auto-collapse tools when subs arrive
-  useEffect(() => {
-    if (hasSubs) setToolsExpanded(false);
-  }, [hasSubs]);
-
   // Find the currently active subtitle index based on currentTime
   const activeSubIndex = useMemo(() => {
     if (!hasSubs) return -1;

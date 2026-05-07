@@ -9,7 +9,6 @@ function formatTime(seconds) {
 
 export default function SceneList({
   scenes,
-  deletedSceneIds,
   thumbnails,
   currentScene,
   isDetecting,

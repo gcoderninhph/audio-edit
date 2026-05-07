@@ -1,3 +1,5 @@
+import { apiFetch } from './runtimeConfig';
+
 // Chuyển đổi giây thành định dạng thời gian SRT (HH:MM:SS,mmm)
 function formatSrtTime(seconds) {
   const date = new Date(seconds * 1000);
@@ -71,7 +73,7 @@ export async function translateSubtitles(subtitles, targetLanguage, onProgress, 
     formData.append('subtitle_file', srtFile);
     formData.append('target_language', targetLanguage);
 
-    const startRes = await fetch('/api/translation/start', {
+    const startRes = await apiFetch('/api/translation/start', {
       method: 'POST',
       body: formData
     });
@@ -113,7 +115,7 @@ async function pollTranslationJob(requestId, outputFileName, onProgress) {
   while (!isFinished) {
     await new Promise(resolve => setTimeout(resolve, 3000));
 
-    const statusRes = await fetch(`/api/translation/status/${requestId}`);
+    const statusRes = await apiFetch(`/api/translation/status/${requestId}`);
     if (statusRes.status === 404) {
       throw new Error('Tiến trình không tồn tại (Job Not Found)');
     }
@@ -132,7 +134,7 @@ async function pollTranslationJob(requestId, outputFileName, onProgress) {
 
   // Download file
   onProgress({ phase: 'Đang tải kết quả...', percent: 90 });
-  const downloadRes = await fetch(`/api/translation/download/${requestId}/${outputFileName}`);
+  const downloadRes = await apiFetch(`/api/translation/download/${requestId}/${outputFileName}`);
   
   if (!downloadRes.ok) {
     throw new Error('Không thể tải file phụ đề sau khi dịch xong');

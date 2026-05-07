@@ -2,12 +2,17 @@
   "name": "frontend",
   "private": true,
   "version": "0.0.0",
+  "main": "electron/main.mjs",
   "type": "module",
   "scripts": {
     "dev": "vite",
+    "dev:renderer": "vite --host 127.0.0.1",
     "build": "vite build",
     "lint": "eslint .",
-    "preview": "vite preview"
+    "preview": "vite preview",
+    "desktop:launch": "wait-on http://127.0.0.1:5173 && cross-env ELECTRON_RENDERER_URL=http://127.0.0.1:5173 electron .",
+    "desktop:dev": "concurrently -k \"npm:dev:renderer\" \"npm:desktop:launch\"",
+    "desktop:start": "npm run build && electron ."
   },
   "dependencies": {
     "@ffmpeg/ffmpeg": "^0.12.15",
@@ -20,10 +25,14 @@
     "@types/react": "^19.2.14",
     "@types/react-dom": "^19.2.3",
     "@vitejs/plugin-react": "^6.0.1",
+    "concurrently": "^9.2.1",
+    "cross-env": "^7.0.3",
+    "electron": "^36.2.1",
     "eslint": "^10.2.1",
     "eslint-plugin-react-hooks": "^7.1.1",
     "eslint-plugin-react-refresh": "^0.5.2",
     "globals": "^17.5.0",
-    "vite": "^8.0.10"
+    "vite": "^8.0.10",
+    "wait-on": "^8.0.5"
   }
 }

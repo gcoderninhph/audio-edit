@@ -147,15 +147,15 @@ export async function exportVideo(inputFile, keptScenes, onProgress = () => {}) 
     const url = URL.createObjectURL(blob);
 
     // Cleanup
-    try { await ffmpeg.deleteFile('input.mp4'); } catch (e) { /* ignore */ }
-    try { await ffmpeg.deleteFile('output.mp4'); } catch (e) { /* ignore */ }
+    try { await ffmpeg.deleteFile('input.mp4'); } catch { /* ignore */ }
+    try { await ffmpeg.deleteFile('output.mp4'); } catch { /* ignore */ }
 
     onProgress({ phase: 'done', percent: 100 });
 
     return { blob, url, size: blob.size };
   } catch (error) {
     // Cleanup on error
-    try { await ffmpeg.deleteFile('input.mp4'); } catch (e) { /* ignore */ }
+    try { await ffmpeg.deleteFile('input.mp4'); } catch { /* ignore */ }
     throw error;
   }
 }

@@ -1,16 +1,21 @@
-# React + Vite
+# Frontend Workspace
 
-This template provides a minimal setup to get React working in Vite with HMR and some ESLint rules.
+This frontend now uses Electron as the primary runtime for real project work.
 
-Currently, two official plugins are available:
+- `npm run desktop:dev` starts the React renderer inside Electron and launches or connects to the Flask subtitle service at `http://127.0.0.1:5000`.
+- `npm run dev` still serves the renderer in a browser for UI iteration, but local project persistence depends on the Electron desktop bridge.
 
-- [@vitejs/plugin-react](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react) uses [Oxc](https://oxc.rs)
-- [@vitejs/plugin-react-swc](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react-swc) uses [SWC](https://swc.rs/)
+## Desktop Commands
 
-## React Compiler
+- `npm run desktop:dev` starts Vite on `127.0.0.1:5173`, waits for it to become ready, then launches Electron.
+- `npm run desktop:start` builds the renderer and launches Electron against the local production build.
 
-The React Compiler is not enabled on this template because of its impact on dev & build performances. To add it, see [this documentation](https://react.dev/learn/react-compiler/installation).
+## Backend Runtime
 
-## Expanding the ESLint configuration
+Electron now stores project metadata and source videos in the desktop app data directory. Flask is only used for transcription and translation proxy requests.
 
-If you are developing a production application, we recommend using TypeScript with type-aware lint rules enabled. Check out the [TS template](https://github.com/vitejs/vite/tree/main/packages/create-vite/template-react-ts) for information on how to integrate TypeScript and [`typescript-eslint`](https://typescript-eslint.io) in your project.
+Electron reads the backend base URL from runtime config and defaults to `http://127.0.0.1:5000`.
+
+- Set `ELECTRON_SERVER_URL` to point the desktop client at a different Flask host.
+- Set `PYTHON_BIN` if Electron needs a specific Python executable when it launches the local server itself.
+- Set `ELECTRON_SKIP_BACKEND=1` to connect Electron to an already running Flask server during development.

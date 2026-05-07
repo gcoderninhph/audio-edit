@@ -1,0 +1,263 @@
+import { app, BrowserWindow, dialog, ipcMain } from 'electron'
+import { spawn } from 'node:child_process'
+import { createServer } from 'node:http'
+import { readFile, stat } from 'node:fs/promises'
+import path from 'node:path'
+import { fileURLToPath } from 'node:url'
+import { registerProjectStoreIpc } from './projectStore.mjs'
+
+const __filename = fileURLToPath(import.meta.url)
+const __dirname = path.dirname(__filename)
+
+const frontendDir = path.resolve(__dirname, '..')
+const workspaceDir = path.resolve(frontendDir, '..')
+const serverDir = path.join(workspaceDir, 'server')
+const distDir = path.join(frontendDir, 'dist')
+
+const serverPort = Number(process.env.ELECTRON_SERVER_PORT || 5000)
+const serverUrl = process.env.ELECTRON_SERVER_URL || `http://127.0.0.1:${serverPort}`
+const rendererDevUrl = process.env.ELECTRON_RENDERER_URL
+const rendererPort = Number(process.env.ELECTRON_STATIC_PORT || 4173)
+const shouldSpawnBackend = process.env.ELECTRON_SKIP_BACKEND !== '1'
+
+const crossOriginHeaders = {
+  'Cross-Origin-Opener-Policy': 'same-origin',
+  'Cross-Origin-Embedder-Policy': 'require-corp',
+}
+
+const mimeTypes = new Map([
+  ['.css', 'text/css; charset=utf-8'],
+  ['.html', 'text/html; charset=utf-8'],
+  ['.ico', 'image/x-icon'],
+  ['.jpeg', 'image/jpeg'],
+  ['.jpg', 'image/jpeg'],
+  ['.js', 'text/javascript; charset=utf-8'],
+  ['.json', 'application/json; charset=utf-8'],
+  ['.map', 'application/json; charset=utf-8'],
+  ['.png', 'image/png'],
+  ['.svg', 'image/svg+xml'],
+  ['.wasm', 'application/wasm'],
+  ['.webp', 'image/webp'],
+  ['.woff', 'font/woff'],
+  ['.woff2', 'font/woff2'],
+])
+
+let backendProcess = null
+let rendererServer = null
+let rendererStartUrl = null
+let isQuitting = false
+
+registerProjectStoreIpc(ipcMain)
+
+function delay(ms) {
+  return new Promise((resolve) => setTimeout(resolve, ms))
+}
+
+function getPythonCommand() {
+  return process.env.PYTHON_BIN || 'python'
+}
+
+function getContentType(filePath) {
+  return mimeTypes.get(path.extname(filePath).toLowerCase()) || 'application/octet-stream'
+}
+
+async function fileExists(filePath) {
+  try {
+    const fileStats = await stat(filePath)
+    return fileStats.isFile()
+  } catch {
+    return false
+  }
+}
+
+function logBackendOutput(prefix, data) {
+  const output = data.toString().trim()
+  if (output) {
+    console.log(`${prefix} ${output}`)
+  }
+}
+
+function startBackendProcess() {
+  if (!shouldSpawnBackend || backendProcess) {
+    return
+  }
+
+  backendProcess = spawn(getPythonCommand(), ['app.py'], {
+    cwd: serverDir,
+    env: {
+      ...process.env,
+      FLASK_DEBUG: '0',
+      FLASK_USE_RELOADER: '0',
+      PYTHONUNBUFFERED: '1',
+      SERVER_PORT: String(serverPort),
+    },
+    stdio: ['ignore', 'pipe', 'pipe'],
+  })
+
+  backendProcess.stdout.on('data', (data) => logBackendOutput('[flask]', data))
+  backendProcess.stderr.on('data', (data) => logBackendOutput('[flask:error]', data))
+  backendProcess.on('error', (error) => {
+    dialog.showErrorBox('Backend startup failed', error.message)
+  })
+  backendProcess.on('exit', (code, signal) => {
+    backendProcess = null
+    if (isQuitting) {
+      return
+    }
+
+    const reason = signal ? `signal ${signal}` : `code ${code}`
+    dialog.showErrorBox('Backend stopped unexpectedly', `The Flask server exited with ${reason}.`)
+    app.quit()
+  })
+}
+
+async function waitForBackendReady() {
+  const healthUrl = `${serverUrl}/api/health`
+  let lastError = null
+
+  for (let attempt = 0; attempt < 60; attempt += 1) {
+    try {
+      const response = await fetch(healthUrl)
+      if (response.ok) {
+        return
+      }
+      lastError = new Error(`Backend responded with status ${response.status}`)
+    } catch (error) {
+      lastError = error
+    }
+
+    await delay(500)
+  }
+
+  throw lastError || new Error('Timed out waiting for the Flask backend to become ready.')
+}
+
+async function serveFile(response, filePath) {
+  const content = await readFile(filePath)
+  response.writeHead(200, {
+    ...crossOriginHeaders,
+    'Content-Type': getContentType(filePath),
+  })
+  response.end(content)
+}
+
+async function resolveRendererTarget(requestUrl) {
+  const requestPath = new URL(requestUrl || '/', 'http://127.0.0.1').pathname
+  const relativePath = requestPath === '/' ? 'index.html' : requestPath.replace(/^\//, '')
+  const resolvedPath = path.resolve(distDir, relativePath)
+
+  if (!resolvedPath.startsWith(distDir)) {
+    return null
+  }
+
+  if (await fileExists(resolvedPath)) {
+    return resolvedPath
+  }
+
+  return path.join(distDir, 'index.html')
+}
+
+async function startRendererServer() {
+  if (rendererDevUrl) {
+    return rendererDevUrl
+  }
+
+  const indexPath = path.join(distDir, 'index.html')
+  if (!(await fileExists(indexPath))) {
+    throw new Error('Missing frontend/dist/index.html. Run npm run build before launching the desktop app.')
+  }
+
+  return new Promise((resolve, reject) => {
+    rendererServer = createServer(async (request, response) => {
+      try {
+        const targetPath = await resolveRendererTarget(request.url)
+        if (!targetPath) {
+          response.writeHead(403, crossOriginHeaders)
+          response.end('Forbidden')
+          return
+        }
+
+        await serveFile(response, targetPath)
+      } catch (error) {
+        response.writeHead(500, {
+          ...crossOriginHeaders,
+          'Content-Type': 'text/plain; charset=utf-8',
+        })
+        response.end(error.message)
+      }
+    })
+
+    rendererServer.once('error', reject)
+    rendererServer.listen(rendererPort, '127.0.0.1', () => {
+      resolve(`http://127.0.0.1:${rendererPort}`)
+    })
+  })
+}
+
+async function createMainWindow() {
+  const window = new BrowserWindow({
+    width: 1440,
+    height: 920,
+    minWidth: 1180,
+    minHeight: 760,
+    autoHideMenuBar: true,
+    backgroundColor: '#101317',
+    show: false,
+    webPreferences: {
+      preload: path.join(__dirname, 'preload.mjs'),
+      contextIsolation: true,
+      nodeIntegration: false,
+      sandbox: false,
+    },
+  })
+
+  window.once('ready-to-show', () => {
+    window.show()
+  })
+
+  await window.loadURL(rendererStartUrl)
+}
+
+async function bootstrapDesktopApp() {
+  rendererStartUrl = await startRendererServer()
+  startBackendProcess()
+  await waitForBackendReady()
+  await createMainWindow()
+}
+
+function cleanupRuntime() {
+  isQuitting = true
+
+  if (rendererServer) {
+    rendererServer.close()
+    rendererServer = null
+  }
+
+  if (backendProcess) {
+    backendProcess.kill()
+    backendProcess = null
+  }
+}
+
+app.on('before-quit', cleanupRuntime)
+
+app.whenReady().then(async () => {
+  try {
+    await bootstrapDesktopApp()
+  } catch (error) {
+    dialog.showErrorBox('Desktop startup failed', error.message)
+    app.quit()
+  }
+
+  app.on('activate', async () => {
+    if (BrowserWindow.getAllWindows().length === 0 && rendererStartUrl) {
+      await createMainWindow()
+    }
+  })
+})
+
+app.on('window-all-closed', () => {
+  if (process.platform !== 'darwin') {
+    app.quit()
+  }
+})

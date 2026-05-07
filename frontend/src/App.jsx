@@ -11,13 +11,14 @@ import ExportPanel from './components/ExportPanel/ExportPanel';
 function App() {
   const editor = useVideoEditor();
   const [activeRightTab, setActiveRightTab] = useState('scenes');
+  const { redo, setCurrentTime, undo, videoRef } = editor;
 
   const handleSeek = useCallback((time) => {
-    if (editor.videoRef.current) {
-      editor.videoRef.current.currentTime = time;
+    if (videoRef.current) {
+      videoRef.current.currentTime = time;
     }
-    editor.setCurrentTime(time);
-  }, [editor.videoRef, editor.setCurrentTime]);
+    setCurrentTime(time);
+  }, [setCurrentTime, videoRef]);
 
   // ── Ctrl+Z / Ctrl+Y listener ──
   useEffect(() => {
@@ -27,16 +28,16 @@ function App() {
 
       if ((e.ctrlKey || e.metaKey) && e.key === 'z' && !e.shiftKey) {
         e.preventDefault();
-        editor.undo();
+        undo();
       } else if ((e.ctrlKey || e.metaKey) && (e.key === 'y' || (e.key === 'z' && e.shiftKey))) {
         e.preventDefault();
-        editor.redo();
+        redo();
       }
     };
 
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [editor.undo, editor.redo]);
+  }, [redo, undo]);
 
   const hasVideo = !!editor.videoUrl;
   const hasScenes = editor.scenes.length > 0;

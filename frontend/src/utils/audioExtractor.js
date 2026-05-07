@@ -1,3 +1,5 @@
+import { apiFetch } from './runtimeConfig';
+
 export async function transcribeVideo(ffmpeg, videoFile, duration, onProgress, onJobCreated) {
   try {
     onProgress({ phase: 'Đang tách audio...', percent: 0 });
@@ -30,7 +32,7 @@ export async function transcribeVideo(ffmpeg, videoFile, duration, onProgress, o
     const formData = new FormData();
     formData.append('file', audioFile);
 
-    const startRes = await fetch('/api/transcription/start', {
+    const startRes = await apiFetch('/api/transcription/start', {
       method: 'POST',
       body: formData
     });
@@ -60,7 +62,7 @@ async function pollTranscriptionJob(jobId, onProgress) {
   while (true) {
     await new Promise(resolve => setTimeout(resolve, 3000));
 
-    const statusRes = await fetch(`/api/transcription/status/${jobId}`);
+    const statusRes = await apiFetch(`/api/transcription/status/${jobId}`);
     if (statusRes.status === 404) {
       throw new Error('Tiến trình không tồn tại (Job Not Found)');
     }

@@ -1,4 +1,5 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect } from 'react';
+import { deleteLocalProject, listLocalProjects } from '../../utils/projectStorage';
 import './ProjectDashboard.css';
 
 function formatDate(isoString) {
@@ -13,27 +14,36 @@ export default function ProjectDashboard({ onOpenProject, onNewProject }) {
   const [projects, setProjects] = useState([]);
   const [isLoading, setIsLoading] = useState(true);
 
-  const loadProjects = useCallback(async () => {
-    try {
-      const res = await fetch('/api/session/list');
-      const data = await res.json();
-      setProjects(Array.isArray(data) ? data : []);
-    } catch (err) {
-      console.error('Failed to load projects:', err);
-    } finally {
-      setIsLoading(false);
-    }
-  }, []);
-
   useEffect(() => {
-    loadProjects();
-  }, [loadProjects]);
+    let isCancelled = false;
+
+    const loadProjects = async () => {
+      try {
+        const data = await listLocalProjects();
+        if (!isCancelled) {
+          setProjects(Array.isArray(data) ? data : []);
+        }
+      } catch (err) {
+        console.error('Failed to load projects:', err);
+      } finally {
+        if (!isCancelled) {
+          setIsLoading(false);
+        }
+      }
+    };
+
+    void loadProjects();
+
+    return () => {
+      isCancelled = true;
+    };
+  }, []);
 
   const handleDelete = async (e, id) => {
     e.stopPropagation();
     if (!confirm('Xóa project này?')) return;
     try {
-      await fetch(`/api/session/${id}`, { method: 'DELETE' });
+      await deleteLocalProject(id);
       setProjects(prev => prev.filter(p => p.id !== id));
     } catch (err) {
       console.error('Delete failed:', err);

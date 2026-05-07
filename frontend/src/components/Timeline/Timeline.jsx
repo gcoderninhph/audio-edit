@@ -16,7 +16,7 @@ function formatTime(seconds) {
   return `${String(mins).padStart(2, '0')}:${String(secs).padStart(2, '0')}`;
 }
 
-export default function Timeline({ scenes, deletedSceneIds, currentTime, duration, currentScene, onSeek, subtitles }) {
+export default function Timeline({ scenes, deletedSceneIds, currentTime, currentScene, onSeek, subtitles }) {
   const [hoveredScene, setHoveredScene] = useState(null);
   const [tooltipX, setTooltipX] = useState(0);
   const barRef = useRef(null);
@@ -28,6 +28,10 @@ export default function Timeline({ scenes, deletedSceneIds, currentTime, duratio
   const keptDuration = useMemo(() => {
     return getKeptDuration(keptScenes);
   }, [keptScenes]);
+
+  const displayedTime = useMemo(() => {
+    return mapRealToKeptTime(currentTime, keptScenes);
+  }, [currentTime, keptScenes]);
 
   const handleBarClick = useCallback((e) => {
     if (!barRef.current || keptDuration <= 0) return;
@@ -47,9 +51,8 @@ export default function Timeline({ scenes, deletedSceneIds, currentTime, duratio
 
   const playheadPercent = useMemo(() => {
     if (keptDuration <= 0) return 0;
-    const tTime = mapRealToKeptTime(currentTime, keptScenes);
-    return (tTime / keptDuration) * 100;
-  }, [currentTime, keptDuration, keptScenes]);
+    return (displayedTime / keptDuration) * 100;
+  }, [displayedTime, keptDuration]);
 
   if (!scenes || scenes.length === 0) return null;
 
@@ -58,7 +61,7 @@ export default function Timeline({ scenes, deletedSceneIds, currentTime, duratio
       <div className="timeline-header">
         <span className="timeline-title">Timeline</span>
         <span className="timeline-title" style={{ opacity: 0.6 }}>
-          {formatTime(currentTime)} / {formatTime(duration)}
+          {formatTime(displayedTime)} / {formatTime(keptDuration)}
         </span>
       </div>
       <div
@@ -102,7 +105,7 @@ export default function Timeline({ scenes, deletedSceneIds, currentTime, duratio
         {/* Subtitles Track */}
         {subtitles && subtitles.length > 0 && (
           <div className="timeline-subtitles-bar">
-            {subtitles.map((sub, idx) => {
+                {subtitles.map((sub, idx) => {
               const tStart = mapRealToKeptTime(sub.start, keptScenes);
               const tEnd = mapRealToKeptTime(sub.end, keptScenes);
               const tDuration = tEnd - tStart;
@@ -113,7 +116,7 @@ export default function Timeline({ scenes, deletedSceneIds, currentTime, duratio
               const leftPercent = keptDuration > 0 ? (tStart / keptDuration) * 100 : 0;
               return (
                 <div
-                  key={sub.id || index}
+                  key={sub.id || idx}
                   className="timeline-subtitle-block"
                   style={{
                     left: `${leftPercent}%`,
