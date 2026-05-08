@@ -3,7 +3,7 @@ import { mkdir, readFile, rm, writeFile } from 'node:fs/promises'
 import path from 'node:path'
 import { appendDebugLog } from '../debugLog.mjs'
 import { resolveProjectVideoPath } from '../projectStore.mjs'
-import { getFramePresetById, sanitizeFrameBackground } from '../../src/utils/frameComposer.js'
+import { describeFrameBackground, getFramePresetById, isImageFrameBackground, sanitizeFrameBackground } from '../../src/utils/frameComposer.js'
 import { frameMergedVideo } from './framePipeline.mjs'
 import { extractSceneSegments, mergeSceneSegments } from './scenePipeline.mjs'
 
@@ -171,6 +171,57 @@ async function writeOverlayAssets(jobDirectory, subtitleOverlay = {}) {
   return writtenAssets
 }
 
+function getImageExtension(mimeType = '') {
+  const normalizedMimeType = mimeType.toLowerCase()
+  if (normalizedMimeType === 'image/jpeg' || normalizedMimeType === 'image/jpg') {
+    return 'jpg'
+  }
+  if (normalizedMimeType === 'image/png') {
+    return 'png'
+  }
+  if (normalizedMimeType === 'image/webp') {
+    return 'webp'
+  }
+
+  return 'img'
+}
+
+function parseDataUrl(dataUrl = '') {
+  const match = String(dataUrl).match(/^data:([^;,]+)?(;base64)?,(.*)$/s)
+  if (!match) {
+    throw createExportError('Invalid image background payload for native export.', 'NATIVE_EXPORT_INVALID_INPUT')
+  }
+
+  const mimeType = match[1] || 'application/octet-stream'
+  const isBase64 = Boolean(match[2])
+  const body = match[3] || ''
+  const bytes = isBase64
+    ? Buffer.from(body, 'base64')
+    : Buffer.from(decodeURIComponent(body), 'utf8')
+
+  return {
+    bytes,
+    extension: getImageExtension(mimeType),
+    mimeType,
+  }
+}
+
+async function writeFrameBackgroundAsset(jobDirectory, frameBackground) {
+  if (!isImageFrameBackground(frameBackground)) {
+    return frameBackground
+  }
+
+  const { bytes, extension, mimeType } = parseDataUrl(frameBackground.dataUrl)
+  const backgroundPath = path.join(jobDirectory, `frame-background.${extension}`)
+  await writeFile(backgroundPath, bytes)
+
+  return {
+    ...frameBackground,
+    nativeImagePath: backgroundPath,
+    nativeMimeType: mimeType,
+  }
+}
+
 async function runNativeExportJob(sender, payload = {}) {
   const jobId = payload.jobId || `native-export-${Date.now()}`
   const jobDirectory = buildJobDirectory(jobId)
@@ -202,12 +253,14 @@ async function runNativeExportJob(sender, payload = {}) {
 
   try {
     const { inputPath } = await resolveInputPath(payload.source, jobDirectory)
+    const nativeFrameBackground = await writeFrameBackgroundAsset(jobDirectory, frameBackground)
     const overlayAssets = await writeOverlayAssets(jobDirectory, payload.subtitleOverlay)
     emitLog(sender, jobId, 'preparing', 'Resolved native export inputs', 'info', {
       percent: 8,
       stagePercent: 40,
       detail: `Nguồn: ${sanitizeFileName(path.basename(inputPath))} • ${overlayAssets.length} overlay`,
     }, {
+      frameBackground: describeFrameBackground(frameBackground),
       inputPath,
       overlayCount: overlayAssets.length,
     })
@@ -236,7 +289,7 @@ async function runNativeExportJob(sender, payload = {}) {
       mergedPath,
       keptScenes,
       framePreset,
-      frameBackground,
+      frameBackground: nativeFrameBackground,
       overlayAssets,
       emitLog,
       emitProgress,

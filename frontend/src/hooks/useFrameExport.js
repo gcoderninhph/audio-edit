@@ -5,9 +5,12 @@ import {
   buildExportSubtitles,
   DEFAULT_FRAME_BACKGROUND,
   DEFAULT_FRAME_PRESET_ID,
+  describeFrameBackground,
   getFrameBackgroundLabel,
   getFramePresetById,
   getFrameSummary,
+  sanitizeFrameBackground,
+  serializeFrameBackground,
 } from '../utils/frameComposer'
 
 function buildExportSignature(keptScenes, exportSubtitles, framePresetId, frameBackground) {
@@ -16,7 +19,7 @@ function buildExportSignature(keptScenes, exportSubtitles, framePresetId, frameB
     .map((subtitle) => `${subtitle.id}:${subtitle.start}-${subtitle.end}:${subtitle.text}`)
     .join('|')
 
-  return `${framePresetId}::${frameBackground}::${sceneSignature}::${subtitleSignature}`
+  return `${framePresetId}::${serializeFrameBackground(frameBackground)}::${sceneSignature}::${subtitleSignature}`
 }
 
 function createInitialExportProgress() {
@@ -115,7 +118,7 @@ export function useFrameExport({ videoFile, keptScenes, filteredSubtitles }) {
   }, [])
 
   const setFrameBackground = useCallback((nextFrameBackground) => {
-    setFrameBackgroundState(nextFrameBackground)
+    setFrameBackgroundState(sanitizeFrameBackground(nextFrameBackground))
   }, [])
 
   const startExport = useCallback(async () => {
@@ -129,7 +132,7 @@ export function useFrameExport({ videoFile, keptScenes, filteredSubtitles }) {
 
     const startedAt = Date.now()
     void logExportDebug('Export requested from UI', {
-      frameBackground,
+      frameBackground: describeFrameBackground(frameBackground),
       framePresetId,
       keptSceneCount: keptScenes.length,
       subtitleCount: exportSubtitles.length,
@@ -174,7 +177,7 @@ export function useFrameExport({ videoFile, keptScenes, filteredSubtitles }) {
       setLastExportSignature(exportSignature)
       void logExportDebug('Export result is ready', {
         exportSize: result.size,
-        frameBackground,
+        frameBackground: describeFrameBackground(frameBackground),
         framePresetId,
       })
     } catch (error) {

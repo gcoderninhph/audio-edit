@@ -1,6 +1,13 @@
 import { useRef, useState, useCallback, useEffect, useMemo } from 'react';
-import { FRAME_BACKGROUND_OPTIONS, FRAME_PRESETS, getFramePresetById } from '../../utils/frameComposer';
-import { drawFrameComposition } from '../../utils/frameCanvasRenderer';
+import {
+  createImageFrameBackgroundFromFile,
+  FRAME_BACKGROUND_OPTIONS,
+  FRAME_PRESETS,
+  getFrameBackgroundFillColor,
+  getFramePresetById,
+  isImageFrameBackground,
+} from '../../utils/frameComposer';
+import { drawFrameComposition, loadFrameBackgroundImage } from '../../utils/frameCanvasRenderer';
 import { getKeptScenes, getKeptDuration, mapRealToKeptTime, mapKeptToRealTime } from '../../utils/timeMapping';
 import DeveloperLocator from '../DeveloperLocator/DeveloperLocator';
 import './VideoPlayer.css';
@@ -30,38 +37,32 @@ export default function VideoPlayer({
   const [duration, setDuration] = useState(0);
   const [realCurrentTime, setRealCurrentTime] = useState(0);
   const [volume, setVolume] = useState(1);
+  const [frameBackgroundImage, setFrameBackgroundImage] = useState(null);
   const seekBarRef = useRef(null);
   const canvasRef = useRef(null);
   const animationFrameRef = useRef(null);
+  const backgroundInputRef = useRef(null);
   const framePreset = useMemo(() => getFramePresetById(framePresetId), [framePresetId]);
 
-  const keptScenes = useMemo(() => {
-    return getKeptScenes(scenes, deletedSceneIds);
-  }, [scenes, deletedSceneIds]);
-
-  const keptDuration = useMemo(() => {
-    return getKeptDuration(keptScenes);
-  }, [keptScenes]);
-
-  const displayedTime = useMemo(() => {
-    return mapRealToKeptTime(realCurrentTime, keptScenes);
-  }, [realCurrentTime, keptScenes]);
+  const keptScenes = useMemo(() => getKeptScenes(scenes, deletedSceneIds), [scenes, deletedSceneIds]);
+  const keptDuration = useMemo(() => getKeptDuration(keptScenes), [keptScenes]);
+  const displayedTime = useMemo(() => mapRealToKeptTime(realCurrentTime, keptScenes), [realCurrentTime, keptScenes]);
 
   const handleLoadedMetadata = () => {
-    const dur = videoRef.current?.duration || 0;
-    setDuration(dur);
-    onDurationChange?.(dur);
+    const nextDuration = videoRef.current?.duration || 0;
+    setDuration(nextDuration);
+    onDurationChange?.(nextDuration);
   };
 
   const handleTimeUpdate = () => {
     let time = videoRef.current?.currentTime || 0;
-    
+
     if (scenes && deletedSceneIds && videoRef.current && !videoRef.current.paused) {
-      const activeScene = scenes.find(s => time >= s.start && time < s.end);
+      const activeScene = scenes.find((scene) => time >= scene.start && time < scene.end);
       if (activeScene && deletedSceneIds.has(activeScene.id)) {
-        const nextKeptScene = scenes.find(s => s.start >= activeScene.end && !deletedSceneIds.has(s.id));
+        const nextKeptScene = scenes.find((scene) => scene.start >= activeScene.end && !deletedSceneIds.has(scene.id));
         if (nextKeptScene) {
-          videoRef.current.currentTime = nextKeptScene.start + 0.05; // jump slightly into it
+          videoRef.current.currentTime = nextKeptScene.start + 0.05;
           time = nextKeptScene.start + 0.05;
         } else {
           videoRef.current.pause();
@@ -87,33 +88,77 @@ export default function VideoPlayer({
     }
   }, [videoRef]);
 
-  const handleSeek = useCallback((e) => {
+  const handleSeek = useCallback((event) => {
     if (!seekBarRef.current || !videoRef.current || keptDuration <= 0) return;
+
     const rect = seekBarRef.current.getBoundingClientRect();
-    const x = e.clientX - rect.left;
+    const x = event.clientX - rect.left;
     const percent = Math.max(0, Math.min(1, x / rect.width));
-    
-    // Convert percent of keptDuration to real time
     const targetKeptTime = percent * keptDuration;
     const targetRealTime = mapKeptToRealTime(targetKeptTime, keptScenes);
-    
+
     videoRef.current.currentTime = targetRealTime;
   }, [keptDuration, keptScenes, videoRef]);
 
-  const handleVolumeChange = (e) => {
-    const v = parseFloat(e.target.value);
-    setVolume(v);
-    if (videoRef.current) videoRef.current.volume = v;
+  const handleVolumeChange = (event) => {
+    const nextVolume = parseFloat(event.target.value);
+    setVolume(nextVolume);
+    if (videoRef.current) {
+      videoRef.current.volume = nextVolume;
+    }
   };
 
+  const handleChooseBackgroundImage = useCallback(() => {
+    backgroundInputRef.current?.click();
+  }, []);
+
+  const handleBackgroundImageChange = useCallback(async (event) => {
+    const file = event.target.files?.[0];
+    if (!file) {
+      return;
+    }
+
+    try {
+      const nextBackground = await createImageFrameBackgroundFromFile(file);
+      onFrameBackgroundChange?.(nextBackground);
+    } catch (error) {
+      console.error('Background image selection failed:', error);
+      alert(`Không thể dùng ảnh nền bìa: ${error.message}`);
+    } finally {
+      event.target.value = '';
+    }
+  }, [onFrameBackgroundChange]);
+
   useEffect(() => {
-    const handleKeyPress = (e) => {
-      if (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA') return;
-      if (e.code === 'Space') {
-        e.preventDefault();
+    let isDisposed = false;
+
+    loadFrameBackgroundImage(frameBackground)
+      .then((image) => {
+        if (!isDisposed) {
+          setFrameBackgroundImage(image);
+        }
+      })
+      .catch((error) => {
+        console.error('Failed to load frame background image:', error);
+        if (!isDisposed) {
+          setFrameBackgroundImage(null);
+        }
+      });
+
+    return () => {
+      isDisposed = true;
+    };
+  }, [frameBackground]);
+
+  useEffect(() => {
+    const handleKeyPress = (event) => {
+      if (event.target.tagName === 'INPUT' || event.target.tagName === 'TEXTAREA') return;
+      if (event.code === 'Space') {
+        event.preventDefault();
         handlePlayPause();
       }
     };
+
     window.addEventListener('keydown', handleKeyPress);
     return () => window.removeEventListener('keydown', handleKeyPress);
   }, [handlePlayPause]);
@@ -133,51 +178,50 @@ export default function VideoPlayer({
   }, [videoRef]);
 
   const handleEnded = () => setIsPlaying(false);
-
   const progress = keptDuration > 0 ? (displayedTime / keptDuration) * 100 : 0;
 
-  // Find active subtitle
   const activeSubtitle = subtitles?.find(
-    (sub) => realCurrentTime >= sub.start && realCurrentTime <= sub.end
+    (subtitle) => realCurrentTime >= subtitle.start && realCurrentTime <= subtitle.end,
   );
 
   useEffect(() => {
-    const canvasElement = canvasRef.current
-    const videoElement = videoRef.current
+    const canvasElement = canvasRef.current;
+    const videoElement = videoRef.current;
     if (!canvasElement || !videoElement) {
-      return undefined
+      return undefined;
     }
 
-    canvasElement.width = framePreset.width
-    canvasElement.height = framePreset.height
+    canvasElement.width = framePreset.width;
+    canvasElement.height = framePreset.height;
 
-    const context = canvasElement.getContext('2d', { alpha: false })
+    const context = canvasElement.getContext('2d', { alpha: false });
     if (!context) {
-      return undefined
+      return undefined;
     }
 
     const renderFrame = () => {
       drawFrameComposition(context, {
         framePreset,
         frameBackground,
+        backgroundImage: frameBackgroundImage,
         videoElement,
         subtitleText: activeSubtitle?.text || '',
-      })
-      animationFrameRef.current = window.requestAnimationFrame(renderFrame)
-    }
+      });
+      animationFrameRef.current = window.requestAnimationFrame(renderFrame);
+    };
 
-    renderFrame()
+    renderFrame();
 
     return () => {
       if (animationFrameRef.current) {
-        window.cancelAnimationFrame(animationFrameRef.current)
+        window.cancelAnimationFrame(animationFrameRef.current);
       }
-    }
-  }, [activeSubtitle?.text, frameBackground, framePreset, videoRef])
+    };
+  }, [activeSubtitle?.text, frameBackground, frameBackgroundImage, framePreset, videoRef]);
 
   const frameStageStyle = useMemo(() => ({
     aspectRatio: `${framePreset.width} / ${framePreset.height}`,
-    backgroundColor: frameBackground,
+    backgroundColor: getFrameBackgroundFillColor(frameBackground),
     maxWidth: `${Math.round((450 * framePreset.width) / framePreset.height)}px`,
   }), [frameBackground, framePreset.height, framePreset.width]);
 
@@ -201,6 +245,7 @@ export default function VideoPlayer({
             ))}
           </div>
         </div>
+
         <div className="video-frame-toolbar-group">
           <span className="video-frame-toolbar-label">Nền bìa</span>
           <div className="video-frame-options">
@@ -215,6 +260,25 @@ export default function VideoPlayer({
                 style={{ '--frame-swatch': option.value }}
               />
             ))}
+            <button
+              type="button"
+              className={`frame-color-btn frame-image-btn ${isImageFrameBackground(frameBackground) ? 'active' : ''}`}
+              onClick={handleChooseBackgroundImage}
+              title="Chọn ảnh nền bìa"
+              aria-label="Chọn ảnh nền bìa"
+              style={isImageFrameBackground(frameBackground)
+                ? { '--frame-swatch-image': `url("${frameBackground.dataUrl}")` }
+                : undefined}
+            >
+              <span className="frame-image-icon">🖼</span>
+            </button>
+            <input
+              ref={backgroundInputRef}
+              className="frame-image-input"
+              type="file"
+              accept="image/*"
+              onChange={handleBackgroundImageChange}
+            />
           </div>
         </div>
       </div>
@@ -253,9 +317,9 @@ export default function VideoPlayer({
 
         <div className="volume-control">
           <button className="control-btn" onClick={() => {
-            const newVol = volume > 0 ? 0 : 1;
-            setVolume(newVol);
-            if (videoRef.current) videoRef.current.volume = newVol;
+            const nextVolume = volume > 0 ? 0 : 1;
+            setVolume(nextVolume);
+            if (videoRef.current) videoRef.current.volume = nextVolume;
           }}>
             {volume > 0 ? (
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"/><path d="M19.07 4.93a10 10 0 0 1 0 14.14M15.54 8.46a5 5 0 0 1 0 7.07"/></svg>
@@ -277,7 +341,7 @@ export default function VideoPlayer({
 
       {currentScene && (
         <div className="scene-indicator">
-          Cảnh <span className="current-scene-label">#{keptScenes.findIndex(s => s.id === currentScene.id) + 1}</span>
+          Cảnh <span className="current-scene-label">#{keptScenes.findIndex((scene) => scene.id === currentScene.id) + 1}</span>
           {' '}({formatTime(currentScene.start)} - {formatTime(currentScene.end)})
         </div>
       )}

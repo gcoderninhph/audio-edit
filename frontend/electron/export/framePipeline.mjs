@@ -1,5 +1,6 @@
 import { writeFile } from 'node:fs/promises'
 import path from 'node:path'
+import { getFrameBackgroundFillColor, isImageFrameBackground } from '../../src/utils/frameComposer.js'
 import { getFrameChunkPlan, getFrameWorkerPlan, getNativeEncodePlan, runNativeFfmpeg } from './nativeFfmpeg.mjs'
 
 function formatSeconds(seconds) {
@@ -11,7 +12,13 @@ function escapeConcatPath(filePath) {
 }
 
 function toFfmpegColor(hexColor) {
-  return `0x${String(hexColor || '#050816').replace('#', '')}`
+  return `0x${String(getFrameBackgroundFillColor(hexColor)).replace('#', '')}`
+}
+
+function getNativeBackgroundImagePath(frameBackground) {
+  return isImageFrameBackground(frameBackground) && typeof frameBackground.nativeImagePath === 'string'
+    ? frameBackground.nativeImagePath
+    : ''
 }
 
 function buildEnableExpression(events) {
@@ -21,16 +28,23 @@ function buildEnableExpression(events) {
 }
 
 function buildFrameFilter(framePreset, frameBackground, overlayAssets) {
-  const color = toFfmpegColor(frameBackground)
-  const filterChain = [
-    `[0:v]scale=w=${framePreset.width}:h=${framePreset.height}:force_original_aspect_ratio=decrease,pad=${framePreset.width}:${framePreset.height}:(ow-iw)/2:(oh-ih)/2:${color}[v0]`,
-  ]
+  const backgroundImagePath = getNativeBackgroundImagePath(frameBackground)
+  const filterChain = backgroundImagePath
+    ? [
+      `[1:v]scale=w=${framePreset.width}:h=${framePreset.height}:force_original_aspect_ratio=increase,crop=${framePreset.width}:${framePreset.height},setsar=1[bg]`,
+      `[0:v]scale=w=${framePreset.width}:h=${framePreset.height}:force_original_aspect_ratio=decrease,setsar=1[fg]`,
+      `[bg][fg]overlay=(W-w)/2:(H-h)/2:shortest=1:eof_action=pass[v0]`,
+    ]
+    : [
+      `[0:v]scale=w=${framePreset.width}:h=${framePreset.height}:force_original_aspect_ratio=decrease,pad=${framePreset.width}:${framePreset.height}:(ow-iw)/2:(oh-ih)/2:${toFfmpegColor(frameBackground)}[v0]`,
+    ]
+  const subtitleInputOffset = backgroundImagePath ? 2 : 1
 
   let currentLabel = 'v0'
   overlayAssets.forEach((asset, index) => {
     const nextLabel = `v${index + 1}`
     filterChain.push(
-      `[${currentLabel}][${index + 1}:v]overlay=${asset.x}:${asset.y}:shortest=1:eof_action=pass:repeatlast=0:enable='${buildEnableExpression(asset.events)}'[${nextLabel}]`,
+      `[${currentLabel}][${index + subtitleInputOffset}:v]overlay=${asset.x}:${asset.y}:shortest=1:eof_action=pass:repeatlast=0:enable='${buildEnableExpression(asset.events)}'[${nextLabel}]`,
     )
     currentLabel = nextLabel
   })
@@ -64,47 +78,26 @@ function getTimelineDurationSeconds(keptScenes) {
   return keptScenes.reduce((sum, scene) => sum + Math.max(0, Number(scene.duration) || 0), 0)
 }
 
-function buildFrameChunks(keptScenes, targetChunkDurationSeconds) {
+function buildFrameChunks(totalDurationSeconds, targetChunkDurationSeconds) {
   const chunks = []
-  let timelineCursor = 0
-  let currentChunk = null
+  const safeTotalDurationSeconds = Math.max(0, Number(totalDurationSeconds) || 0)
+  const safeTargetChunkDurationSeconds = Math.max(0.5, Number(targetChunkDurationSeconds) || safeTotalDurationSeconds || 1)
+  const chunkCount = Math.max(1, Math.ceil(safeTotalDurationSeconds / safeTargetChunkDurationSeconds))
 
-  for (const scene of keptScenes) {
-    const sceneDuration = Math.max(0, Number(scene.duration) || 0)
-    if (sceneDuration <= 0) {
-      continue
-    }
+  for (let index = 0; index < chunkCount; index += 1) {
+    const start = Math.min(safeTotalDurationSeconds, index * safeTargetChunkDurationSeconds)
+    const end = index === chunkCount - 1
+      ? safeTotalDurationSeconds
+      : Math.min(safeTotalDurationSeconds, start + safeTargetChunkDurationSeconds)
+    const duration = Math.max(0, end - start)
 
-    if (!currentChunk) {
-      currentChunk = {
+    if (duration > 0) {
+      chunks.push({
         index: chunks.length,
-        start: timelineCursor,
-        duration: 0,
-        sceneCount: 0,
-      }
+        start,
+        duration,
+      })
     }
-
-    const wouldOverflow = currentChunk.sceneCount > 0
-      && currentChunk.duration >= targetChunkDurationSeconds * 0.65
-      && currentChunk.duration + sceneDuration > targetChunkDurationSeconds
-
-    if (wouldOverflow) {
-      chunks.push(currentChunk)
-      currentChunk = {
-        index: chunks.length,
-        start: timelineCursor,
-        duration: 0,
-        sceneCount: 0,
-      }
-    }
-
-    currentChunk.duration += sceneDuration
-    currentChunk.sceneCount += 1
-    timelineCursor += sceneDuration
-  }
-
-  if (currentChunk && currentChunk.duration > 0) {
-    chunks.push(currentChunk)
   }
 
   return chunks
@@ -182,6 +175,8 @@ function buildChunkOutputPath(jobDirectory, index) {
 }
 
 function buildChunkArgs({ mergedPath, chunk, chunkOverlayAssets, workerPlan, framePreset, frameBackground, encoderPlan, outputPath }) {
+  const backgroundImagePath = getNativeBackgroundImagePath(frameBackground)
+  const backgroundInputArgs = backgroundImagePath ? ['-loop', '1', '-i', backgroundImagePath] : []
   const overlayInputArgs = chunkOverlayAssets.flatMap((asset) => ['-loop', '1', '-i', asset.path])
   const filterPlan = buildFrameFilter(framePreset, frameBackground, chunkOverlayAssets)
 
@@ -203,6 +198,7 @@ function buildChunkArgs({ mergedPath, chunk, chunkOverlayAssets, workerPlan, fra
     String(workerPlan.filterComplexThreads),
     '-i',
     mergedPath,
+    ...backgroundInputArgs,
     ...overlayInputArgs,
     '-filter_complex',
     filterPlan.filterComplex,
@@ -278,9 +274,14 @@ export async function frameMergedVideo({
     sceneCount: keptScenes.length,
     totalDurationSeconds,
   })
-  const chunks = buildFrameChunks(keptScenes, chunkPlan.targetChunkDurationSeconds)
+  const chunks = buildFrameChunks(totalDurationSeconds, chunkPlan.targetChunkDurationSeconds)
+  if (chunks.length === 0) {
+    throw new Error('No frame chunks were generated for native export.')
+  }
+
+  const effectiveWorkerCount = Math.max(1, Math.min(chunkPlan.workerCount, chunks.length))
   const workerPlan = getFrameWorkerPlan({
-    workerCount: chunkPlan.workerCount,
+    workerCount: effectiveWorkerCount,
     encoderPlan,
   })
   const chunkProgressMicroseconds = chunks.map(() => 0)
@@ -298,16 +299,19 @@ export async function frameMergedVideo({
   emitLog(sender, jobId, 'framing', `Start native chunked frame encode with ${encoderPlan.label}`, 'info', {
     percent: 70,
     stagePercent: 0,
-    detail: `Dựng khung ${framePreset.label} bằng ${encoderPlan.label} • ${chunks.length} chunk / ${chunkPlan.workerCount} worker`,
+    detail: `Dựng khung ${framePreset.label} bằng ${encoderPlan.label} • ${chunks.length} chunk / ${effectiveWorkerCount} worker`,
   }, {
     encoder: encoderPlan,
-    chunkPlan,
+    chunkPlan: {
+      ...chunkPlan,
+      effectiveWorkerCount,
+    },
     frameWorkerPlan: workerPlan,
     overlayCount: overlayAssets.length,
     chunkCount: chunks.length,
   })
 
-  await runWithConcurrency(chunks, chunkPlan.workerCount, async (chunk) => {
+  await runWithConcurrency(chunks, effectiveWorkerCount, async (chunk) => {
     const chunkOverlayAssets = buildChunkOverlayAssets(overlayAssets, chunk)
     const outputPath = buildChunkOutputPath(jobDirectory, chunk.index)
     chunkPaths[chunk.index] = outputPath

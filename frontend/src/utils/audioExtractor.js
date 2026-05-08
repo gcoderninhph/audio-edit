@@ -1,6 +1,15 @@
 import { apiFetch } from './runtimeConfig';
 import { materializeVideoFile } from './projectStorage';
 
+function mapTranscriptionSegments(segments = []) {
+  return segments.map((seg, index) => ({
+    id: seg.id || `sub_${index}`,
+    start: seg.start,
+    end: seg.end,
+    text: seg.text.trim(),
+  }));
+}
+
 export async function transcribeVideo(ffmpeg, videoFile, duration, onProgress, onJobCreated) {
   try {
     onProgress({ phase: 'Đang tách audio...', percent: 0 });
@@ -55,14 +64,49 @@ export async function transcribeVideo(ffmpeg, videoFile, duration, onProgress, o
   }
 }
 
-export async function resumeTranscription(jobId, onProgress) {
+export async function resumeTranscription(jobId, onProgress, options = {}) {
   onProgress({ phase: 'Đang tiếp tục tiến trình tạo phụ đề...', percent: 30 });
-  return await pollTranscriptionJob(jobId, onProgress);
+  return await pollTranscriptionJob(jobId, onProgress, {
+    initialDelayMs: options.initialDelayMs ?? 3000,
+  });
 }
 
-async function pollTranscriptionJob(jobId, onProgress) {
+export async function getTranscriptionJobSnapshot(jobId) {
+  const statusRes = await apiFetch(`/api/transcription/status/${jobId}`);
+  if (statusRes.status === 404) {
+    return { state: 'missing' };
+  }
+  if (!statusRes.ok) {
+    throw new Error('Không thể kiểm tra trạng thái tiến trình tạo phụ đề');
+  }
+
+  const statusData = await statusRes.json();
+  if (statusData.status === 2) {
+    return {
+      state: 'finished',
+      subtitles: mapTranscriptionSegments(statusData.result?.segments || []),
+    };
+  }
+  if (statusData.status === -1) {
+    return {
+      state: 'failed',
+      message: 'Whisper job thất bại',
+    };
+  }
+
+  return {
+    state: 'running',
+  };
+}
+
+async function pollTranscriptionJob(jobId, onProgress, { initialDelayMs = 3000 } = {}) {
+  let waitMilliseconds = initialDelayMs;
+
   while (true) {
-    await new Promise(resolve => setTimeout(resolve, 3000));
+    if (waitMilliseconds > 0) {
+      await new Promise(resolve => setTimeout(resolve, waitMilliseconds));
+    }
+    waitMilliseconds = 3000;
 
     const statusRes = await apiFetch(`/api/transcription/status/${jobId}`);
     if (statusRes.status === 404) {
@@ -74,13 +118,7 @@ async function pollTranscriptionJob(jobId, onProgress) {
 
     if (statusData.status === 2) {
       onProgress({ phase: 'Hoàn tất phụ đề!', percent: 100 });
-      const segments = statusData.result?.segments || [];
-      return segments.map((seg, index) => ({
-        id: seg.id || `sub_${index}`,
-        start: seg.start,
-        end: seg.end,
-        text: seg.text.trim()
-      }));
+      return mapTranscriptionSegments(statusData.result?.segments || []);
     } else if (statusData.status === -1) {
       throw new Error('Whisper job thất bại');
     } else {

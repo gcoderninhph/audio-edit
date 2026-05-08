@@ -299,17 +299,21 @@ export function useVideoEditor() {
   const startTranscription = useCallback(async () => {
     if (!videoFile) return;
     const currentSessionId = sessionIdRef.current;
+    const updateTranscribeProgress = (progress) => {
+      if (sessionIdRef.current !== currentSessionId) return;
+      setTranscribeProgress(progress);
+    };
     pushState(getCurrentSnapshot());
     setIsTranscribing(true);
     setTranscribeProgress({ phase: 'Đang tải bộ công cụ...', percent: 0 });
 
     try {
-      const ffmpeg = await getFFmpeg((p) => setTranscribeProgress({ phase: 'Đang tải bộ công cụ...', percent: p }));
+      const ffmpeg = await getFFmpeg((p) => updateTranscribeProgress({ phase: 'Đang tải bộ công cụ...', percent: p }));
       const subs = await transcribeVideo(
         ffmpeg,
         videoFile,
         videoDuration,
-        setTranscribeProgress,
+        updateTranscribeProgress,
         (jobId) => {
           if (sessionIdRef.current !== currentSessionId) return;
           setTranscriptionJobId(jobId);
@@ -337,6 +341,10 @@ export function useVideoEditor() {
   const startTranslation = useCallback(async (targetLanguage) => {
     if (!subtitles || subtitles.length === 0) return;
     const currentSessionId = sessionIdRef.current;
+    const updateTranslateProgress = (progress) => {
+      if (sessionIdRef.current !== currentSessionId) return;
+      setTranslateProgress(progress);
+    };
     pushState(getCurrentSnapshot());
     setIsTranslating(true);
     setTranslateProgress({ phase: 'Khởi tạo dịch...', percent: 0 });
@@ -345,7 +353,7 @@ export function useVideoEditor() {
       const newSubs = await translateSubtitles(
         subtitles, 
         targetLanguage, 
-        setTranslateProgress,
+        updateTranslateProgress,
         (reqId, outName) => {
           if (sessionIdRef.current !== currentSessionId) return;
           const jobId = `${reqId}|${outName}`;

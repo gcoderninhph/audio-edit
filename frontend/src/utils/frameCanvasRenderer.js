@@ -1,4 +1,12 @@
+import {
+  DEFAULT_FRAME_BACKGROUND,
+  getFrameBackgroundFillColor,
+  isImageFrameBackground,
+  sanitizeFrameBackground,
+} from './frameComposer'
 import { buildSubtitleRenderSpec, DEFAULT_SUBTITLE_FONT_FAMILY, wrapSubtitleText } from './subtitleRenderModel'
+
+const backgroundImageCache = new Map()
 
 function drawRoundedRect(context, x, y, width, height, radius) {
   const safeRadius = Math.min(radius, width / 2, height / 2)
@@ -29,6 +37,47 @@ export function getContainedVideoLayout(framePreset, sourceWidth, sourceHeight) 
     width,
     height,
   }
+}
+
+function getCoverImageLayout(framePreset, sourceWidth, sourceHeight) {
+  const safeSourceWidth = Math.max(1, sourceWidth || framePreset.width)
+  const safeSourceHeight = Math.max(1, sourceHeight || framePreset.height)
+  const scale = Math.max(framePreset.width / safeSourceWidth, framePreset.height / safeSourceHeight)
+  const width = safeSourceWidth * scale
+  const height = safeSourceHeight * scale
+
+  return {
+    x: (framePreset.width - width) / 2,
+    y: (framePreset.height - height) / 2,
+    width,
+    height,
+  }
+}
+
+export function loadFrameBackgroundImage(frameBackground) {
+  const normalizedBackground = sanitizeFrameBackground(frameBackground)
+  if (!isImageFrameBackground(normalizedBackground)) {
+    return Promise.resolve(null)
+  }
+
+  const cachedPromise = backgroundImageCache.get(normalizedBackground.dataUrl)
+  if (cachedPromise) {
+    return cachedPromise
+  }
+
+  const nextPromise = new Promise((resolve, reject) => {
+    const image = new Image()
+    image.decoding = 'async'
+    image.onload = () => resolve(image)
+    image.onerror = () => {
+      backgroundImageCache.delete(normalizedBackground.dataUrl)
+      reject(new Error('Không thể tải ảnh nền bìa.'))
+    }
+    image.src = normalizedBackground.dataUrl
+  })
+
+  backgroundImageCache.set(normalizedBackground.dataUrl, nextPromise)
+  return nextPromise
 }
 
 export function buildSubtitleCardLayout(context, subtitleText, framePreset, fontFamily = DEFAULT_SUBTITLE_FONT_FAMILY) {
@@ -101,17 +150,29 @@ function drawSubtitleCard(context, subtitleText, framePreset, fontFamily = DEFAU
   )
 }
 
+function drawFrameBackground(context, framePreset, frameBackground, backgroundImage) {
+  context.fillStyle = getFrameBackgroundFillColor(frameBackground) || DEFAULT_FRAME_BACKGROUND
+  context.fillRect(0, 0, framePreset.width, framePreset.height)
+
+  if (!backgroundImage) {
+    return
+  }
+
+  const layout = getCoverImageLayout(framePreset, backgroundImage.naturalWidth, backgroundImage.naturalHeight)
+  context.drawImage(backgroundImage, layout.x, layout.y, layout.width, layout.height)
+}
+
 export function drawFrameComposition(context, {
   framePreset,
   frameBackground,
+  backgroundImage = null,
   videoElement,
   subtitleText,
   fontFamily = DEFAULT_SUBTITLE_FONT_FAMILY,
 }) {
   context.save()
   context.clearRect(0, 0, framePreset.width, framePreset.height)
-  context.fillStyle = frameBackground
-  context.fillRect(0, 0, framePreset.width, framePreset.height)
+  drawFrameBackground(context, framePreset, frameBackground, backgroundImage)
 
   if (videoElement && videoElement.readyState >= 2) {
     const layout = getContainedVideoLayout(framePreset, videoElement.videoWidth, videoElement.videoHeight)

@@ -1,18 +1,12 @@
 # TASK
 
 ## Active
-- [ ] Run one native export on the latest desktop build to benchmark adaptive worker planning
-  - Scope: frontend
-  - Owner files: `frontend/electron/export/nativeFfmpeg.mjs`, `frontend/electron/export/framePipeline.mjs`, `frontend/electron/export/scenePipeline.mjs`, `frontend/src/utils/nativeExportClient.js`, `frontend/src/utils/ffmpegManager.js`
-  - Evidence: the native export planner now scales scene-worker count, frame-worker count, and target chunk duration from logical CPU count, scene count, and total timeline duration instead of the previous coarse fixed defaults.
-  - Next step: trigger one native export on the restarted desktop build and compare the logged worker plan, chunk count, and wall-clock completion time in `export-debug.jsonl`.
-  - Validation: pending runtime export reproduction on latest desktop build
 - [ ] Re-run export on the latest desktop build to confirm record-frame parity
   - Scope: frontend
   - Owner files: `frontend/src/components/VideoPlayer/VideoPlayer.jsx`, `frontend/src/utils/frameCanvasRenderer.js`, `frontend/src/utils/frameCanvasExport.js`, `frontend/src/utils/ffmpegManager.js`
   - Evidence: preview and export previously used different renderers, so the output could not match what the user saw in `panel.video-player`. The latest implementation makes the preview itself use the shared canvas frame renderer, then export records that same renderer and muxes the merged audio back in.
-  - Next step: trigger one export on the restarted desktop build and confirm the output visually matches the frame preview while the log shows `Start record-frame compositor from preview renderer` during `framing`.
-  - Validation: pending runtime export reproduction on latest desktop build
+  - Next step: force or observe a renderer-record fallback export only when native export is unavailable, then confirm the output visually matches the frame preview while the log shows `Start record-frame compositor from preview renderer` during `framing`.
+  - Validation: pending renderer-fallback parity check; the latest image-background export now uses native fast export instead of the record-frame fallback.
 
 ## Backlog
 - [ ] Optimize client RAM for long videos
@@ -22,6 +16,41 @@
   - Validation: pending
 
 ## Completed
+- [x] Improve panel export native resource utilization
+  - Scope: frontend
+  - Owner files: `frontend/electron/export/exportCoordinator.mjs`, `frontend/electron/export/framePipeline.mjs`, `frontend/electron/export/nativeFfmpeg.mjs`, `frontend/src/utils/ffmpegManager.js`, `frontend/src/utils/nativeExportClient.js`, `TASK.md`, `MAP.md`
+  - Outcome: image-backed frame exports no longer bypass native export; selected background images are written as native job assets and composed as cover backgrounds in FFmpeg, frame chunks are split by timeline duration instead of scene count so long scenes can use multiple workers, and worker planning now drives more of the host CPU/GPU budget.
+  - Validation: VS Code diagnostics; line guardrail checked with largest touched file at 357 lines; `npm run lint`; `npm run build`; `npm run desktop:start`; latest image-background export job `23e0a62a-7a5c-4b7c-8a81-97789a0f82e3` used 12 scene workers on 28 logical CPUs, 10 native frame workers, 36 chunks, `nvidia-nvenc`, and completed `Native export completed (114.7 MB)` / `Native fast export completed in renderer bridge`
+- [x] Add external image cover backgrounds for frame export
+  - Scope: frontend
+  - Owner files: `frontend/src/components/VideoPlayer/VideoPlayer.jsx`, `frontend/src/components/VideoPlayer/VideoPlayer.css`, `frontend/src/utils/frameComposer.js`, `frontend/src/utils/frameCanvasRenderer.js`, `frontend/src/utils/frameCanvasExport.js`, `frontend/src/utils/ffmpegManager.js`, `frontend/src/hooks/useFrameExport.js`, `frontend/src/hooks/useEditorPersistence.js`, `frontend/electron/projectStore.mjs`, `TASK.md`, `MAP.md`
+  - Outcome: frame backgrounds now support preset colors or a selected image, the player exposes an image picker with a hidden file input and preview swatch, image backgrounds persist through project metadata, preview/export canvas rendering draws cover images, and export bypasses native fast export for image-backed frames so renderer-record output can match the preview.
+  - Validation: VS Code diagnostics; line guardrail checked with largest touched file at 396 lines; `npm run lint`; `npm run build`; `npm run desktop:start`; confirmed backend health `200` and renderer finished load on bundle `index-DetfDFDl.js`
+- [x] Sort dashboard projects by creation date and show first-frame thumbnails
+  - Scope: frontend
+  - Owner files: `frontend/src/components/ProjectDashboard/ProjectDashboard.jsx`, `frontend/src/components/ProjectDashboard/ProjectDashboard.css`, `frontend/src/utils/projectStorage.js`, `frontend/electron/projectStore.mjs`, `TASK.md`, `MAP.md`
+  - Outcome: project metadata now preserves `created_at`, dashboard project summaries expose preview URLs, saved projects can be sorted newest or oldest from `dashboard.sort`, and each saved project card renders a first-frame video thumbnail with a fallback state.
+  - Validation: VS Code diagnostics; line guardrail checked with largest touched file at 396 lines; `npm run lint`; `npm run build`; `npm run desktop:start`; confirmed backend health `200` and renderer finished load on bundle `index-DetfDFDl.js`
+- [x] Preserve subtitle transcription resume across project switches
+  - Scope: frontend
+  - Owner files: `frontend/src/hooks/editorPersistenceJobRestore.js`, `frontend/src/hooks/useVideoEditor.js`, `frontend/src/utils/audioExtractor.js`, `TASK.md`, `MAP.md`
+  - Outcome: reopening a project during `tạo lại phụ đề gốc` now probes the saved `transcription_job_id` instead of clearing it just because older subtitles already exist, and transcription progress callbacks are scoped to the active session so switching projects does not leak progress from one project into another.
+  - Validation: `npm run lint`; `npm run build`; `npm run desktop:start`; observed the latest runtime build `index-BN8FipEr.js` start a new transcription job and continue polling `/api/transcription/status/69fc49cb51b8b2bf3b6c4e15` while the patched desktop app was running
+- [x] Preserve subtitle translation resume across project switches
+  - Scope: frontend
+  - Owner files: `frontend/src/hooks/useEditorPersistence.js`, `frontend/src/hooks/editorPersistenceJobRestore.js`, `frontend/src/hooks/useVideoEditor.js`, `frontend/src/utils/subtitleUtils.js`
+  - Outcome: project restore no longer clears a valid `translation_job_id` just because source subtitles already exist, reopening a project now probes the saved translation job and either keeps showing progress or downloads the finished translation, and translation progress callbacks are scoped to the active session so switching between projects does not leak progress updates across projects.
+  - Validation: `npm run lint`; `npm run build`; `npm run desktop:start`; observed the latest runtime build `index-C4q9INIq.js` poll `/api/translation/status/2ef0946567ad` after restart and then download `/api/translation/download/2ef0946567ad/subtitles_vi_Vietnamese.srt` successfully when the job finished
+- [x] Split the oversized editor persistence hook
+  - Scope: frontend
+  - Owner files: `frontend/src/hooks/useEditorPersistence.js`, `frontend/src/hooks/editorPersistenceJobRestore.js`, `TASK.md`, `MAP.md`
+  - Outcome: extracted saved transcription and translation restore helpers into `editorPersistenceJobRestore.js`, reducing `useEditorPersistence.js` from 448 lines to 348 lines while keeping restore behavior localized.
+  - Validation: measured `useEditorPersistence.js` at 348 lines; `npm run lint`; `npm run build`
+- [x] Prevent stale subtitle job progress on project open
+  - Scope: frontend
+  - Owner files: `frontend/src/hooks/useEditorPersistence.js`, `frontend/src/utils/audioExtractor.js`, `frontend/src/utils/subtitleUtils.js`, `frontend/electron/projectStore.mjs`, `TASK.md`, `MAP.md`
+  - Outcome: project restore now clears in-memory subtitle job state before probing, immediately syncs `sessionIdRef` during restore, and fixes project metadata writes so `null` actually clears stale `transcription_job_id` and `translation_job_id` values instead of preserving them.
+  - Validation: found persisted `transcription_job_id` and `translation_job_id` alongside existing subtitles in `C:\Users\ADMIN\AppData\Roaming\frontend\projects\*.json`; verified the root cause in `frontend/electron/projectStore.mjs` where `??` preserved stale job IDs; cleared the existing stale job markers in saved project metadata; `npm run lint`; `npm run build`
 - [x] Make subtitle translation complete successfully when upstream workers are unavailable
   - Scope: server
   - Owner files: `server/proxy_routes.py`, `server/translation_fallback.py`, `server/requirements.txt`, `TASK.md`, `MAP.md`

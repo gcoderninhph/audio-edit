@@ -16,13 +16,129 @@ export const FRAME_BACKGROUND_OPTIONS = [
 
 export const DEFAULT_FRAME_PRESET_ID = FRAME_PRESETS[0].id
 export const DEFAULT_FRAME_BACKGROUND = FRAME_BACKGROUND_OPTIONS[0].value
+const IMAGE_BACKGROUND_KIND = 'image'
+
+function loadImageFromDataUrl(dataUrl) {
+  return new Promise((resolve, reject) => {
+    const image = new Image()
+    image.decoding = 'async'
+    image.onload = () => resolve(image)
+    image.onerror = () => reject(new Error('Không thể đọc ảnh nền đã chọn.'))
+    image.src = dataUrl
+  })
+}
+
+function readFileAsDataUrl(file) {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader()
+    reader.onload = () => resolve(String(reader.result || ''))
+    reader.onerror = () => reject(reader.error || new Error('Không thể đọc file ảnh đã chọn.'))
+    reader.readAsDataURL(file)
+  })
+}
 
 export function getFramePresetById(framePresetId) {
   return FRAME_PRESETS.find((preset) => preset.id === framePresetId) || FRAME_PRESETS[0]
 }
 
+export function isImageFrameBackground(frameBackground) {
+  return Boolean(
+    frameBackground
+      && typeof frameBackground === 'object'
+      && frameBackground.kind === IMAGE_BACKGROUND_KIND
+      && typeof frameBackground.dataUrl === 'string'
+      && /^data:image\//i.test(frameBackground.dataUrl),
+  )
+}
+
+export async function createImageFrameBackgroundFromFile(file, { maxDimension = 1600 } = {}) {
+  if (!(file instanceof Blob)) {
+    throw new Error('File ảnh không hợp lệ.')
+  }
+
+  const originalDataUrl = await readFileAsDataUrl(file)
+  const image = await loadImageFromDataUrl(originalDataUrl)
+  const longestEdge = Math.max(image.naturalWidth || 0, image.naturalHeight || 0, 1)
+  const scale = Math.min(1, maxDimension / longestEdge)
+  let dataUrl = originalDataUrl
+
+  if (scale < 1) {
+    const canvas = document.createElement('canvas')
+    canvas.width = Math.max(1, Math.round((image.naturalWidth || 1) * scale))
+    canvas.height = Math.max(1, Math.round((image.naturalHeight || 1) * scale))
+    const context = canvas.getContext('2d')
+
+    if (!context) {
+      throw new Error('Không thể tối ưu ảnh nền đã chọn.')
+    }
+
+    context.drawImage(image, 0, 0, canvas.width, canvas.height)
+    const targetType = file.type === 'image/png' ? 'image/png' : 'image/jpeg'
+    dataUrl = canvas.toDataURL(targetType, targetType === 'image/png' ? undefined : 0.88)
+  }
+
+  return {
+    kind: IMAGE_BACKGROUND_KIND,
+    dataUrl,
+    name: typeof file.name === 'string' && file.name.trim() ? file.name.trim() : 'Background image',
+  }
+}
+
 export function getFrameBackgroundLabel(frameBackground) {
+  if (isImageFrameBackground(frameBackground)) {
+    return 'Ảnh nền'
+  }
+
   return FRAME_BACKGROUND_OPTIONS.find((option) => option.value === frameBackground)?.label || 'Custom'
+}
+
+export function getFrameBackgroundFillColor(frameBackground) {
+  return /^#[0-9a-f]{6}$/i.test(frameBackground || '')
+    ? frameBackground
+    : DEFAULT_FRAME_BACKGROUND
+}
+
+export function describeFrameBackground(frameBackground) {
+  const normalizedBackground = sanitizeFrameBackground(frameBackground)
+  if (isImageFrameBackground(normalizedBackground)) {
+    return {
+      type: IMAGE_BACKGROUND_KIND,
+      name: normalizedBackground.name || 'Background image',
+    }
+  }
+
+  return {
+    type: 'color',
+    value: normalizedBackground,
+    label: getFrameBackgroundLabel(normalizedBackground),
+  }
+}
+
+export function serializeFrameBackground(frameBackground) {
+  const normalizedBackground = sanitizeFrameBackground(frameBackground)
+  if (isImageFrameBackground(normalizedBackground)) {
+    return `image:${normalizedBackground.name || 'background'}:${normalizedBackground.dataUrl.length}:${normalizedBackground.dataUrl.slice(0, 64)}`
+  }
+
+  return normalizedBackground
+}
+
+export function sanitizeFrameBackground(frameBackground) {
+  if (/^#[0-9a-f]{6}$/i.test(frameBackground || '')) {
+    return frameBackground
+  }
+
+  if (isImageFrameBackground(frameBackground)) {
+    return {
+      kind: IMAGE_BACKGROUND_KIND,
+      dataUrl: frameBackground.dataUrl,
+      name: typeof frameBackground.name === 'string' && frameBackground.name.trim()
+        ? frameBackground.name.trim()
+        : 'Background image',
+    }
+  }
+
+  return DEFAULT_FRAME_BACKGROUND
 }
 
 export function getFrameAspectRatio(framePresetId) {
@@ -33,12 +149,6 @@ export function getFrameAspectRatio(framePresetId) {
 export function getFrameSummary(framePresetId) {
   const framePreset = getFramePresetById(framePresetId)
   return `${framePreset.label} • ${framePreset.width}x${framePreset.height}`
-}
-
-export function sanitizeFrameBackground(frameBackground) {
-  return /^#[0-9a-f]{6}$/i.test(frameBackground || '')
-    ? frameBackground
-    : DEFAULT_FRAME_BACKGROUND
 }
 
 export function buildExportSubtitles(subtitles, keptScenes) {

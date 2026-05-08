@@ -133,17 +133,60 @@ export async function translateSubtitles(subtitles, targetLanguage, onProgress, 
   }
 }
 
-export async function resumeTranslation(requestId, outputFileName, onProgress) {
+export async function resumeTranslation(requestId, outputFileName, onProgress, options = {}) {
   onProgress({ phase: 'Đang tiếp tục tiến trình dịch...', percent: 30 });
-  return await pollTranslationJob(requestId, outputFileName, onProgress);
+  return await pollTranslationJob(requestId, outputFileName, onProgress, {
+    initialDelayMs: options.initialDelayMs ?? 3000,
+  });
 }
 
-async function pollTranslationJob(requestId, outputFileName, onProgress) {
+export async function getTranslationJobSnapshot(requestId) {
+  const statusRes = await apiFetch(`/api/translation/status/${requestId}`);
+  if (statusRes.status === 404) {
+    return { state: 'missing' };
+  }
+  if (!statusRes.ok) {
+    throw new Error(await readApiErrorMessage(statusRes, 'Không thể kiểm tra trạng thái tiến trình dịch'));
+  }
+
+  const statusData = await statusRes.json();
+  if (statusData.status === 'finished') {
+    return { state: 'finished' };
+  }
+  if (statusData.status === 'failed') {
+    return {
+      state: 'failed',
+      message: statusData.message || 'Quá trình dịch thất bại (LLM-Subtrans Error)',
+    };
+  }
+
+  return {
+    state: 'running',
+    status: statusData.status,
+  };
+}
+
+export async function downloadTranslatedSubtitles(requestId, outputFileName) {
+  const downloadRes = await apiFetch(`/api/translation/download/${requestId}/${outputFileName}`);
+
+  if (!downloadRes.ok) {
+    throw new Error(await readApiErrorMessage(downloadRes, 'Không thể tải file phụ đề sau khi dịch xong'));
+  }
+
+  const translatedSrtText = await downloadRes.text();
+  return srtToJson(translatedSrtText);
+}
+
+async function pollTranslationJob(requestId, outputFileName, onProgress, { initialDelayMs = 3000 } = {}) {
   onProgress({ phase: 'Đang dịch (Việc này có thể mất vài phút)...', percent: 30 });
   let isFinished = false;
+  let waitMilliseconds = initialDelayMs;
 
   while (!isFinished) {
-    await new Promise(resolve => setTimeout(resolve, 3000));
+    if (waitMilliseconds > 0) {
+      await new Promise(resolve => setTimeout(resolve, waitMilliseconds));
+    }
+    waitMilliseconds = 3000;
 
     const statusRes = await apiFetch(`/api/translation/status/${requestId}`);
     if (statusRes.status === 404) {
@@ -166,14 +209,7 @@ async function pollTranslationJob(requestId, outputFileName, onProgress) {
 
   // Download file
   onProgress({ phase: 'Đang tải kết quả...', percent: 90 });
-  const downloadRes = await apiFetch(`/api/translation/download/${requestId}/${outputFileName}`);
-  
-  if (!downloadRes.ok) {
-    throw new Error(await readApiErrorMessage(downloadRes, 'Không thể tải file phụ đề sau khi dịch xong'));
-  }
-
-  const translatedSrtText = await downloadRes.text();
-  const translatedSubtitles = srtToJson(translatedSrtText);
+  const translatedSubtitles = await downloadTranslatedSubtitles(requestId, outputFileName);
   
   onProgress({ phase: 'Hoàn tất!', percent: 100 });
   return translatedSubtitles;

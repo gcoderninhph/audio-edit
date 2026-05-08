@@ -4,7 +4,7 @@ import { runNativeExport } from './nativeExportClient';
 import { renderFrameCompositionVideo } from './frameCanvasExport';
 import { logExportDebug, writeDesktopDebugLog } from './desktopLogger';
 import { buildMergedSceneTrack } from './ffmpegSceneMerge';
-import { getFramePresetById, sanitizeFrameBackground } from './frameComposer';
+import { describeFrameBackground, getFramePresetById, sanitizeFrameBackground } from './frameComposer';
 import { materializeVideoFile } from './projectStorage';
 
 let ffmpegInstance = null;
@@ -252,13 +252,18 @@ export async function exportVideo(inputFile, keptScenes, subtitles, frameSetting
     throw new Error('No scenes to export');
   }
 
+  const normalizedFrameBackground = sanitizeFrameBackground(frameSettings?.backgroundColor);
+
   try {
     emitExportLog(onProgress, 'preparing', 'Attempt native fast export backend');
     return await runNativeExport({
       inputFile,
       keptScenes,
       subtitles,
-      frameSettings,
+      frameSettings: {
+        ...frameSettings,
+        backgroundColor: normalizedFrameBackground,
+      },
     }, onProgress);
   } catch (error) {
     emitExportLog(
@@ -269,6 +274,7 @@ export async function exportVideo(inputFile, keptScenes, subtitles, frameSetting
     );
     void logExportDebug('Fallback to renderer export backend', {
       code: error?.code || 'NATIVE_EXPORT_FAILED',
+      frameBackground: describeFrameBackground(normalizedFrameBackground),
       message: error?.message || 'Unknown native export error',
     }, 'warning');
   }
@@ -353,7 +359,7 @@ export async function exportVideo(inputFile, keptScenes, subtitles, frameSetting
       sourceVideoBlob: cutVideoBlob,
       subtitles: subtitles || [],
       framePreset,
-      frameBackground: sanitizeFrameBackground(frameSettings?.backgroundColor),
+      frameBackground: normalizedFrameBackground,
       onProgress,
       onLog: (message) => emitExportLog(onProgress, 'framing', message),
     });

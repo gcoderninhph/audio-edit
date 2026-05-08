@@ -1,5 +1,5 @@
 import { logExportDebug } from './desktopLogger'
-import { getFramePresetById, sanitizeFrameBackground } from './frameComposer'
+import { describeFrameBackground, getFramePresetById, sanitizeFrameBackground } from './frameComposer'
 import { buildDesktopExportSourceDescriptor } from './projectStorage'
 import { buildSubtitleOverlayAssets } from './subtitleOverlayAssets'
 
@@ -58,7 +58,7 @@ export async function runNativeExport({ inputFile, keptScenes, subtitles, frameS
   const jobId = createJobId()
 
   void logExportDebug('Attempt native fast export backend', {
-    frameBackground,
+    frameBackground: describeFrameBackground(frameBackground),
     framePresetId: framePreset.id,
     jobId,
     keptSceneCount: keptScenes.length,

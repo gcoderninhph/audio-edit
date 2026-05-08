@@ -1,4 +1,4 @@
-import { drawFrameComposition } from './frameCanvasRenderer'
+import { drawFrameComposition, loadFrameBackgroundImage } from './frameCanvasRenderer'
 import { DEFAULT_SUBTITLE_FONT_FAMILY } from './subtitleRenderModel'
 
 function waitForEvent(target, eventName) {
@@ -52,6 +52,7 @@ export async function renderFrameCompositionVideo({
   const videoElement = document.createElement('video')
   const canvasElement = document.createElement('canvas')
   const canvasContext = canvasElement.getContext('2d', { alpha: false })
+  const backgroundImage = await loadFrameBackgroundImage(frameBackground)
 
   if (!canvasContext) {
     throw new Error('Không thể khởi tạo canvas renderer cho export.')
@@ -85,6 +86,7 @@ export async function renderFrameCompositionVideo({
   drawFrameComposition(canvasContext, {
     framePreset,
     frameBackground,
+    backgroundImage,
     videoElement,
     subtitleText: getActiveSubtitleText(subtitles, 0),
     fontFamily,
@@ -103,6 +105,7 @@ export async function renderFrameCompositionVideo({
     drawFrameComposition(canvasContext, {
       framePreset,
       frameBackground,
+      backgroundImage,
       videoElement,
       subtitleText: getActiveSubtitleText(subtitles, videoElement.currentTime),
       fontFamily,

@@ -97,6 +97,10 @@ async function writeProjectMetadata(projectId, projectData) {
 }
 
 function buildProjectRecord(projectId, payload, existingRecord = null) {
+  const hasTranscriptionJobId = Object.prototype.hasOwnProperty.call(payload, 'transcriptionJobId')
+  const hasTranslationJobId = Object.prototype.hasOwnProperty.call(payload, 'translationJobId')
+  const createdAt = existingRecord?.created_at || new Date().toISOString()
+
   return {
     id: projectId,
     video_filename: payload.videoFilename ?? existingRecord?.video_filename ?? '',
@@ -109,8 +113,9 @@ function buildProjectRecord(projectId, payload, existingRecord = null) {
     deleted_ids: Array.isArray(payload.deletedIds) ? payload.deletedIds : existingRecord?.deleted_ids ?? [],
     subtitles: Array.isArray(payload.subtitles) ? payload.subtitles : existingRecord?.subtitles ?? [],
     sensitivity: payload.sensitivity ?? existingRecord?.sensitivity ?? 2.5,
-    transcription_job_id: payload.transcriptionJobId ?? existingRecord?.transcription_job_id ?? null,
-    translation_job_id: payload.translationJobId ?? existingRecord?.translation_job_id ?? null,
+    transcription_job_id: hasTranscriptionJobId ? payload.transcriptionJobId : existingRecord?.transcription_job_id ?? null,
+    translation_job_id: hasTranslationJobId ? payload.translationJobId : existingRecord?.translation_job_id ?? null,
+    created_at: createdAt,
     updated_at: new Date().toISOString(),
   }
 }
@@ -166,6 +171,8 @@ async function saveProject(payload) {
 function toProjectSummary(projectRecord) {
   return {
     id: projectRecord.id,
+    created_at: projectRecord.created_at || projectRecord.updated_at,
+    preview_url: projectRecord.video_filename ? buildProjectVideoUrl(projectRecord.id) : '',
     video_original_name: projectRecord.video_original_name,
     sensitivity: projectRecord.sensitivity,
     updated_at: projectRecord.updated_at,
@@ -194,8 +201,8 @@ async function listProjects() {
   }
 
   return projects.sort((left, right) => {
-    const leftTime = Date.parse(left.updated_at || 0)
-    const rightTime = Date.parse(right.updated_at || 0)
+    const leftTime = Date.parse(left.created_at || left.updated_at || 0)
+    const rightTime = Date.parse(right.created_at || right.updated_at || 0)
     return rightTime - leftTime
   })
 }

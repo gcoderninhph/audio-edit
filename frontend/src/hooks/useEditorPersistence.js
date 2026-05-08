@@ -1,7 +1,9 @@
 import { useState, useCallback, useEffect, useRef } from 'react';
-import { resumeTranscription } from '../utils/audioExtractor';
-import { resumeTranslation } from '../utils/subtitleUtils';
-import { DEFAULT_FRAME_BACKGROUND, DEFAULT_FRAME_PRESET_ID } from '../utils/frameComposer';
+import { DEFAULT_FRAME_BACKGROUND, DEFAULT_FRAME_PRESET_ID, sanitizeFrameBackground } from '../utils/frameComposer';
+import {
+  restoreSavedTranscriptionJob,
+  restoreSavedTranslationJob,
+} from './editorPersistenceJobRestore';
 import {
   deleteLocalProject,
   getLocalProject,
@@ -169,42 +171,14 @@ export function useEditorPersistence({
   }, [setVideoFileState, setVideoFilename, setVideoName, setVideoUrl, videoUrl]);
 
   const resumeSavedTranscription = useCallback((data) => {
-    if (!data.transcription_job_id) return;
-
-    setTranscriptionJobId(data.transcription_job_id);
-    setIsTranscribing(true);
-
-    resumeTranscription(data.transcription_job_id, setTranscribeProgress)
-      .then((nextSubtitles) => {
-        if (sessionIdRef.current !== data.id) return;
-
-        setSubtitles(nextSubtitles);
-        setTranscriptionJobId(null);
-        setIsTranscribing(false);
-        setTranscribeProgress(null);
-        performAutoSave(
-          data.scenes || [],
-          Array.from(new Set(data.deleted_ids || [])),
-          nextSubtitles,
-          null,
-          data.translation_job_id
-        );
-      })
-      .catch((error) => {
-        if (sessionIdRef.current !== data.id) return;
-
-        console.error('Lỗi resume tạo phụ đề:', error);
-        setTranscriptionJobId(null);
-        setIsTranscribing(false);
-        setTranscribeProgress(null);
-        performAutoSave(
-          data.scenes || [],
-          Array.from(new Set(data.deleted_ids || [])),
-          data.subtitles || [],
-          null,
-          data.translation_job_id
-        );
-      });
+    return restoreSavedTranscriptionJob(data, {
+      performAutoSave,
+      sessionIdRef,
+      setIsTranscribing,
+      setSubtitles,
+      setTranscribeProgress,
+      setTranscriptionJobId,
+    });
   }, [
     performAutoSave,
     sessionIdRef,
@@ -215,45 +189,14 @@ export function useEditorPersistence({
   ]);
 
   const resumeSavedTranslation = useCallback((data) => {
-    if (!data.translation_job_id) return;
-
-    const [requestId, outputFileName] = data.translation_job_id.split('|');
-    if (!requestId || !outputFileName) return;
-
-    setTranslationJobId(data.translation_job_id);
-    setIsTranslating(true);
-
-    resumeTranslation(requestId, outputFileName, setTranslateProgress)
-      .then((nextSubtitles) => {
-        if (sessionIdRef.current !== data.id) return;
-
-        setSubtitles(nextSubtitles);
-        setTranslationJobId(null);
-        setIsTranslating(false);
-        setTranslateProgress(null);
-        performAutoSave(
-          data.scenes || [],
-          Array.from(new Set(data.deleted_ids || [])),
-          nextSubtitles,
-          data.transcription_job_id,
-          null
-        );
-      })
-      .catch((error) => {
-        if (sessionIdRef.current !== data.id) return;
-
-        console.error('Lỗi resume dịch phụ đề:', error);
-        setTranslationJobId(null);
-        setIsTranslating(false);
-        setTranslateProgress(null);
-        performAutoSave(
-          data.scenes || [],
-          Array.from(new Set(data.deleted_ids || [])),
-          data.subtitles || [],
-          data.transcription_job_id,
-          null
-        );
-      });
+    return restoreSavedTranslationJob(data, {
+      performAutoSave,
+      sessionIdRef,
+      setIsTranslating,
+      setSubtitles,
+      setTranslateProgress,
+      setTranslationJobId,
+    });
   }, [
     performAutoSave,
     sessionIdRef,
@@ -270,9 +213,17 @@ export function useEditorPersistence({
 
       await restoreVideoState(id, data);
 
+      setIsTranscribing(false);
+      setTranscribeProgress(null);
+      setTranscriptionJobId(null);
+      setIsTranslating(false);
+      setTranslateProgress(null);
+      setTranslationJobId(null);
+
+      sessionIdRef.current = data.id;
       setSessionId(data.id);
       setFramePresetId(data.frame_preset_id || DEFAULT_FRAME_PRESET_ID);
-      setFrameBackground(data.frame_background || DEFAULT_FRAME_BACKGROUND);
+      setFrameBackground(sanitizeFrameBackground(data.frame_background || DEFAULT_FRAME_BACKGROUND));
       setScenes(data.scenes || []);
       setDeletedSceneIds(new Set(data.deleted_ids || []));
       setSubtitles(data.subtitles || []);
@@ -281,8 +232,13 @@ export function useEditorPersistence({
         setSensitivity(data.sensitivity);
       }
 
-      resumeSavedTranscription(data);
-      resumeSavedTranslation(data);
+      if (data.transcription_job_id) {
+        void resumeSavedTranscription(data);
+      }
+
+      if (data.translation_job_id) {
+        void resumeSavedTranslation(data);
+      }
 
       resetHistory();
       return data;
@@ -300,11 +256,18 @@ export function useEditorPersistence({
     setDeletedSceneIds,
     setFrameBackground,
     setFramePresetId,
+    setIsTranscribing,
+    setIsTranslating,
     setIsRestoring,
     setScenes,
     setSensitivity,
     setSessionId,
     setSubtitles,
+    sessionIdRef,
+    setTranscribeProgress,
+    setTranscriptionJobId,
+    setTranslateProgress,
+    setTranslationJobId,
   ]);
 
   const deleteSession = useCallback(async (id) => {

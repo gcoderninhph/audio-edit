@@ -79,13 +79,13 @@ export function getSceneWorkerPlan({ sceneCount = 0, totalDurationSeconds = 0 } 
   const logicalCpuCount = getLogicalCpuCount()
   const normalizedSceneCount = normalizeCount(sceneCount)
   const normalizedDurationSeconds = normalizeSeconds(totalDurationSeconds)
-  const cpuBudget = Math.max(2, Math.floor(logicalCpuCount * 0.9))
+  const cpuBudget = Math.max(2, Math.floor(logicalCpuCount * 0.95))
   const aggressiveConcurrency = normalizedDurationSeconds >= 180 || normalizedSceneCount >= 8
-  const baseWorkerCount = clamp(Math.ceil(logicalCpuCount / (aggressiveConcurrency ? 3 : 4)), 2, 10)
+  const baseWorkerCount = clamp(Math.ceil(logicalCpuCount / (aggressiveConcurrency ? 2.5 : 3.5)), 2, 12)
   const workerCount = normalizedSceneCount > 0
-    ? clamp(Math.min(normalizedSceneCount, baseWorkerCount), 1, 10)
+    ? clamp(Math.min(normalizedSceneCount, baseWorkerCount), 1, 12)
     : baseWorkerCount
-  const threadsPerWorker = clamp(Math.floor(cpuBudget / Math.max(workerCount, 1)) || 1, 1, 4)
+  const threadsPerWorker = clamp(Math.floor(cpuBudget / Math.max(workerCount, 1)) || 1, 1, 12)
 
   return {
     logicalCpuCount,
@@ -102,22 +102,21 @@ export function getFrameChunkPlan({ encoderPlan = null, sceneCount = 0, totalDur
   const normalizedSceneCount = normalizeCount(sceneCount)
   const normalizedDurationSeconds = normalizeSeconds(totalDurationSeconds)
   const hardware = Boolean(encoderPlan?.hardware)
-  const minChunkDurationSeconds = hardware ? 6 : 10
-  const maxChunkDurationSeconds = hardware ? 14 : 22
-  const queueDepth = hardware ? 3 : 2
-  const baseWorkerCeiling = hardware ? 6 : 4
+  const minChunkDurationSeconds = hardware ? 4 : 8
+  const maxChunkDurationSeconds = hardware ? 12 : 18
+  const queueDepth = hardware ? 4 : 3
+  const baseWorkerCeiling = hardware ? 12 : 8
   const baseWorkerFloor = hardware ? 2 : 1
   const baseWorkerCount = clamp(
-    Math.ceil(logicalCpuCount / (hardware ? 6 : 8)),
+    Math.ceil(logicalCpuCount / (hardware ? 3 : 4)),
     baseWorkerFloor,
     baseWorkerCeiling,
   )
   const maxWorkersByDuration = normalizedDurationSeconds > 0
     ? Math.max(1, Math.floor(normalizedDurationSeconds / minChunkDurationSeconds))
     : baseWorkerCount
-  const maxWorkersByScenes = normalizedSceneCount > 0 ? normalizedSceneCount : baseWorkerCount
   const workerCount = clamp(
-    Math.min(baseWorkerCount, maxWorkersByDuration, maxWorkersByScenes),
+    Math.min(baseWorkerCount, maxWorkersByDuration),
     1,
     baseWorkerCeiling,
   )
