@@ -37,6 +37,7 @@ export default function ExportPanel({
   keptScenes,
   keptDuration,
   deletedSceneIds,
+  duration = 0,
   isExporting,
   exportProgress,
   exportUrl,
@@ -54,7 +55,7 @@ export default function ExportPanel({
 
   const hasScenes = scenes && scenes.length > 0;
   const hasDeletedScenes = deletedSceneIds && deletedSceneIds.size > 0;
-  const canExport = hasScenes && keptScenes.length > 0;
+  const canExport = keptScenes.length > 0 || duration > 0;
 
   const handleExport = () => {
     if (canExport) onExport();
@@ -77,18 +78,20 @@ export default function ExportPanel({
     a.click();
   };
 
-  if (!hasScenes) return null;
-
   return (
     <div className="export-panel dev-locator-host" id="export-panel">
       <DeveloperLocator code="panel.export.content" title="Export Panel" />
       <div className="export-panel-header">
         <div>
           <div className="export-panel-title">Export Video</div>
-          {hasScenes && (
+          {hasScenes ? (
             <div className="export-panel-info">
               {keptScenes.length}/{scenes.length} cảnh • {formatTime(keptDuration)}
               {hasDeletedScenes && ` • ${deletedSceneIds.size} cảnh bị xóa`}
+            </div>
+          ) : (
+            <div className="export-panel-info">
+              {duration > 0 ? `Toàn bộ video • ${formatTime(duration)} • chưa cắt cảnh` : 'Đang tải thời lượng video...'}
             </div>
           )}
           <div className="export-frame-info">

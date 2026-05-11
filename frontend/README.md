@@ -2,13 +2,13 @@
 
 This frontend now uses Electron as the primary runtime for real project work.
 
-- `npm run desktop:dev` starts the React renderer inside Electron and launches or connects to the Flask subtitle service at `http://127.0.0.1:5000`.
+- `npm run desktop:dev` watches and rebuilds the renderer into `dist/`, then launches Electron without opening a renderer web port.
 - `npm run dev` still serves the renderer in a browser for UI iteration, but local project persistence depends on the Electron desktop bridge.
 
 ## Desktop Commands
 
-- `npm run desktop:dev` starts Vite on `127.0.0.1:5173`, waits for it to become ready, then launches Electron.
-- `npm run desktop:start` builds the renderer and launches Electron against the local production build.
+- `npm run desktop:dev` rebuilds `dist/` on change and launches Electron against the desktop protocol runtime.
+- `npm run desktop:start` builds the renderer and launches Electron against the local desktop protocol runtime.
 
 ## Backend Runtime
 

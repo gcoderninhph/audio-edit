@@ -29,11 +29,14 @@ contextBridge.exposeInMainWorld('desktopBridge', {
   },
   projectStore: {
     saveVideoFile: (payload) => ipcRenderer.invoke('projects:save-video', payload),
+    saveVoiceoverFile: (payload) => ipcRenderer.invoke('projects:save-voiceover', payload),
     saveProject: (payload) => ipcRenderer.invoke('projects:save-project', payload),
     listProjects: () => ipcRenderer.invoke('projects:list'),
     getProject: (projectId) => ipcRenderer.invoke('projects:get', projectId),
     getProjectVideo: (projectId) => ipcRenderer.invoke('projects:get-video', projectId),
     readProjectVideoBytes: (projectId) => ipcRenderer.invoke('projects:read-video-bytes', projectId),
+    getProjectVoiceover: (projectId) => ipcRenderer.invoke('projects:get-voiceover', projectId),
+    readProjectVoiceoverBytes: (projectId) => ipcRenderer.invoke('projects:read-voiceover-bytes', projectId),
     deleteProject: (projectId) => ipcRenderer.invoke('projects:delete', projectId),
   },
 })

@@ -1,16 +1,24 @@
 import { useRef, useState, useCallback, useEffect, useMemo } from 'react';
 import {
   createImageFrameBackgroundFromFile,
-  FRAME_BACKGROUND_OPTIONS,
-  FRAME_PRESETS,
+  getFrameBackgroundLabel,
   getFrameBackgroundFillColor,
   getFramePresetById,
-  isImageFrameBackground,
 } from '../../utils/frameComposer';
 import { drawFrameComposition, loadFrameBackgroundImage } from '../../utils/frameCanvasRenderer';
 import { getKeptScenes, getKeptDuration, mapRealToKeptTime, mapKeptToRealTime } from '../../utils/timeMapping';
+import VideoPlayerFrameControls from './VideoPlayerFrameControls';
+import VideoPlayerFrameSummaryBar from './VideoPlayerFrameSummaryBar';
+import VideoPlayerSidebar from './VideoPlayerSidebar';
+import VideoPlayerTransportControls from './VideoPlayerTransportControls';
 import DeveloperLocator from '../DeveloperLocator/DeveloperLocator';
 import './VideoPlayer.css';
+
+const FRAME_SIDEBAR_SECTIONS = Object.freeze({
+  FRAME: 'frame',
+  BACKGROUND: 'background',
+  AUDIO: 'audio',
+});
 
 function formatTime(seconds) {
   if (!seconds || !isFinite(seconds)) return '00:00';
@@ -32,27 +40,99 @@ export default function VideoPlayer({
   scenes,
   deletedSceneIds,
   subtitles,
+  voiceoverTrack,
+  activeSidebarSection,
+  onToggleSidebarSection,
+  onCloseSidebarSection,
 }) {
   const [isPlaying, setIsPlaying] = useState(false);
   const [duration, setDuration] = useState(0);
   const [realCurrentTime, setRealCurrentTime] = useState(0);
-  const [volume, setVolume] = useState(1);
+  const [videoVolume, setVideoVolume] = useState(1);
+  const [voiceoverVolume, setVoiceoverVolume] = useState(1);
+  const [customizedAudioTrackKey, setCustomizedAudioTrackKey] = useState('');
   const [frameBackgroundImage, setFrameBackgroundImage] = useState(null);
   const seekBarRef = useRef(null);
   const canvasRef = useRef(null);
+  const voiceoverRef = useRef(null);
   const animationFrameRef = useRef(null);
-  const backgroundInputRef = useRef(null);
   const framePreset = useMemo(() => getFramePresetById(framePresetId), [framePresetId]);
 
   const keptScenes = useMemo(() => getKeptScenes(scenes, deletedSceneIds), [scenes, deletedSceneIds]);
   const keptDuration = useMemo(() => getKeptDuration(keptScenes), [keptScenes]);
-  const displayedTime = useMemo(() => mapRealToKeptTime(realCurrentTime, keptScenes), [realCurrentTime, keptScenes]);
+  const hasSceneCuts = keptScenes.length > 0;
+  const displayedTime = useMemo(() => {
+    if (!hasSceneCuts) return realCurrentTime;
+    return mapRealToKeptTime(realCurrentTime, keptScenes);
+  }, [hasSceneCuts, realCurrentTime, keptScenes]);
+  const displayedDuration = useMemo(() => {
+    if (!hasSceneCuts) return duration;
+    return keptDuration;
+  }, [duration, hasSceneCuts, keptDuration]);
+  const frameBackgroundLabel = useMemo(() => getFrameBackgroundLabel(frameBackground), [frameBackground]);
+  const hasVoiceoverTrack = Boolean(voiceoverTrack?.previewUrl);
+  const currentAudioTrackKey = voiceoverTrack?.previewUrl || '';
+  const hasCustomizedCurrentAudioMix = Boolean(currentAudioTrackKey) && customizedAudioTrackKey === currentAudioTrackKey;
+  const effectiveVideoVolume = hasVoiceoverTrack
+    ? (hasCustomizedCurrentAudioMix ? videoVolume : 0)
+    : videoVolume;
+  const effectiveVoiceoverVolume = hasVoiceoverTrack
+    ? (hasCustomizedCurrentAudioMix ? voiceoverVolume : 1)
+    : 1;
+  const sidebarTitle = useMemo(() => {
+    if (activeSidebarSection === FRAME_SIDEBAR_SECTIONS.FRAME) {
+      return 'Chỉnh khung video';
+    }
 
-  const handleLoadedMetadata = () => {
-    const nextDuration = videoRef.current?.duration || 0;
+    if (activeSidebarSection === FRAME_SIDEBAR_SECTIONS.BACKGROUND) {
+      return 'Chỉnh nền video';
+    }
+
+    if (activeSidebarSection === FRAME_SIDEBAR_SECTIONS.AUDIO) {
+      return 'Chỉnh âm thanh xem trước';
+    }
+
+    return 'Chỉnh video';
+  }, [activeSidebarSection]);
+
+  const syncVoiceoverTime = useCallback((force = false) => {
+    const audioElement = voiceoverRef.current;
+    if (!audioElement || !voiceoverTrack?.previewUrl) return;
+
+    const maxTime = voiceoverTrack.duration > 0
+      ? voiceoverTrack.duration
+      : (Number.isFinite(audioElement.duration) ? audioElement.duration : displayedDuration);
+    const targetTime = Math.max(0, Math.min(displayedTime - (voiceoverTrack.startTime || 0), maxTime));
+
+    if (force || Math.abs((audioElement.currentTime || 0) - targetTime) > 0.25) {
+      audioElement.currentTime = targetTime;
+    }
+  }, [displayedDuration, displayedTime, voiceoverTrack]);
+
+  const syncPlaybackState = useCallback(() => {
+    const mediaElement = videoRef.current;
+    if (!mediaElement) {
+      setIsPlaying(false);
+      return;
+    }
+    setIsPlaying(!mediaElement.paused && !mediaElement.ended);
+  }, [videoRef]);
+
+  const handleLoadedMetadata = useCallback(() => {
+    const mediaElement = videoRef.current;
+    const nextDuration = mediaElement?.duration || 0;
     setDuration(nextDuration);
     onDurationChange?.(nextDuration);
-  };
+
+    if (mediaElement && nextDuration > 0 && mediaElement.currentTime >= nextDuration) {
+      const restartTime = keptScenes[0]?.start ?? 0;
+      mediaElement.currentTime = restartTime;
+      setRealCurrentTime(restartTime);
+      onTimeUpdate?.(restartTime);
+    }
+
+    syncPlaybackState();
+  }, [keptScenes, onDurationChange, onTimeUpdate, syncPlaybackState, videoRef]);
 
   const handleTimeUpdate = () => {
     let time = videoRef.current?.currentTime || 0;
@@ -78,45 +158,61 @@ export default function VideoPlayer({
   };
 
   const handlePlayPause = useCallback(() => {
-    if (!videoRef.current) return;
-    if (videoRef.current.paused) {
-      videoRef.current.play();
-      setIsPlaying(true);
-    } else {
-      videoRef.current.pause();
-      setIsPlaying(false);
+    const mediaElement = videoRef.current;
+    if (!mediaElement) return;
+
+    if (!mediaElement.paused) {
+      mediaElement.pause();
+      return;
     }
-  }, [videoRef]);
+
+    const reachedEnd = mediaElement.ended
+      || (Number.isFinite(mediaElement.duration)
+        && mediaElement.duration > 0
+        && mediaElement.currentTime >= mediaElement.duration - 0.05);
+
+    if (reachedEnd) {
+      const restartTime = keptScenes[0]?.start ?? 0;
+      mediaElement.currentTime = restartTime;
+      setRealCurrentTime(restartTime);
+      onTimeUpdate?.(restartTime);
+    }
+
+    const playPromise = mediaElement.play();
+    if (playPromise && typeof playPromise.then === 'function') {
+      playPromise
+        .then(() => {
+          syncPlaybackState();
+        })
+        .catch((error) => {
+          console.error('Video playback failed:', error);
+          setIsPlaying(false);
+        });
+      return;
+    }
+
+    syncPlaybackState();
+  }, [keptScenes, onTimeUpdate, syncPlaybackState, videoRef]);
 
   const handleSeek = useCallback((event) => {
-    if (!seekBarRef.current || !videoRef.current || keptDuration <= 0) return;
+    if (!seekBarRef.current || !videoRef.current || displayedDuration <= 0) return;
 
     const rect = seekBarRef.current.getBoundingClientRect();
     const x = event.clientX - rect.left;
     const percent = Math.max(0, Math.min(1, x / rect.width));
-    const targetKeptTime = percent * keptDuration;
-    const targetRealTime = mapKeptToRealTime(targetKeptTime, keptScenes);
+    const targetDisplayedTime = percent * displayedDuration;
+    const targetRealTime = hasSceneCuts
+      ? mapKeptToRealTime(targetDisplayedTime, keptScenes)
+      : targetDisplayedTime;
 
     videoRef.current.currentTime = targetRealTime;
-  }, [keptDuration, keptScenes, videoRef]);
-
-  const handleVolumeChange = (event) => {
-    const nextVolume = parseFloat(event.target.value);
-    setVolume(nextVolume);
-    if (videoRef.current) {
-      videoRef.current.volume = nextVolume;
-    }
-  };
-
-  const handleChooseBackgroundImage = useCallback(() => {
-    backgroundInputRef.current?.click();
-  }, []);
+    setRealCurrentTime(targetRealTime);
+    onTimeUpdate?.(targetRealTime);
+  }, [displayedDuration, hasSceneCuts, keptScenes, onTimeUpdate, videoRef]);
 
   const handleBackgroundImageChange = useCallback(async (event) => {
     const file = event.target.files?.[0];
-    if (!file) {
-      return;
-    }
+    if (!file) return;
 
     try {
       const nextBackground = await createImageFrameBackgroundFromFile(file);
@@ -165,20 +261,59 @@ export default function VideoPlayer({
 
   useEffect(() => {
     const mediaElement = videoRef.current;
+    const voiceoverElement = voiceoverRef.current;
 
     return () => {
-      if (!mediaElement) {
-        return;
-      }
-
+      if (!mediaElement) return;
       mediaElement.pause();
       mediaElement.removeAttribute('src');
       mediaElement.load();
+      voiceoverElement?.pause();
     };
   }, [videoRef]);
 
-  const handleEnded = () => setIsPlaying(false);
-  const progress = keptDuration > 0 ? (displayedTime / keptDuration) * 100 : 0;
+  useEffect(() => {
+    syncVoiceoverTime(false);
+  }, [syncVoiceoverTime]);
+
+  useEffect(() => {
+    const mediaElement = videoRef.current;
+    if (!mediaElement) {
+      return;
+    }
+
+    mediaElement.volume = effectiveVideoVolume;
+  }, [effectiveVideoVolume, videoRef]);
+
+  useEffect(() => {
+    const audioElement = voiceoverRef.current;
+    if (!audioElement) return;
+
+    if (!voiceoverTrack?.previewUrl) {
+      audioElement.pause();
+      audioElement.currentTime = 0;
+      return;
+    }
+
+    audioElement.volume = effectiveVoiceoverVolume;
+    syncVoiceoverTime(true);
+
+    if (!isPlaying) {
+      audioElement.pause();
+      return;
+    }
+
+    const playPromise = audioElement.play();
+    playPromise?.catch((error) => {
+      console.error('Voiceover playback failed:', error);
+    });
+  }, [effectiveVoiceoverVolume, isPlaying, syncVoiceoverTime, voiceoverTrack?.previewUrl]);
+
+  const handlePlay = useCallback(() => syncPlaybackState(), [syncPlaybackState]);
+  const handlePause = useCallback(() => setIsPlaying(false), []);
+  const handleEnded = useCallback(() => setIsPlaying(false), []);
+
+  const progress = displayedDuration > 0 ? (displayedTime / displayedDuration) * 100 : 0;
 
   const activeSubtitle = subtitles?.find(
     (subtitle) => realCurrentTime >= subtitle.start && realCurrentTime <= subtitle.end,
@@ -187,17 +322,13 @@ export default function VideoPlayer({
   useEffect(() => {
     const canvasElement = canvasRef.current;
     const videoElement = videoRef.current;
-    if (!canvasElement || !videoElement) {
-      return undefined;
-    }
+    if (!canvasElement || !videoElement) return undefined;
 
     canvasElement.width = framePreset.width;
     canvasElement.height = framePreset.height;
 
     const context = canvasElement.getContext('2d', { alpha: false });
-    if (!context) {
-      return undefined;
-    }
+    if (!context) return undefined;
 
     const renderFrame = () => {
       drawFrameComposition(context, {
@@ -225,119 +356,86 @@ export default function VideoPlayer({
     maxWidth: `${Math.round((450 * framePreset.width) / framePreset.height)}px`,
   }), [frameBackground, framePreset.height, framePreset.width]);
 
+  const handleVideoVolumeChange = useCallback((nextVolume) => {
+    setCustomizedAudioTrackKey(currentAudioTrackKey);
+    setVideoVolume(Math.max(0, Math.min(1, nextVolume)));
+  }, [currentAudioTrackKey]);
+
+  const handleVoiceoverVolumeChange = useCallback((nextVolume) => {
+    setCustomizedAudioTrackKey(currentAudioTrackKey);
+    setVoiceoverVolume(Math.max(0, Math.min(1, nextVolume)));
+  }, [currentAudioTrackKey]);
+
+  const handleToggleVideoMute = useCallback(() => {
+    setCustomizedAudioTrackKey(currentAudioTrackKey);
+    setVideoVolume(effectiveVideoVolume > 0 ? 0 : 1);
+  }, [currentAudioTrackKey, effectiveVideoVolume]);
+
   return (
     <div className="video-player-container dev-locator-host" id="video-player">
       <DeveloperLocator code="panel.video-player" title="Video Player" />
-      <div className="video-frame-toolbar dev-locator-host">
-        <DeveloperLocator code="panel.video-player.frame-controls" title="Frame Controls" />
-        <div className="video-frame-toolbar-group">
-          <span className="video-frame-toolbar-label">Khung xuất</span>
-          <div className="video-frame-options">
-            {FRAME_PRESETS.map((preset) => (
-              <button
-                key={preset.id}
-                type="button"
-                className={`frame-option-btn ${preset.id === framePresetId ? 'active' : ''}`}
-                onClick={() => onFramePresetChange?.(preset.id)}
-              >
-                {preset.label}
-              </button>
-            ))}
-          </div>
-        </div>
+      <VideoPlayerSidebar
+        activeSection={activeSidebarSection}
+        title={sidebarTitle}
+        onClose={onCloseSidebarSection}
+      >
+        <VideoPlayerFrameControls
+          visibleSection={activeSidebarSection}
+          framePresetId={framePresetId}
+          onFramePresetChange={onFramePresetChange}
+          frameBackground={frameBackground}
+          onFrameBackgroundChange={onFrameBackgroundChange}
+          onBackgroundImageChange={handleBackgroundImageChange}
+          videoVolume={effectiveVideoVolume}
+          voiceoverVolume={effectiveVoiceoverVolume}
+          onVideoVolumeChange={handleVideoVolumeChange}
+          onVoiceoverVolumeChange={handleVoiceoverVolumeChange}
+          hasVoiceoverTrack={hasVoiceoverTrack}
+        />
+      </VideoPlayerSidebar>
 
-        <div className="video-frame-toolbar-group">
-          <span className="video-frame-toolbar-label">Nền bìa</span>
-          <div className="video-frame-options">
-            {FRAME_BACKGROUND_OPTIONS.map((option) => (
-              <button
-                key={option.value}
-                type="button"
-                className={`frame-color-btn ${option.value === frameBackground ? 'active' : ''}`}
-                onClick={() => onFrameBackgroundChange?.(option.value)}
-                title={option.label}
-                aria-label={option.label}
-                style={{ '--frame-swatch': option.value }}
+      <div className="video-player-workspace">
+        <div className="video-player-main">
+          <VideoPlayerFrameSummaryBar
+            activeSection={activeSidebarSection}
+            framePresetLabel={framePreset.label}
+            frameBackgroundLabel={frameBackgroundLabel}
+            onToggleSection={onToggleSidebarSection}
+          />
+
+          <div className="video-frame-preview">
+            <div className="video-frame-stage" style={frameStageStyle}>
+              <canvas ref={canvasRef} className="video-frame-canvas" onClick={handlePlayPause} />
+              <video
+                ref={videoRef}
+                src={videoUrl}
+                onLoadedMetadata={handleLoadedMetadata}
+                onDurationChange={handleLoadedMetadata}
+                onTimeUpdate={handleTimeUpdate}
+                onPlay={handlePlay}
+                onPause={handlePause}
+                onEnded={handleEnded}
+                onClick={handlePlayPause}
+                preload="metadata"
+                playsInline
               />
-            ))}
-            <button
-              type="button"
-              className={`frame-color-btn frame-image-btn ${isImageFrameBackground(frameBackground) ? 'active' : ''}`}
-              onClick={handleChooseBackgroundImage}
-              title="Chọn ảnh nền bìa"
-              aria-label="Chọn ảnh nền bìa"
-              style={isImageFrameBackground(frameBackground)
-                ? { '--frame-swatch-image': `url("${frameBackground.dataUrl}")` }
-                : undefined}
-            >
-              <span className="frame-image-icon">🖼</span>
-            </button>
-            <input
-              ref={backgroundInputRef}
-              className="frame-image-input"
-              type="file"
-              accept="image/*"
-              onChange={handleBackgroundImageChange}
-            />
+              <audio ref={voiceoverRef} src={voiceoverTrack?.previewUrl || undefined} preload="metadata" />
+            </div>
           </div>
         </div>
       </div>
 
-      <div className="video-frame-preview">
-        <div className="video-frame-stage" style={frameStageStyle}>
-          <canvas ref={canvasRef} className="video-frame-canvas" onClick={handlePlayPause} />
-          <video
-            ref={videoRef}
-            src={videoUrl}
-            onLoadedMetadata={handleLoadedMetadata}
-            onTimeUpdate={handleTimeUpdate}
-            onEnded={handleEnded}
-            onClick={handlePlayPause}
-            playsInline
-          />
-        </div>
-      </div>
-
-      <div className="video-controls">
-        <button className="control-btn" onClick={handlePlayPause} id="play-pause-btn" title={isPlaying ? 'Tạm dừng' : 'Phát'}>
-          {isPlaying ? (
-            <svg viewBox="0 0 24 24" fill="currentColor"><rect x="6" y="4" width="4" height="16" rx="1"/><rect x="14" y="4" width="4" height="16" rx="1"/></svg>
-          ) : (
-            <svg viewBox="0 0 24 24" fill="currentColor"><polygon points="5,3 19,12 5,21"/></svg>
-          )}
-        </button>
-
-        <span className="time-display">{formatTime(displayedTime)} / {formatTime(keptDuration)}</span>
-
-        <div className="seek-bar-container" ref={seekBarRef} onClick={handleSeek}>
-          <div className="seek-bar-track">
-            <div className="seek-bar-fill" style={{ width: `${progress}%` }} />
-          </div>
-        </div>
-
-        <div className="volume-control">
-          <button className="control-btn" onClick={() => {
-            const nextVolume = volume > 0 ? 0 : 1;
-            setVolume(nextVolume);
-            if (videoRef.current) videoRef.current.volume = nextVolume;
-          }}>
-            {volume > 0 ? (
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"/><path d="M19.07 4.93a10 10 0 0 1 0 14.14M15.54 8.46a5 5 0 0 1 0 7.07"/></svg>
-            ) : (
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"/><line x1="23" y1="9" x2="17" y2="15"/><line x1="17" y1="9" x2="23" y2="15"/></svg>
-            )}
-          </button>
-          <input
-            type="range"
-            className="volume-slider"
-            min="0"
-            max="1"
-            step="0.05"
-            value={volume}
-            onChange={handleVolumeChange}
-          />
-        </div>
-      </div>
+      <VideoPlayerTransportControls
+        isPlaying={isPlaying}
+        onPlayPause={handlePlayPause}
+        timeLabel={`${formatTime(displayedTime)} / ${formatTime(displayedDuration)}`}
+        progress={progress}
+        onSeek={handleSeek}
+        seekBarRef={seekBarRef}
+        videoVolume={effectiveVideoVolume}
+        onVideoVolumeChange={handleVideoVolumeChange}
+        onToggleVideoMute={handleToggleVideoMute}
+      />
 
       {currentScene && (
         <div className="scene-indicator">

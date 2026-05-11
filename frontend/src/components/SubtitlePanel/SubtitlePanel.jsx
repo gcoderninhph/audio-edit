@@ -22,6 +22,10 @@ export default function SubtitlePanel({
   onStartTranslation,
   isTranslating,
   translateProgress,
+  onStartVoiceover,
+  isGeneratingVoiceover,
+  voiceoverProgress,
+  lastVoiceoverAudioName,
 }) {
   const [editingId, setEditingId] = useState(null);
   const [editingText, setEditingText] = useState('');
@@ -112,6 +116,24 @@ export default function SubtitlePanel({
     );
   }
 
+  if (isGeneratingVoiceover) {
+    return (
+      <div className="subtitle-panel-container dev-locator-host">
+        <DeveloperLocator code="panel.subtitle.voiceover" title="Voiceover Progress Panel" />
+        <div className="subtitle-panel-progress">
+          <div className="detecting-spinner" style={{ borderTopColor: '#f59e0b' }} />
+          <div className="subtitle-progress-text">{voiceoverProgress?.phase || 'Dang tao thuyet minh...'}</div>
+          {voiceoverProgress?.percent !== undefined && (
+            <div className="progress-bar" style={{ width: '80%' }}>
+              <div className="progress-bar-fill" style={{ width: `${voiceoverProgress.percent}%`, background: '#f59e0b' }} />
+            </div>
+          )}
+          <div className="subtitle-progress-hint">Client dang polling moi 0.5 giay</div>
+        </div>
+      </div>
+    );
+  }
+
   // ── Tools section (create / translate) ──
   const showToolsAlways = !hasSubs; // Always show when no subs exist
 
@@ -139,26 +161,42 @@ export default function SubtitlePanel({
           </button>
 
           {hasSubs && (
-            <div className="subtitle-translate-row">
-              <select
-                value={targetLang}
-                onChange={e => setTargetLang(e.target.value)}
-                className="subtitle-lang-select"
-              >
-                <option value="Vietnamese">Tiếng Việt</option>
-                <option value="English">Tiếng Anh</option>
-                <option value="Japanese">Tiếng Nhật</option>
-                <option value="Korean">Tiếng Hàn</option>
-                <option value="Chinese">Tiếng Trung</option>
-              </select>
+            <>
+              <div className="subtitle-translate-row">
+                <select
+                  value={targetLang}
+                  onChange={e => setTargetLang(e.target.value)}
+                  className="subtitle-lang-select"
+                >
+                  <option value="Vietnamese">Tiếng Việt</option>
+                  <option value="English">Tiếng Anh</option>
+                  <option value="Japanese">Tiếng Nhật</option>
+                  <option value="Korean">Tiếng Hàn</option>
+                  <option value="Chinese">Tiếng Trung</option>
+                </select>
+                <button
+                  className="btn btn-primary btn-sm"
+                  style={{ background: '#3b82f6' }}
+                  onClick={() => onStartTranslation(targetLang)}
+                >
+                  🌐 Dịch
+                </button>
+              </div>
+
               <button
-                className="btn btn-primary btn-sm"
-                style={{ background: '#3b82f6' }}
-                onClick={() => onStartTranslation(targetLang)}
+                className="btn btn-primary btn-sm subtitle-tool-btn subtitle-voiceover-btn"
+                style={{ background: '#f59e0b' }}
+                onClick={onStartVoiceover}
               >
-                🌐 Dịch
+                🔊 Tao thuyet minh
               </button>
-            </div>
+
+              {lastVoiceoverAudioName && (
+                <div className="subtitle-tool-note">
+                  Audio noi bo moi nhat: <strong>{lastVoiceoverAudioName}</strong> • luu trong project va gan vao timeline tu 00:00
+                </div>
+              )}
+            </>
           )}
         </div>
       )}

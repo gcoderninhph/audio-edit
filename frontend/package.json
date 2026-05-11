@@ -6,11 +6,11 @@
   "type": "module",
   "scripts": {
     "dev": "vite",
-    "dev:renderer": "vite --host 127.0.0.1",
+    "dev:renderer": "vite build --watch --mode development",
     "build": "vite build",
     "lint": "eslint .",
     "preview": "vite preview",
-    "desktop:launch": "wait-on http://127.0.0.1:5173 && cross-env ELECTRON_RENDERER_URL=http://127.0.0.1:5173 electron .",
+    "desktop:launch": "wait-on dist/index.html && electron .",
     "desktop:dev": "concurrently -k \"npm:dev:renderer\" \"npm:desktop:launch\"",
     "desktop:start": "npm run build && electron ."
   },

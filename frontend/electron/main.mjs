@@ -1,18 +1,16 @@
-import { app, BrowserWindow, dialog, ipcMain, net, protocol } from 'electron'
+import { app, BrowserWindow, dialog, ipcMain, protocol } from 'electron'
 import { spawn } from 'node:child_process'
-import { createServer } from 'node:http'
-import { readFile, stat } from 'node:fs/promises'
 import path from 'node:path'
-import { fileURLToPath, pathToFileURL } from 'node:url'
+import { fileURLToPath } from 'node:url'
 import { appendDebugLog, getDebugLogFilePath, registerDebugLogIpc } from './debugLog.mjs'
 import { registerNativeExportIpc } from './export/exportCoordinator.mjs'
-import { registerProjectMediaProtocol } from './projectMediaProtocol.mjs'
+import { registerDesktopAppProtocol } from './projectMediaProtocol.mjs'
 import { registerProjectStoreIpc } from './projectStore.mjs'
 import { registerSubtitleFontIpc } from './subtitleFont.mjs'
 
 protocol.registerSchemesAsPrivileged([
   {
-    scheme: 'project-media',
+    scheme: 'desktop',
     privileges: {
       standard: true,
       secure: true,
@@ -37,13 +35,7 @@ process.env.ELECTRON_IS_DEVELOPER = isDeveloper ? '1' : '0'
 const serverPort = Number(process.env.ELECTRON_SERVER_PORT || 5000)
 const serverUrl = process.env.ELECTRON_SERVER_URL || `http://127.0.0.1:${serverPort}`
 const rendererDevUrl = process.env.ELECTRON_RENDERER_URL
-const rendererPort = Number(process.env.ELECTRON_STATIC_PORT || 4173)
 const shouldSpawnBackend = process.env.ELECTRON_SKIP_BACKEND !== '1'
-
-const crossOriginHeaders = {
-  'Cross-Origin-Opener-Policy': 'same-origin',
-  'Cross-Origin-Embedder-Policy': 'require-corp',
-}
 
 const mimeTypes = new Map([
   ['.css', 'text/css; charset=utf-8'],
@@ -68,7 +60,6 @@ const mimeTypes = new Map([
 
 let backendProcess = null
 let mainWindow = null
-let rendererServer = null
 let rendererStartUrl = null
 let isQuitting = false
 
@@ -91,15 +82,6 @@ function getPythonCommand() {
 
 function getContentType(filePath) {
   return mimeTypes.get(path.extname(filePath).toLowerCase()) || 'application/octet-stream'
-}
-
-async function fileExists(filePath) {
-  try {
-    const fileStats = await stat(filePath)
-    return fileStats.isFile()
-  } catch {
-    return false
-  }
 }
 
 function logBackendOutput(prefix, data) {
@@ -172,68 +154,6 @@ async function waitForBackendReady() {
   throw lastError || new Error('Timed out waiting for the Flask backend to become ready.')
 }
 
-async function serveFile(response, filePath) {
-  const content = await readFile(filePath)
-  response.writeHead(200, {
-    ...crossOriginHeaders,
-    'Content-Type': getContentType(filePath),
-  })
-  response.end(content)
-}
-
-async function resolveRendererTarget(requestUrl) {
-  const requestPath = new URL(requestUrl || '/', 'http://127.0.0.1').pathname
-  const relativePath = requestPath === '/' ? 'index.html' : requestPath.replace(/^\//, '')
-  const resolvedPath = path.resolve(distDir, relativePath)
-
-  if (!resolvedPath.startsWith(distDir)) {
-    return null
-  }
-
-  if (await fileExists(resolvedPath)) {
-    return resolvedPath
-  }
-
-  return path.join(distDir, 'index.html')
-}
-
-async function startRendererServer() {
-  if (rendererDevUrl) {
-    return rendererDevUrl
-  }
-
-  const indexPath = path.join(distDir, 'index.html')
-  if (!(await fileExists(indexPath))) {
-    throw new Error('Missing frontend/dist/index.html. Run npm run build before launching the desktop app.')
-  }
-
-  return new Promise((resolve, reject) => {
-    rendererServer = createServer(async (request, response) => {
-      try {
-        const targetPath = await resolveRendererTarget(request.url)
-        if (!targetPath) {
-          response.writeHead(403, crossOriginHeaders)
-          response.end('Forbidden')
-          return
-        }
-
-        await serveFile(response, targetPath)
-      } catch (error) {
-        response.writeHead(500, {
-          ...crossOriginHeaders,
-          'Content-Type': 'text/plain; charset=utf-8',
-        })
-        response.end(error.message)
-      }
-    })
-
-    rendererServer.once('error', reject)
-    rendererServer.listen(rendererPort, '127.0.0.1', () => {
-      resolve(`http://127.0.0.1:${rendererPort}`)
-    })
-  })
-}
-
 async function createMainWindow() {
   mainWindow = new BrowserWindow({
     width: 1440,
@@ -279,8 +199,8 @@ async function bootstrapDesktopApp() {
     rendererDevUrl: rendererDevUrl || null,
     serverUrl,
   })
-  rendererStartUrl = await startRendererServer()
-  registerProjectMediaProtocol({ getContentType })
+  registerDesktopAppProtocol({ distDir, getContentType })
+  rendererStartUrl = rendererDevUrl || 'desktop://app/index.html'
   startBackendProcess()
   await waitForBackendReady()
   logDesktopEvent('desktop-main', 'Backend became ready', { serverUrl })
@@ -290,11 +210,6 @@ async function bootstrapDesktopApp() {
 function cleanupRuntime() {
   isQuitting = true
   logDesktopEvent('desktop-main', 'Cleaning up desktop runtime')
-
-  if (rendererServer) {
-    rendererServer.close()
-    rendererServer = null
-  }
 
   if (backendProcess) {
     backendProcess.kill()

@@ -17,7 +17,7 @@ function formatTime(seconds) {
   return `${String(mins).padStart(2, '0')}:${String(secs).padStart(2, '0')}`;
 }
 
-export default function Timeline({ scenes, deletedSceneIds, currentTime, currentScene, onSeek, subtitles }) {
+export default function Timeline({ scenes, deletedSceneIds, currentTime, duration = 0, currentScene, onSeek, subtitles, voiceoverTrack, onVoiceoverClick }) {
   const [hoveredScene, setHoveredScene] = useState(null);
   const [tooltipX, setTooltipX] = useState(0);
   const barRef = useRef(null);
@@ -30,19 +30,32 @@ export default function Timeline({ scenes, deletedSceneIds, currentTime, current
     return getKeptDuration(keptScenes);
   }, [keptScenes]);
 
+  const hasDetectedScenes = keptScenes.length > 0;
+
+  const totalDuration = useMemo(() => {
+    if (keptDuration > 0) return keptDuration;
+    return duration > 0 ? duration : 0;
+  }, [duration, keptDuration]);
+
   const displayedTime = useMemo(() => {
+    if (!hasDetectedScenes) {
+      return Math.max(0, Math.min(currentTime, totalDuration));
+    }
+
     return mapRealToKeptTime(currentTime, keptScenes);
-  }, [currentTime, keptScenes]);
+  }, [currentTime, hasDetectedScenes, keptScenes, totalDuration]);
 
   const handleBarClick = useCallback((e) => {
-    if (!barRef.current || keptDuration <= 0) return;
+    if (!barRef.current || totalDuration <= 0) return;
     const rect = barRef.current.getBoundingClientRect();
     const x = e.clientX - rect.left;
     const percent = Math.max(0, Math.min(1, x / rect.width));
-    const timelineTime = percent * keptDuration;
-    const realTime = mapKeptToRealTime(timelineTime, keptScenes);
+    const timelineTime = percent * totalDuration;
+    const realTime = hasDetectedScenes
+      ? mapKeptToRealTime(timelineTime, keptScenes)
+      : timelineTime;
     onSeek?.(realTime);
-  }, [keptDuration, keptScenes, onSeek]);
+  }, [hasDetectedScenes, keptScenes, onSeek, totalDuration]);
 
   const handleMouseMove = useCallback((e) => {
     if (!barRef.current) return;
@@ -50,12 +63,66 @@ export default function Timeline({ scenes, deletedSceneIds, currentTime, current
     setTooltipX(e.clientX - rect.left);
   }, []);
 
-  const playheadPercent = useMemo(() => {
-    if (keptDuration <= 0) return 0;
-    return (displayedTime / keptDuration) * 100;
-  }, [displayedTime, keptDuration]);
+  const handleVoiceoverClick = useCallback((event) => {
+    event.stopPropagation();
+    onVoiceoverClick?.();
+  }, [onVoiceoverClick]);
 
-  if (!scenes || scenes.length === 0) return null;
+  const handleVoiceoverKeyDown = useCallback((event) => {
+    if (event.key !== 'Enter' && event.key !== ' ') {
+      return;
+    }
+
+    event.preventDefault();
+    onVoiceoverClick?.();
+  }, [onVoiceoverClick]);
+
+  const playheadPercent = useMemo(() => {
+    if (totalDuration <= 0) return 0;
+    return (displayedTime / totalDuration) * 100;
+  }, [displayedTime, totalDuration]);
+
+  const timelineSubtitles = useMemo(() => {
+    if (!subtitles || subtitles.length === 0 || totalDuration <= 0) {
+      return [];
+    }
+
+    return subtitles
+      .map((sub, idx) => {
+        const timelineStart = hasDetectedScenes ? mapRealToKeptTime(sub.start, keptScenes) : sub.start;
+        const timelineEnd = hasDetectedScenes ? mapRealToKeptTime(sub.end, keptScenes) : sub.end;
+        const timelineDuration = timelineEnd - timelineStart;
+
+        if (timelineDuration <= 0.05) {
+          return null;
+        }
+
+        return {
+          key: sub.id || idx,
+          leftPercent: (timelineStart / totalDuration) * 100,
+          widthPercent: (timelineDuration / totalDuration) * 100,
+          title: `[${formatTime(sub.start)}] ${sub.text}`,
+        };
+      })
+      .filter(Boolean);
+  }, [hasDetectedScenes, keptScenes, subtitles, totalDuration]);
+
+  const timelineVoiceover = useMemo(() => {
+    if (!voiceoverTrack || totalDuration <= 0) {
+      return null;
+    }
+
+    const startTime = Math.max(0, voiceoverTrack.startTime || 0);
+    const boundedDuration = voiceoverTrack.duration > 0
+      ? Math.min(voiceoverTrack.duration, Math.max(totalDuration - startTime, 0))
+      : Math.max(totalDuration - startTime, 0);
+
+    return {
+      fileName: voiceoverTrack.fileName,
+      leftPercent: (startTime / totalDuration) * 100,
+      widthPercent: (boundedDuration / totalDuration) * 100,
+    };
+  }, [totalDuration, voiceoverTrack]);
 
   return (
     <div className="timeline-container dev-locator-host" id="timeline">
@@ -63,7 +130,7 @@ export default function Timeline({ scenes, deletedSceneIds, currentTime, current
       <div className="timeline-header">
         <span className="timeline-title">Timeline</span>
         <span className="timeline-title" style={{ opacity: 0.6 }}>
-          {formatTime(displayedTime)} / {formatTime(keptDuration)}
+          {formatTime(displayedTime)} / {formatTime(totalDuration)}
         </span>
       </div>
       <div
@@ -73,29 +140,42 @@ export default function Timeline({ scenes, deletedSceneIds, currentTime, current
         onMouseMove={handleMouseMove}
       >
         <div className="timeline-bar">
-          {keptScenes.map((scene, index) => {
-            const widthPercent = keptDuration > 0 ? (scene.duration / keptDuration) * 100 : 0;
-            const isActive = currentScene?.id === scene.id;
-            const color = SCENE_COLORS[index % SCENE_COLORS.length];
+          {hasDetectedScenes ? (
+            keptScenes.map((scene, index) => {
+              const widthPercent = totalDuration > 0 ? (scene.duration / totalDuration) * 100 : 0;
+              const isActive = currentScene?.id === scene.id;
+              const color = SCENE_COLORS[index % SCENE_COLORS.length];
 
-            return (
-              <div
-                key={scene.id}
-                className={`timeline-scene-block ${isActive ? 'active' : ''}`}
-                style={{
-                  width: `${widthPercent}%`,
-                  background: `linear-gradient(135deg, ${color}dd, ${color}88)`,
-                }}
-                onMouseEnter={() => setHoveredScene(scene)}
-                onMouseLeave={() => setHoveredScene(null)}
-                title={`Scene ${index + 1}: ${formatTime(scene.start)} - ${formatTime(scene.end)}`}
-              >
-                {widthPercent > 4 && (
-                  <span className="timeline-scene-label">{index + 1}</span>
-                )}
-              </div>
-            );
-          })}
+              return (
+                <div
+                  key={scene.id}
+                  className={`timeline-scene-block ${isActive ? 'active' : ''}`}
+                  style={{
+                    width: `${widthPercent}%`,
+                    background: `linear-gradient(135deg, ${color}dd, ${color}88)`,
+                  }}
+                  onMouseEnter={() => setHoveredScene(scene)}
+                  onMouseLeave={() => setHoveredScene(null)}
+                  title={`Scene ${index + 1}: ${formatTime(scene.start)} - ${formatTime(scene.end)}`}
+                >
+                  {widthPercent > 4 && (
+                    <span className="timeline-scene-label">{index + 1}</span>
+                  )}
+                </div>
+              );
+            })
+          ) : (
+            <div
+              className="timeline-scene-block active"
+              style={{
+                width: '100%',
+                background: 'linear-gradient(135deg, rgba(34, 197, 94, 0.85), rgba(14, 165, 233, 0.55))',
+              }}
+              title={totalDuration > 0 ? `Toàn bộ video: 00:00 - ${formatTime(totalDuration)}` : 'Đang tải thời lượng video'}
+            >
+              <span className="timeline-scene-label">Video</span>
+            </div>
+          )}
 
           {/* Playhead */}
           <div
@@ -105,34 +185,44 @@ export default function Timeline({ scenes, deletedSceneIds, currentTime, current
         </div>
 
         {/* Subtitles Track */}
-        {subtitles && subtitles.length > 0 && (
+        {timelineSubtitles.length > 0 && (
           <div className="timeline-subtitles-bar">
-                {subtitles.map((sub, idx) => {
-              const tStart = mapRealToKeptTime(sub.start, keptScenes);
-              const tEnd = mapRealToKeptTime(sub.end, keptScenes);
-              const tDuration = tEnd - tStart;
-              
-              if (tDuration <= 0.05) return null; // Hide if entirely inside deleted scene
+            {timelineSubtitles.map((subtitle) => (
+              <div
+                key={subtitle.key}
+                className="timeline-subtitle-block"
+                style={{
+                  left: `${subtitle.leftPercent}%`,
+                  width: `${subtitle.widthPercent}%`,
+                }}
+                title={subtitle.title}
+              ></div>
+            ))}
+          </div>
+        )}
 
-              const widthPercent = keptDuration > 0 ? (tDuration / keptDuration) * 100 : 0;
-              const leftPercent = keptDuration > 0 ? (tStart / keptDuration) * 100 : 0;
-              return (
-                <div
-                  key={sub.id || idx}
-                  className="timeline-subtitle-block"
-                  style={{
-                    left: `${leftPercent}%`,
-                    width: `${widthPercent}%`,
-                  }}
-                  title={`[${formatTime(sub.start)}] ${sub.text}`}
-                ></div>
-              );
-            })}
+        {timelineVoiceover && (
+          <div className="timeline-voiceover-bar dev-locator-host">
+            <DeveloperLocator code="panel.timeline.voiceover" title="Timeline Voiceover Track" />
+            <div
+              className="timeline-voiceover-block"
+              style={{
+                left: `${timelineVoiceover.leftPercent}%`,
+                width: `${timelineVoiceover.widthPercent}%`,
+              }}
+              title={`Thuyet minh: ${timelineVoiceover.fileName} • bat dau tu 00:00 • click de chinh am thanh`}
+              role="button"
+              tabIndex={0}
+              onClick={handleVoiceoverClick}
+              onKeyDown={handleVoiceoverKeyDown}
+            >
+              <span className="timeline-voiceover-label">Voiceover</span>
+            </div>
           </div>
         )}
 
         {/* Tooltip */}
-        {hoveredScene && (
+        {hasDetectedScenes && hoveredScene && (
           <div className="timeline-tooltip" style={{ left: tooltipX }}>
             Scene {keptScenes.findIndex(s => s.id === hoveredScene.id) + 1} | {formatTime(hoveredScene.start)} - {formatTime(hoveredScene.end)} | {hoveredScene.duration.toFixed(1)}s
           </div>

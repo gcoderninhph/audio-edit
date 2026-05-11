@@ -39,7 +39,7 @@ function normalizeBinaryPayload(bytes) {
     return Uint8Array.from(bytes)
   }
 
-  throw new Error('Unsupported video payload received from the Electron project store.')
+  throw new Error('Unsupported binary payload received from the Electron project store.')
 }
 
 export function saveLocalProject(projectData) {
@@ -59,6 +59,21 @@ export async function saveLocalProjectVideo(projectId, file) {
   }
 
   return getProjectStore().saveVideoFile(payload)
+}
+
+export async function saveLocalProjectVoiceoverAudio(projectId, payload) {
+  const rawBytes = payload?.bytes
+  const bytes = typeof Blob !== 'undefined' && rawBytes instanceof Blob
+    ? new Uint8Array(await rawBytes.arrayBuffer())
+    : normalizeBinaryPayload(rawBytes)
+
+  return getProjectStore().saveVoiceoverFile({
+    projectId,
+    originalName: payload?.fileName || 'voiceover.mp3',
+    mimeType: payload?.mimeType || 'audio/mpeg',
+    duration: Number.isFinite(payload?.duration) ? payload.duration : 0,
+    bytes,
+  })
 }
 
 export function listLocalProjects() {
@@ -101,6 +116,24 @@ async function materializeLocalProjectVideo(projectId) {
     name: file.name,
     storedFileName: videoRecord.storedFileName || '',
     url: URL.createObjectURL(blob),
+  }
+}
+
+export async function materializeLocalProjectVoiceover(projectId) {
+  const voiceoverRecord = await getProjectStore().readProjectVoiceoverBytes(projectId)
+  if (!voiceoverRecord) {
+    return null
+  }
+
+  const bytes = normalizeBinaryPayload(voiceoverRecord.bytes)
+  const blob = new Blob([bytes], { type: voiceoverRecord.mimeType || 'audio/mpeg' })
+
+  return {
+    duration: Number.isFinite(voiceoverRecord.duration) ? voiceoverRecord.duration : 0,
+    fileName: voiceoverRecord.fileName || voiceoverRecord.storedFileName || 'voiceover.mp3',
+    mimeType: voiceoverRecord.mimeType || 'audio/mpeg',
+    previewUrl: URL.createObjectURL(blob),
+    storedFileName: voiceoverRecord.storedFileName || '',
   }
 }
 
@@ -186,10 +219,14 @@ export function getPlayableVideoUrl(videoSource) {
   }
 }
 
-export function releaseVideoUrl(videoUrl) {
-  if (typeof videoUrl === 'string' && videoUrl.startsWith('blob:')) {
-    URL.revokeObjectURL(videoUrl)
+export function releaseObjectUrl(objectUrl) {
+  if (typeof objectUrl === 'string' && objectUrl.startsWith('blob:')) {
+    URL.revokeObjectURL(objectUrl)
   }
+}
+
+export function releaseVideoUrl(videoUrl) {
+  releaseObjectUrl(videoUrl)
 }
 
 export function deleteLocalProject(projectId) {

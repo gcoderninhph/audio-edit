@@ -109,6 +109,49 @@
   opacity: 1;
 }
 
+.timeline-voiceover-bar {
+  width: 100%;
+  height: 14px;
+  background: rgba(245, 158, 11, 0.12);
+  border-radius: 3px;
+  margin-top: 4px;
+  position: relative;
+  overflow: hidden;
+}
+
+.timeline-voiceover-block {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  display: flex;
+  align-items: center;
+  padding: 0 8px;
+  background: linear-gradient(90deg, rgba(245, 158, 11, 0.88), rgba(249, 115, 22, 0.7));
+  border-radius: 3px;
+  color: rgba(255,255,255,0.92);
+  min-width: 48px;
+  cursor: pointer;
+  transition: filter 0.18s var(--ease-out), transform 0.18s var(--ease-out);
+}
+
+.timeline-voiceover-block:hover {
+  filter: brightness(1.08);
+}
+
+.timeline-voiceover-block:focus-visible {
+  outline: 2px solid rgba(251, 191, 36, 0.92);
+  outline-offset: 2px;
+}
+
+.timeline-voiceover-label {
+  font-size: 0.58rem;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  white-space: nowrap;
+  pointer-events: none;
+}
+
 /* Playhead */
 .timeline-playhead {
   position: absolute;

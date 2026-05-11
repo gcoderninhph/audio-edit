@@ -12,6 +12,7 @@ import DeveloperLocator from './components/DeveloperLocator/DeveloperLocator';
 function App() {
   const editor = useVideoEditor();
   const [activeRightTab, setActiveRightTab] = useState('scenes');
+  const [activePlayerSidebarSection, setActivePlayerSidebarSection] = useState(null);
   const { redo, setCurrentTime, undo, videoRef } = editor;
 
   const handleSeek = useCallback((time) => {
@@ -40,9 +41,34 @@ function App() {
     return () => window.removeEventListener('keydown', handleKeyDown);
   }, [redo, undo]);
 
-  const hasVideo = !!editor.videoUrl;
-  const hasScenes = editor.scenes.length > 0;
+  const handleTogglePlayerSidebarSection = useCallback((section) => {
+    setActivePlayerSidebarSection((currentSection) => (currentSection === section ? null : section));
+  }, []);
 
+  const handleClosePlayerSidebar = useCallback(() => {
+    setActivePlayerSidebarSection(null);
+  }, []);
+
+  const handleOpenVoiceoverAudioConfig = useCallback(() => {
+    setActivePlayerSidebarSection('audio');
+  }, []);
+
+  const handleOpenProject = useCallback((sessionId) => {
+    setActivePlayerSidebarSection(null);
+    editor.loadSession(sessionId);
+  }, [editor]);
+
+  const handleNewProject = useCallback((file) => {
+    setActivePlayerSidebarSection(null);
+    editor.setVideoFile(file);
+  }, [editor]);
+
+  const handleCloseProject = useCallback(() => {
+    setActivePlayerSidebarSection(null);
+    editor.closeProject();
+  }, [editor]);
+
+  const hasVideo = !!editor.videoUrl;
   // ── Loading Screen ──
   if (editor.isRestoring) {
     return (
@@ -67,8 +93,8 @@ function App() {
         <Header />
         <main className="app-main">
           <ProjectDashboard
-            onOpenProject={(sessionId) => editor.loadSession(sessionId)}
-            onNewProject={(file) => editor.setVideoFile(file)}
+            onOpenProject={handleOpenProject}
+            onNewProject={handleNewProject}
           />
         </main>
       </div>
@@ -118,7 +144,7 @@ function App() {
           </div>
           <button
             className="btn btn-ghost btn-sm"
-            onClick={editor.closeProject}
+            onClick={handleCloseProject}
             title="Quay về Dashboard"
           >
             ← Dự án
@@ -156,6 +182,10 @@ function App() {
               scenes={editor.scenes}
               deletedSceneIds={editor.deletedSceneIds}
               subtitles={editor.filteredSubtitles}
+              voiceoverTrack={editor.voiceoverTrack}
+              activeSidebarSection={activePlayerSidebarSection}
+              onToggleSidebarSection={handleTogglePlayerSidebarSection}
+              onCloseSidebarSection={handleClosePlayerSidebar}
             />
           </div>
 
@@ -210,50 +240,53 @@ function App() {
                 onStartTranslation={editor.startTranslation}
                 isTranslating={editor.isTranslating}
                 translateProgress={editor.translateProgress}
+                onStartVoiceover={editor.startVoiceover}
+                isGeneratingVoiceover={editor.isGeneratingVoiceover}
+                voiceoverProgress={editor.voiceoverProgress}
+                lastVoiceoverAudioName={editor.lastVoiceoverAudioName}
               />
             </div>
           </div>
 
           {/* Timeline (full width) */}
-          {hasScenes && (
-            <div className="editor-timeline dev-locator-host">
-              <DeveloperLocator code="panel.timeline" title="Timeline Panel Wrapper" />
-              <Timeline
-                scenes={editor.scenes}
-                deletedSceneIds={editor.deletedSceneIds}
-                currentTime={editor.currentTime}
-                duration={editor.videoDuration}
-                currentScene={editor.currentScene}
-                onSeek={handleSeek}
-                subtitles={editor.filteredSubtitles}
-              />
-            </div>
-          )}
+          <div className="editor-timeline dev-locator-host">
+            <DeveloperLocator code="panel.timeline" title="Timeline Panel Wrapper" />
+            <Timeline
+              scenes={editor.scenes}
+              deletedSceneIds={editor.deletedSceneIds}
+              currentTime={editor.currentTime}
+              duration={editor.videoDuration}
+              currentScene={editor.currentScene}
+              onSeek={handleSeek}
+              subtitles={editor.filteredSubtitles}
+              voiceoverTrack={editor.voiceoverTrack}
+              onVoiceoverClick={handleOpenVoiceoverAudioConfig}
+            />
+          </div>
 
           {/* Export Panel (full width) */}
-          {hasScenes && (
-            <div className="editor-export dev-locator-host">
-              <DeveloperLocator code="panel.export" title="Export Panel Wrapper" />
-              <ExportPanel
-                scenes={editor.scenes}
-                keptScenes={editor.keptScenes}
-                keptDuration={editor.keptDuration}
-                deletedSceneIds={editor.deletedSceneIds}
-                isExporting={editor.isExporting}
-                exportProgress={editor.exportProgress}
-                exportUrl={editor.exportUrl}
-                exportSize={editor.exportSize}
-                videoName={editor.videoName}
-                frameSummary={editor.frameSummary}
-                frameBackgroundLabel={editor.frameBackgroundLabel}
-                onExport={editor.startExport}
-                onLoadHistoryList={editor.loadHistoryList}
-                onLoadSession={editor.loadSession}
-                onDeleteSession={editor.deleteSession}
-                historyList={editor.historyList}
-              />
-            </div>
-          )}
+          <div className="editor-export dev-locator-host">
+            <DeveloperLocator code="panel.export" title="Export Panel Wrapper" />
+            <ExportPanel
+              scenes={editor.scenes}
+              keptScenes={editor.keptScenes}
+              keptDuration={editor.keptDuration}
+              deletedSceneIds={editor.deletedSceneIds}
+              duration={editor.videoDuration}
+              isExporting={editor.isExporting}
+              exportProgress={editor.exportProgress}
+              exportUrl={editor.exportUrl}
+              exportSize={editor.exportSize}
+              videoName={editor.videoName}
+              frameSummary={editor.frameSummary}
+              frameBackgroundLabel={editor.frameBackgroundLabel}
+              onExport={editor.startExport}
+              onLoadHistoryList={editor.loadHistoryList}
+              onLoadSession={editor.loadSession}
+              onDeleteSession={editor.deleteSession}
+              historyList={editor.historyList}
+            />
+          </div>
         </div>
       </main>
     </div>

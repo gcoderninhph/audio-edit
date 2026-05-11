@@ -1,104 +1,36 @@
-import { app } from 'electron'
-import { copyFile, mkdir, readFile, readdir, rm, stat, writeFile } from 'node:fs/promises'
-import path from 'node:path'
+import { copyFile, readFile, readdir, rm, stat, writeFile } from 'node:fs/promises'
 import { appendDebugLog } from './debugLog.mjs'
+import {
+  assertProjectId,
+  buildProjectVideoUrl,
+  buildStoredVideoName,
+  buildStoredVoiceoverName,
+  ensureProjectDirectory,
+  ensureProjectsRoot,
+  ensureProjectVoiceoverDirectory,
+  getProjectsRootCandidates,
+  getLegacyProjectVoiceoverPath,
+  getProjectDirectory,
+  getProjectVideoPath,
+  getProjectVoiceoverDirectory,
+  getProjectVoiceoverPath,
+  isRetryableDeleteError,
+  readProjectMetadata,
+  readProjectMetadataFromRoot,
+  toBuffer,
+  wait,
+  writeProjectMetadata,
+} from './projectStoreShared.mjs'
 import { DEFAULT_FRAME_BACKGROUND, DEFAULT_FRAME_PRESET_ID } from '../src/utils/frameComposer.js'
-
-const PROJECTS_DIR_NAME = 'projects'
-const PROJECT_METADATA_FILE = 'project.json'
-
-function getProjectsRoot() {
-  return path.join(app.getPath('userData'), PROJECTS_DIR_NAME)
-}
-
-function getProjectDirectory(projectId) {
-  return path.join(getProjectsRoot(), projectId)
-}
-
-function getProjectMetadataPath(projectId) {
-  return path.join(getProjectDirectory(projectId), PROJECT_METADATA_FILE)
-}
-
-function buildProjectVideoUrl(projectId) {
-  return `project-media://project/${encodeURIComponent(projectId)}`
-}
-
-function assertProjectId(projectId) {
-  if (!projectId || !/^[a-z0-9._-]+$/i.test(projectId)) {
-    throw new Error('Invalid project id.')
-  }
-
-  return projectId
-}
-
-function buildStoredVideoName(originalName = '') {
-  const extension = path.extname(originalName) || '.mp4'
-  return `video${extension.toLowerCase()}`
-}
-
-function toBuffer(bytes) {
-  if (!bytes) {
-    return null
-  }
-
-  if (Buffer.isBuffer(bytes)) {
-    return bytes
-  }
-
-  if (bytes instanceof ArrayBuffer) {
-    return Buffer.from(bytes)
-  }
-
-  if (ArrayBuffer.isView(bytes)) {
-    return Buffer.from(bytes.buffer, bytes.byteOffset, bytes.byteLength)
-  }
-
-  if (Array.isArray(bytes)) {
-    return Buffer.from(bytes)
-  }
-
-  throw new Error('Unsupported video payload received by the desktop project store.')
-}
-
-function wait(milliseconds) {
-  return new Promise((resolve) => setTimeout(resolve, milliseconds))
-}
-
-function isRetryableDeleteError(error) {
-  return error?.code === 'EBUSY' || error?.code === 'EPERM'
-}
-
-async function ensureProjectDirectory(projectId) {
-  const projectDirectory = getProjectDirectory(projectId)
-  await mkdir(projectDirectory, { recursive: true })
-  return projectDirectory
-}
-
-async function readProjectMetadata(projectId) {
-  try {
-    const metadataContent = await readFile(getProjectMetadataPath(projectId), 'utf8')
-    return JSON.parse(metadataContent)
-  } catch (error) {
-    if (error?.code === 'ENOENT') {
-      return null
-    }
-
-    throw error
-  }
-}
-
-async function writeProjectMetadata(projectId, projectData) {
-  await ensureProjectDirectory(projectId)
-  await writeFile(
-    getProjectMetadataPath(projectId),
-    JSON.stringify(projectData, null, 2),
-    'utf8',
-  )
-}
 
 function buildProjectRecord(projectId, payload, existingRecord = null) {
   const hasTranscriptionJobId = Object.prototype.hasOwnProperty.call(payload, 'transcriptionJobId')
   const hasTranslationJobId = Object.prototype.hasOwnProperty.call(payload, 'translationJobId')
+  const hasVoiceoverFilename = Object.prototype.hasOwnProperty.call(payload, 'voiceoverFilename')
+  const hasVoiceoverOriginalName = Object.prototype.hasOwnProperty.call(payload, 'voiceoverOriginalName')
+  const hasVoiceoverMimeType = Object.prototype.hasOwnProperty.call(payload, 'voiceoverMimeType')
+  const hasVoiceoverSize = Object.prototype.hasOwnProperty.call(payload, 'voiceoverSize')
+  const hasVoiceoverDuration = Object.prototype.hasOwnProperty.call(payload, 'voiceoverDuration')
   const createdAt = existingRecord?.created_at || new Date().toISOString()
 
   return {
@@ -115,6 +47,11 @@ function buildProjectRecord(projectId, payload, existingRecord = null) {
     sensitivity: payload.sensitivity ?? existingRecord?.sensitivity ?? 2.5,
     transcription_job_id: hasTranscriptionJobId ? payload.transcriptionJobId : existingRecord?.transcription_job_id ?? null,
     translation_job_id: hasTranslationJobId ? payload.translationJobId : existingRecord?.translation_job_id ?? null,
+    voiceover_filename: hasVoiceoverFilename ? payload.voiceoverFilename : existingRecord?.voiceover_filename ?? null,
+    voiceover_original_name: hasVoiceoverOriginalName ? payload.voiceoverOriginalName : existingRecord?.voiceover_original_name ?? null,
+    voiceover_mime_type: hasVoiceoverMimeType ? payload.voiceoverMimeType : existingRecord?.voiceover_mime_type ?? null,
+    voiceover_size: hasVoiceoverSize ? payload.voiceoverSize : existingRecord?.voiceover_size ?? 0,
+    voiceover_duration: hasVoiceoverDuration ? payload.voiceoverDuration : existingRecord?.voiceover_duration ?? 0,
     created_at: createdAt,
     updated_at: new Date().toISOString(),
   }
@@ -126,7 +63,7 @@ async function saveVideoFile(payload) {
   const existingRecord = await readProjectMetadata(projectId)
 
   const storedFileName = buildStoredVideoName(payload?.originalName)
-  const targetPath = path.join(projectDirectory, storedFileName)
+  const targetPath = getProjectVideoPath(projectId, storedFileName)
   if (payload?.sourcePath) {
     await copyFile(payload.sourcePath, targetPath)
   } else {
@@ -155,6 +92,50 @@ async function saveVideoFile(payload) {
   }
 }
 
+async function saveVoiceoverFile(payload) {
+  const projectId = assertProjectId(payload?.projectId)
+  const voiceoverDirectory = await ensureProjectVoiceoverDirectory(projectId)
+  const existingRecord = await readProjectMetadata(projectId)
+  const voiceoverBytes = toBuffer(payload?.bytes)
+
+  if (!voiceoverBytes) {
+    throw new Error('Missing voiceover audio content for desktop persistence.')
+  }
+
+  const storedFileName = buildStoredVoiceoverName(payload?.originalName)
+  if (existingRecord?.voiceover_filename && existingRecord.voiceover_filename !== storedFileName) {
+    for (const projectsRoot of getProjectsRootCandidates(existingRecord?._storage_root)) {
+      await rm(getProjectVoiceoverPath(projectId, existingRecord.voiceover_filename, projectsRoot), { force: true }).catch(() => undefined)
+      await rm(getLegacyProjectVoiceoverPath(projectId, existingRecord.voiceover_filename, projectsRoot), { force: true }).catch(() => undefined)
+    }
+  }
+
+  const targetPath = getProjectVoiceoverPath(projectId, storedFileName)
+  await writeFile(targetPath, voiceoverBytes)
+  for (const projectsRoot of getProjectsRootCandidates(existingRecord?._storage_root)) {
+    await rm(getLegacyProjectVoiceoverPath(projectId, storedFileName, projectsRoot), { force: true }).catch(() => undefined)
+  }
+
+  const fileStats = await stat(targetPath)
+  const nextRecord = buildProjectRecord(projectId, {
+    voiceoverFilename: storedFileName,
+    voiceoverOriginalName: payload?.originalName || existingRecord?.voiceover_original_name || storedFileName,
+    voiceoverMimeType: payload?.mimeType || existingRecord?.voiceover_mime_type || 'audio/mpeg',
+    voiceoverSize: fileStats.size,
+    voiceoverDuration: Number.isFinite(payload?.duration) ? payload.duration : existingRecord?.voiceover_duration ?? 0,
+  }, existingRecord)
+
+  await writeProjectMetadata(projectId, nextRecord)
+
+  return {
+    storedFileName,
+    fileName: nextRecord.voiceover_original_name,
+    mimeType: nextRecord.voiceover_mime_type || 'audio/mpeg',
+    size: nextRecord.voiceover_size || fileStats.size,
+    duration: nextRecord.voiceover_duration || 0,
+  }
+}
+
 async function saveProject(payload) {
   const projectId = assertProjectId(payload?.sessionId)
   const existingRecord = await readProjectMetadata(projectId)
@@ -180,25 +161,29 @@ function toProjectSummary(projectRecord) {
 }
 
 async function listProjects() {
-  await mkdir(getProjectsRoot(), { recursive: true })
+  const projectsById = new Map()
 
-  const entries = await readdir(getProjectsRoot(), { withFileTypes: true })
-  const projects = []
+  for (const projectsRoot of getProjectsRootCandidates()) {
+    await ensureProjectsRoot(projectsRoot)
+    const entries = await readdir(projectsRoot, { withFileTypes: true })
 
-  for (const entry of entries) {
-    if (!entry.isDirectory()) {
-      continue
-    }
-
-    try {
-      const projectRecord = await readProjectMetadata(entry.name)
-      if (projectRecord) {
-        projects.push(toProjectSummary(projectRecord))
+    for (const entry of entries) {
+      if (!entry.isDirectory() || projectsById.has(entry.name)) {
+        continue
       }
-    } catch {
-      // Ignore corrupted project entries so a single bad file does not block the dashboard.
+
+      try {
+        const projectRecord = await readProjectMetadataFromRoot(entry.name, projectsRoot)
+        if (projectRecord) {
+          projectsById.set(projectRecord.id, toProjectSummary(projectRecord))
+        }
+      } catch {
+        // Ignore corrupted project entries so a single bad file does not block the dashboard.
+      }
     }
   }
+
+  const projects = Array.from(projectsById.values())
 
   return projects.sort((left, right) => {
     const leftTime = Date.parse(left.created_at || left.updated_at || 0)
@@ -224,7 +209,20 @@ export async function resolveProjectVideoPath(projectId) {
     return null
   }
 
-  return path.join(getProjectDirectory(projectRecord.id), projectRecord.video_filename)
+  for (const projectsRoot of getProjectsRootCandidates(projectRecord._storage_root)) {
+    const candidatePath = getProjectVideoPath(projectRecord.id, projectRecord.video_filename, projectsRoot)
+
+    try {
+      await stat(candidatePath)
+      return candidatePath
+    } catch (error) {
+      if (error?.code !== 'ENOENT') {
+        throw error
+      }
+    }
+  }
+
+  return null
 }
 
 async function getProjectVideo(projectId) {
@@ -299,13 +297,65 @@ async function readProjectVideoBytes(projectId) {
   }
 }
 
+async function getProjectVoiceover(projectId) {
+  const projectRecord = await getProject(projectId)
+  if (!projectRecord.voiceover_filename) {
+    return null
+  }
+
+  return {
+    projectId: projectRecord.id,
+    fileName: projectRecord.voiceover_original_name || projectRecord.voiceover_filename,
+    storedFileName: projectRecord.voiceover_filename,
+    mimeType: projectRecord.voiceover_mime_type || 'audio/mpeg',
+    size: projectRecord.voiceover_size || 0,
+    duration: projectRecord.voiceover_duration || 0,
+  }
+}
+
+async function readProjectVoiceoverBytes(projectId) {
+  const projectRecord = await getProject(projectId)
+  if (!projectRecord.voiceover_filename) {
+    return null
+  }
+
+  for (const projectsRoot of getProjectsRootCandidates(projectRecord._storage_root)) {
+    const candidatePaths = [
+      getProjectVoiceoverPath(projectRecord.id, projectRecord.voiceover_filename, projectsRoot),
+      getLegacyProjectVoiceoverPath(projectRecord.id, projectRecord.voiceover_filename, projectsRoot),
+    ]
+
+    for (const candidatePath of candidatePaths) {
+      try {
+        const voiceoverBytes = await readFile(candidatePath)
+        return {
+          fileName: projectRecord.voiceover_original_name || projectRecord.voiceover_filename,
+          storedFileName: projectRecord.voiceover_filename,
+          mimeType: projectRecord.voiceover_mime_type || 'audio/mpeg',
+          duration: projectRecord.voiceover_duration || 0,
+          bytes: new Uint8Array(voiceoverBytes),
+        }
+
+      } catch (error) {
+        if (error?.code !== 'ENOENT') {
+          throw error
+        }
+      }
+    }
+  }
+
+  return null
+}
+
 async function deleteProject(projectId) {
   const normalizedProjectId = assertProjectId(projectId)
-  const projectDirectory = getProjectDirectory(normalizedProjectId)
 
   for (let attempt = 0; attempt < 5; attempt += 1) {
     try {
-      await rm(projectDirectory, { recursive: true, force: true })
+      for (const projectsRoot of getProjectsRootCandidates()) {
+        await rm(getProjectDirectory(normalizedProjectId, projectsRoot), { recursive: true, force: true })
+        await rm(getProjectVoiceoverDirectory(normalizedProjectId, projectsRoot), { recursive: true, force: true })
+      }
       break
     } catch (error) {
       if (!isRetryableDeleteError(error) || attempt === 4) {
@@ -323,10 +373,13 @@ async function deleteProject(projectId) {
 
 export function registerProjectStoreIpc(ipcMain) {
   ipcMain.handle('projects:save-video', (_event, payload) => saveVideoFile(payload))
+  ipcMain.handle('projects:save-voiceover', (_event, payload) => saveVoiceoverFile(payload))
   ipcMain.handle('projects:save-project', (_event, payload) => saveProject(payload))
   ipcMain.handle('projects:list', () => listProjects())
   ipcMain.handle('projects:get', (_event, projectId) => getProject(projectId))
   ipcMain.handle('projects:get-video', (_event, projectId) => getProjectVideo(projectId))
   ipcMain.handle('projects:read-video-bytes', (_event, projectId) => readProjectVideoBytes(projectId))
+  ipcMain.handle('projects:get-voiceover', (_event, projectId) => getProjectVoiceover(projectId))
+  ipcMain.handle('projects:read-voiceover-bytes', (_event, projectId) => readProjectVoiceoverBytes(projectId))
   ipcMain.handle('projects:delete', (_event, projectId) => deleteProject(projectId))
 }

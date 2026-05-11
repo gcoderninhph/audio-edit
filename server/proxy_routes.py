@@ -1,6 +1,8 @@
 from flask import Response, jsonify, request, send_file
 import io
+import os
 import requests
+from urllib.parse import urlparse
 
 try:
     from translation_fallback import (
@@ -19,6 +21,11 @@ except ImportError:
 
 WHISPER_API_URL = "http://localhost:8081/api/transcriptions"
 LLM_SUBTRANS_API_URL = "http://localhost:8090/api"
+VBEE_ROUTER_API_URL = os.environ.get('VBEE_ROUTER_API_URL', 'http://localhost:3020').rstrip('/')
+
+
+def build_vbee_router_url(path):
+    return f"{VBEE_ROUTER_API_URL}/public/{path.lstrip('/')}"
 
 
 def build_proxy_response(response, fallback_message):
@@ -146,3 +153,74 @@ def register_proxy_routes(app):
         except requests.RequestException as error:
             print(f"LLM-Subtrans API download error: {error}")
             return jsonify({'error': 'Failed to download from LLM-Subtrans API'}), 502
+
+    @app.route('/api/voiceover/start', methods=['POST'])
+    def start_voiceover():
+        if 'file' not in request.files:
+            return jsonify({'error': 'No file part'}), 400
+
+        file = request.files['file']
+        if not file.filename or not file.filename.lower().endswith('.srt'):
+            return jsonify({'error': 'Only .srt files are supported'}), 400
+
+        file_bytes = file.read()
+        if not file_bytes:
+            return jsonify({'error': 'Subtitle file is empty'}), 400
+
+        files = {'file': (file.filename, io.BytesIO(file_bytes), file.mimetype or 'text/plain')}
+
+        try:
+            response = requests.post(
+                build_vbee_router_url('/tasks'),
+                files=files,
+                timeout=30,
+            )
+            return build_proxy_response(response, 'Failed to communicate with Vbee Router')
+        except requests.RequestException as error:
+            print(f"Vbee Router error: {error}")
+            return jsonify({'error': 'Failed to communicate with Vbee Router'}), 502
+
+    @app.route('/api/voiceover/status/<string:request_id>', methods=['GET'])
+    def get_voiceover_status(request_id):
+        try:
+            response = requests.get(
+                build_vbee_router_url(f'/tasks/{request_id}'),
+                timeout=15,
+            )
+            return build_proxy_response(response, 'Failed to communicate with Vbee Router')
+        except requests.RequestException as error:
+            print(f"Vbee Router error: {error}")
+            return jsonify({'error': 'Failed to communicate with Vbee Router'}), 502
+
+    @app.route('/api/voiceover/download', methods=['POST'])
+    def download_voiceover():
+        payload = request.get_json(silent=True) or {}
+        download_url = str(payload.get('download_url') or '').strip()
+
+        if not download_url:
+            return jsonify({'error': 'No download_url specified'}), 400
+
+        parsed_url = urlparse(download_url)
+        if parsed_url.scheme not in {'http', 'https'} or not parsed_url.netloc:
+            return jsonify({'error': 'Invalid download_url'}), 400
+
+        try:
+            response = requests.get(download_url, stream=True, timeout=120)
+            if not response.ok:
+                return build_proxy_response(response, 'Failed to download from Vbee service')
+
+            file_name = parsed_url.path.rsplit('/', 1)[-1] or 'voiceover.mp3'
+            content_disposition = response.headers.get('Content-Disposition')
+            if content_disposition and 'filename=' in content_disposition:
+                file_name = content_disposition.split('filename=', 1)[1].strip().strip('"')
+
+            return Response(
+                response.iter_content(chunk_size=8192),
+                content_type=response.headers.get('Content-Type', 'audio/mpeg'),
+                headers={
+                    'Content-Disposition': f'attachment; filename="{file_name}"'
+                }
+            )
+        except requests.RequestException as error:
+            print(f"Vbee download error: {error}")
+            return jsonify({'error': 'Failed to download from Vbee service'}), 502

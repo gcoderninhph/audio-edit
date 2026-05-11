@@ -1,0 +1,518 @@
+{
+  "id": "999caee8-54d0-48f0-8af9-d15fead43ec9",
+  "video_filename": "video.mp4",
+  "video_original_name": "tap2.mp4",
+  "video_size": 18327611,
+  "video_mime_type": "video/mp4",
+  "frame_preset_id": "landscape-16-9",
+  "frame_background": {
+    "kind": "video-fade",
+    "presetId": "cinematic"
+  },
+  "scenes": [],
+  "deleted_ids": [],
+  "subtitles": [
+    {
+      "id": "e01cb9cab91d42908489834545e4433c",
+      "start": 0,
+      "end": 1.06,
+      "text": "好好好"
+    },
+    {
+      "id": "f1e94a61c6c1412dab82ec5124f4928e",
+      "start": 1.06,
+      "end": 2.8,
+      "text": "巧儿不愧是我交出来的女儿"
+    },
+    {
+      "id": "17ba44e61b9445efa3894d0e8c42b700",
+      "start": 2.8,
+      "end": 4.12,
+      "text": "真给审家争气"
+    },
+    {
+      "id": "29e73e5e4fa349989c2394e2859ee9c7",
+      "start": 4.64,
+      "end": 5.46,
+      "text": "爹爹过奖了"
+    },
+    {
+      "id": "af4b1c5821564a2a84dd3ce0652c58a7",
+      "start": 5.46,
+      "end": 7.22,
+      "text": "女儿也是为了家族着想"
+    },
+    {
+      "id": "cc682d448a09489aad846a526206ca97",
+      "start": 7.76,
+      "end": 9.06,
+      "text": "等女儿成了慕容夫人"
+    },
+    {
+      "id": "7866e750077d4a00abefe211762ee650",
+      "start": 9.06,
+      "end": 10.82,
+      "text": "日后定会几年胜行"
+    },
+    {
+      "id": "1dcf8eb6170142499a6f5d7c5e18b976",
+      "start": 10.82,
+      "end": 12.34,
+      "text": "为家族谋服质"
+    },
+    {
+      "id": "0e6b0b4fcb134219ad4b47c1fd4e2076",
+      "start": 12.72,
+      "end": 13.32,
+      "text": "姐姐"
+    },
+    {
+      "id": "dd4a948ad55e4e1e9af03027edeaf644",
+      "start": 13.84,
+      "end": 15.04,
+      "text": "你说是吧"
+    },
+    {
+      "id": "f45b2da8c7a14ddc9cd164e568b350fe",
+      "start": 16.32,
+      "end": 17.4,
+      "text": "妹妹好夫妻"
+    },
+    {
+      "id": "1f0247bba81e47c6b01954d63deaab9d",
+      "start": 17.4,
+      "end": 18.74,
+      "text": "我自是替你高兴"
+    },
+    {
+      "id": "92b26f602d1342d9adb47b1da54cd483",
+      "start": 18.74,
+      "end": 19.78,
+      "text": "守您亲"
+    },
+    {
+      "id": "5e0d1ed2a17247a080244fbcb33fb14d",
+      "start": 19.78,
+      "end": 21.74,
+      "text": "如今你的好命被我夺去"
+    },
+    {
+      "id": "01cabd9ef42c4ac3b6c3b088e5e28276",
+      "start": 21.74,
+      "end": 22.74,
+      "text": "这辈子"
+    },
+    {
+      "id": "135740684d9a4600b3d7f58aca631da3",
+      "start": 22.74,
+      "end": 24.64,
+      "text": "我一定不会再让你压回头"
+    },
+    {
+      "id": "2e299a8cc6d245f8bae1a13ff3281dba",
+      "start": 27.22,
+      "end": 28.18,
+      "text": "巧儿快看"
+    },
+    {
+      "id": "9a28c9de36e84fa5bffeabfbf23cb68a",
+      "start": 28.18,
+      "end": 29.84,
+      "text": "慕容公子看你的眼睛"
+    },
+    {
+      "id": "eb2ebfe7e2a8457e993780d18b1f6c29",
+      "start": 29.84,
+      "end": 30.66,
+      "text": "你都快迟了"
+    },
+    {
+      "id": "7c0165c8f74f4dfe8e96c76750e462b8",
+      "start": 38.900000000000006,
+      "end": 39.5,
+      "text": "那不是"
+    },
+    {
+      "id": "ab5855958b214bba88ca5f4b8ecca619",
+      "start": 41.28,
+      "end": 41.72,
+      "text": "皇上"
+    },
+    {
+      "id": "c8512730355c4fdc95a3e5ddd9612a3f",
+      "start": 43.68,
+      "end": 44.12,
+      "text": "主子"
+    },
+    {
+      "id": "9572a5de56f34d2d91d767f22d9b463f",
+      "start": 44.12,
+      "end": 45.28,
+      "text": "您穿着这样出宫"
+    },
+    {
+      "id": "84af69ead70a4656947805416f058b4a",
+      "start": 45.28,
+      "end": 46.5,
+      "text": "太后又是知道了"
+    },
+    {
+      "id": "16baacebd1a14fea9da0056c9f5de348",
+      "start": 46.5,
+      "end": 47.78,
+      "text": "母后天天闭着朕水灰"
+    },
+    {
+      "id": "a383aec5d5a94319b3ef48f909a18d37",
+      "start": 47.78,
+      "end": 49.08,
+      "text": "朕只能出宫躲清净"
+    },
+    {
+      "id": "740ae43df8aa427e8f9bacb7f1a84cb6",
+      "start": 49.5,
+      "end": 50.44,
+      "text": "正好趁此机会"
+    },
+    {
+      "id": "b083c906f73449d0b3f16a9b5113c45b",
+      "start": 50.44,
+      "end": 51.9,
+      "text": "体验一下寻常百姓的生活"
+    },
+    {
+      "id": "d54dd2a843ee4b53b22fc939610b841d",
+      "start": 51.9,
+      "end": 53.36,
+      "text": "主子素来秦郑爱民"
+    },
+    {
+      "id": "710e2c07b7634bf9a32c0860f7165cb8",
+      "start": 53.36,
+      "end": 54.58,
+      "text": "可您穿这一身"
+    },
+    {
+      "id": "dc5ca34993a64ec89ff77182d24b867b",
+      "start": 55.120000000000005,
+      "end": 56.46,
+      "text": "这衣裳随不过"
+    },
+    {
+      "id": "21d3c767db944df7aad710826b8e6a0d",
+      "start": 56.46,
+      "end": 58.04,
+      "text": "混在百姓里才不打眼"
+    },
+    {
+      "id": "ffb5b53ea23e487abe365fc14676718f",
+      "start": 58.04,
+      "end": 58.68,
+      "text": "难不成"
+    },
+    {
+      "id": "fb5c488f54d945708f41f88a5541606b",
+      "start": 58.68,
+      "end": 59.84,
+      "text": "您让朕穿个龙袍"
+    },
+    {
+      "id": "8e3740309fb54473b86206e7f38d4cce",
+      "start": 59.84,
+      "end": 60.56,
+      "text": "再接上闲逛"
+    },
+    {
+      "id": "0d881176958d47efb7ada3246db3956b",
+      "start": 67.46000000000001,
+      "end": 68.1,
+      "text": "主子"
+    },
+    {
+      "id": "27eed65c6f01493f8958c1531e3eeea9",
+      "start": 68.1,
+      "end": 68.88,
+      "text": "您没事吧"
+    },
+    {
+      "id": "a417046db84647d8b61a70d311a2837d",
+      "start": 68.88,
+      "end": 69.48,
+      "text": "抽药饭的"
+    },
+    {
+      "id": "acce544242c743a18f01233e57d0e81c",
+      "start": 69.48,
+      "end": 70.14,
+      "text": "没张眼啊"
+    },
+    {
+      "id": "bccebc34f9e44bbe84a707c37a86a177",
+      "start": 70.14,
+      "end": 70.48,
+      "text": "快走吧"
+    },
+    {
+      "id": "753e430b0af941e99b6b0772ac9068f8",
+      "start": 70.48,
+      "end": 71.54,
+      "text": "沈元外家的两位千金金"
+    },
+    {
+      "id": "7300554d79734310ab5947f5d3692a5f",
+      "start": 71.54,
+      "end": 72.2,
+      "text": "是抛秀秀选夫"
+    },
+    {
+      "id": "ac0c2089efa94f68881091e20609c3c5",
+      "start": 72.2,
+      "end": 73.06,
+      "text": "去晚了就来不及了"
+    },
+    {
+      "id": "be799392f1c3461b838f76f8343f2e92",
+      "start": 73.06,
+      "end": 73.58,
+      "text": "选夫"
+    },
+    {
+      "id": "c068306a95d44ac98d89e09bd7df1697",
+      "start": 74.02000000000001,
+      "end": 74.34,
+      "text": "走"
+    },
+    {
+      "id": "4290b468d9184887bac120beb5a387dd",
+      "start": 74.88,
+      "end": 75.34,
+      "text": "看他去"
+    },
+    {
+      "id": "260f9a21a0d04c0ab2c4665e6c644d62",
+      "start": 75.34,
+      "end": 77.28,
+      "text": "秦是冲击该抢我的秀球"
+    },
+    {
+      "id": "d0081fdc01654f3088e840766a541845",
+      "start": 77.28,
+      "end": 79.1,
+      "text": "害得我逃婚后吃尽苦头"
+    },
+    {
+      "id": "761d9222e9924153b1fbf117d176d1e6",
+      "start": 79.86000000000001,
+      "end": 80.46,
+      "text": "正好"
+    },
+    {
+      "id": "aaca4760280848ec91a106a75548d6fa",
+      "start": 80.46,
+      "end": 81.82,
+      "text": "我也要让你尝尝"
+    },
+    {
+      "id": "b8aabb5e1495472c801a3c3f1ad70c63",
+      "start": 81.82,
+      "end": 83.34,
+      "text": "被至清抛弃的则"
+    },
+    {
+      "id": "2d1a943573d44d11963f0cc73e425a79",
+      "start": 85.19999999999999,
+      "end": 85.8,
+      "text": "去吧"
+    },
+    {
+      "id": "2ae15af8a4524b488461123f0cce5b02",
+      "start": 85.8,
+      "end": 86.82,
+      "text": "按照我说的走"
+    },
+    {
+      "id": "75eabc6a58274351ae44ef5043d11e0b",
+      "start": 86.82,
+      "end": 87.18,
+      "text": "明白"
+    },
+    {
+      "id": "46abffd371994361a904defece4a2005",
+      "start": 87.18,
+      "end": 87.66,
+      "text": "二小姐"
+    },
+    {
+      "id": "fc1da168b827452bb50806687a62dd7f",
+      "start": 87.66,
+      "end": 88.74,
+      "text": "他们只是要"
+    },
+    {
+      "id": "e10d27125ad34b5dbccdff398429d55a",
+      "start": 88.74,
+      "end": 90.04,
+      "text": "如今我们审佳"
+    },
+    {
+      "id": "b36b8e2a88eb41de9eb78f41282797ce",
+      "start": 90.04,
+      "end": 91.54,
+      "text": "攀上了慕容府高知"
+    },
+    {
+      "id": "c7ea75aecb02499bb69015cc39a4b392",
+      "start": 91.54,
+      "end": 93.24,
+      "text": "云青待会儿选夫婿"
+    },
+    {
+      "id": "67267e53518c418296f4be43aa95d75a",
+      "start": 93.24,
+      "end": 94.86,
+      "text": "可不能差了去"
+    },
+    {
+      "id": "bae215474fec416f8d751f53a7977b3c",
+      "start": 94.86,
+      "end": 95.32,
+      "text": "娘"
+    },
+    {
+      "id": "a28598050dd24c6988411e65613262cb",
+      "start": 95.86,
+      "end": 96.84,
+      "text": "您这说的什么话"
+    },
+    {
+      "id": "474d39ee1e754ec282817a7d64ae6390",
+      "start": 96.84,
+      "end": 98.38,
+      "text": "姐姐向来运气好"
+    },
+    {
+      "id": "e2108003edc6470e8f1c341d3bd6b73c",
+      "start": 98.38,
+      "end": 99.68,
+      "text": "怎么会打爹爹的脸"
+    },
+    {
+      "id": "8ac1efffdec34c51b3032254ccf721f0",
+      "start": 100.24,
+      "end": 101,
+      "text": "以我看"
+    },
+    {
+      "id": "5efccc8853c2401aa648be1b58557770",
+      "start": 101,
+      "end": 102.14,
+      "text": "姐姐待会儿"
+    },
+    {
+      "id": "0e1379bb91ea44a3a90f63121e7363d4",
+      "start": 102.14,
+      "end": 103.86,
+      "text": "一定会选的一个最好的夫婿"
+    },
+    {
+      "id": "75e79b20e36f466f9219a16534396f98",
+      "start": 103.86,
+      "end": 104.34,
+      "text": "云青"
+    },
+    {
+      "id": "de8666bf96c84ac5a8aa5af990308d64",
+      "start": 104.86,
+      "end": 106.02,
+      "text": "如今你妹妹的婚事"
+    },
+    {
+      "id": "c8811afd62464382881aea5d03c33885",
+      "start": 106.02,
+      "end": 107.06,
+      "text": "算是有了招落"
+    },
+    {
+      "id": "734bbb2f7d2f43118ae54cfb126c91df",
+      "start": 107.06,
+      "end": 108.34,
+      "text": "现在有了一个有权的"
+    },
+    {
+      "id": "057ba5f9f0d441cd865acc7153dfb55a",
+      "start": 108.34,
+      "end": 109.74,
+      "text": "那你就再来个有才的"
+    },
+    {
+      "id": "dfcbdf77cdf249d3bf963d6ec7251ee1",
+      "start": 109.74,
+      "end": 111.78,
+      "text": "这样才配得上我神招之女"
+    },
+    {
+      "id": "aadff668ca0c4a3d8f87da54d7c8969e",
+      "start": 114.5,
+      "end": 115.66,
+      "text": "小姐该你了"
+    },
+    {
+      "id": "da5daa8984944f49ae3e2b5dd99bbff7",
+      "start": 115.66,
+      "end": 117.36,
+      "text": "全谋算起精英才果"
+    },
+    {
+      "id": "51b328f6c03541d6b0e812a05e1278ce",
+      "start": 117.36,
+      "end": 119.1,
+      "text": "宗教不过是过眼云烟"
+    },
+    {
+      "id": "315670b64f7440f0a97bfa5d4a256d61",
+      "start": 119.56,
+      "end": 120.28,
+      "text": "这一世"
+    },
+    {
+      "id": "c2a36e3693344eac81c318307829786c",
+      "start": 120.28,
+      "end": 122.4,
+      "text": "只求能密得一位两人"
+    },
+    {
+      "id": "b7d210b4341c471abd56915d7877b862",
+      "start": 122.4,
+      "end": 123.66,
+      "text": "安稳过完一生"
+    },
+    {
+      "id": "7e7ddc0f01334d85a9d581757129e792",
+      "start": 124.04,
+      "end": 124.58,
+      "text": "祖宗"
+    },
+    {
+      "id": "ca5ae84091ab464db9f2a7bffa3ef430",
+      "start": 125.06,
+      "end": 125.98,
+      "text": "珍小姐"
+    },
+    {
+      "id": "95ca4bbb84d4426998017d07dbb8111e",
+      "start": 125.98,
+      "end": 127.96,
+      "text": "好让我"
+    }
+  ],
+  "sensitivity": 2.5,
+  "transcription_job_id": null,
+  "translation_job_id": "ad61669d694a|subtitles_vi_Vietnamese.srt",
+  "voiceover_filename": null,
+  "voiceover_original_name": null,
+  "voiceover_mime_type": null,
+  "voiceover_size": 0,
+  "voiceover_duration": 0,
+  "created_at": "2026-05-11T07:46:48.993Z",
+  "updated_at": "2026-05-11T07:56:13.582Z"
+}

@@ -1,8 +1,19 @@
 import { protocol } from 'electron'
 import { createReadStream } from 'node:fs'
-import { stat } from 'node:fs/promises'
+import { readFile, stat } from 'node:fs/promises'
 import { Readable } from 'node:stream'
+import path from 'node:path'
 import { resolveProjectVideoPath } from './projectStore.mjs'
+
+const rendererHeaders = {
+  'Cross-Origin-Embedder-Policy': 'require-corp',
+  'Cross-Origin-Opener-Policy': 'same-origin',
+  'Cross-Origin-Resource-Policy': 'same-origin',
+}
+
+const mediaHeaders = {
+  'Cross-Origin-Resource-Policy': 'cross-origin',
+}
 
 function buildProtocolErrorResponse(message, status) {
   return new Response(message, {
@@ -77,6 +88,7 @@ async function buildProjectMediaResponse(filePath, request, getContentType) {
         'Accept-Ranges': 'bytes',
         'Content-Range': `bytes */${totalSize}`,
         'Content-Type': contentType,
+        ...mediaHeaders,
       },
     })
   }
@@ -87,6 +99,7 @@ async function buildProjectMediaResponse(filePath, request, getContentType) {
       'Cache-Control': 'no-store',
       'Content-Length': String(totalSize),
       'Content-Type': contentType,
+      ...mediaHeaders,
     }
 
     if (request.method === 'HEAD') {
@@ -107,6 +120,7 @@ async function buildProjectMediaResponse(filePath, request, getContentType) {
     'Content-Length': String(chunkSize),
     'Content-Range': `bytes ${start}-${end}/${totalSize}`,
     'Content-Type': contentType,
+    ...mediaHeaders,
   }
 
   if (request.method === 'HEAD') {
@@ -119,23 +133,76 @@ async function buildProjectMediaResponse(filePath, request, getContentType) {
   })
 }
 
-export function registerProjectMediaProtocol({ getContentType }) {
-  protocol.handle('project-media', async (request) => {
+async function fileExists(filePath) {
+  try {
+    const fileStats = await stat(filePath)
+    return fileStats.isFile()
+  } catch {
+    return false
+  }
+}
+
+async function resolveRendererTarget(distDir, requestPath) {
+  const relativePath = requestPath === '/' ? 'index.html' : requestPath.replace(/^\//, '')
+  const resolvedPath = path.resolve(distDir, relativePath)
+
+  if (!resolvedPath.startsWith(distDir)) {
+    return null
+  }
+
+  if (await fileExists(resolvedPath)) {
+    return resolvedPath
+  }
+
+  return path.join(distDir, 'index.html')
+}
+
+async function buildRendererResponse(filePath, request, getContentType) {
+  const content = await readFile(filePath)
+  const headers = {
+    ...rendererHeaders,
+    'Content-Type': getContentType(filePath),
+  }
+
+  if (request.method === 'HEAD') {
+    return new Response(null, { status: 200, headers })
+  }
+
+  return new Response(content, {
+    status: 200,
+    headers,
+  })
+}
+
+export function registerDesktopAppProtocol({ distDir, getContentType }) {
+  protocol.handle('desktop', async (request) => {
     try {
       const requestUrl = new URL(request.url)
-      const pathSegments = requestUrl.pathname.split('/').filter(Boolean)
-      const projectId = decodeURIComponent(pathSegments[0] || '')
-
-      if (requestUrl.hostname !== 'project' || !projectId) {
+      if (requestUrl.hostname !== 'app') {
         return buildProtocolErrorResponse('Invalid project media request.', 400)
       }
 
-      const videoPath = await resolveProjectVideoPath(projectId)
-      if (!videoPath) {
-        return buildProtocolErrorResponse('Project video not found.', 404)
+      const requestPath = decodeURIComponent(requestUrl.pathname || '/')
+      if (requestPath.startsWith('/project-media/')) {
+        const projectId = requestPath.slice('/project-media/'.length)
+        if (!projectId) {
+          return buildProtocolErrorResponse('Invalid project media request.', 400)
+        }
+
+        const videoPath = await resolveProjectVideoPath(projectId)
+        if (!videoPath) {
+          return buildProtocolErrorResponse('Project video not found.', 404)
+        }
+
+        return buildProjectMediaResponse(videoPath, request, getContentType)
       }
 
-      return buildProjectMediaResponse(videoPath, request, getContentType)
+      const targetPath = await resolveRendererTarget(distDir, requestPath)
+      if (!targetPath) {
+        return buildProtocolErrorResponse('Forbidden', 403)
+      }
+
+      return buildRendererResponse(targetPath, request, getContentType)
     } catch (error) {
       return buildProtocolErrorResponse(error.message, 500)
     }

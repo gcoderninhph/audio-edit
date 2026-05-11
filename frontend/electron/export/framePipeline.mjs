@@ -1,6 +1,6 @@
 import { writeFile } from 'node:fs/promises'
 import path from 'node:path'
-import { getFrameBackgroundFillColor, isImageFrameBackground } from '../../src/utils/frameComposer.js'
+import { DEFAULT_FRAME_BACKGROUND, getFrameBackgroundFillColor, getVideoFadePresetById, isImageFrameBackground, isVideoFadeFrameBackground } from '../../src/utils/frameComposer.js'
 import { getFrameChunkPlan, getFrameWorkerPlan, getNativeEncodePlan, runNativeFfmpeg } from './nativeFfmpeg.mjs'
 
 function formatSeconds(seconds) {
@@ -21,6 +21,14 @@ function getNativeBackgroundImagePath(frameBackground) {
     : ''
 }
 
+function isNativeVideoFadeBackground(frameBackground) {
+  return isVideoFadeFrameBackground(frameBackground)
+}
+
+function formatFilterNumber(value, digits = 2) {
+  return Number(value || 0).toFixed(digits).replace(/\.0+$/, '').replace(/(\.\d*?)0+$/, '$1')
+}
+
 function buildEnableExpression(events) {
   return events
     .map((event) => `between(t,${formatSeconds(event.start)},${formatSeconds(event.end)})`)
@@ -29,12 +37,21 @@ function buildEnableExpression(events) {
 
 function buildFrameFilter(framePreset, frameBackground, overlayAssets) {
   const backgroundImagePath = getNativeBackgroundImagePath(frameBackground)
+  const fadePreset = getVideoFadePresetById(frameBackground?.presetId)
   const filterChain = backgroundImagePath
     ? [
       `[1:v]scale=w=${framePreset.width}:h=${framePreset.height}:force_original_aspect_ratio=increase,crop=${framePreset.width}:${framePreset.height},setsar=1[bg]`,
       `[0:v]scale=w=${framePreset.width}:h=${framePreset.height}:force_original_aspect_ratio=decrease,setsar=1[fg]`,
       `[bg][fg]overlay=(W-w)/2:(H-h)/2:shortest=1:eof_action=pass[v0]`,
     ]
+    : isNativeVideoFadeBackground(frameBackground)
+      ? [
+        `[0:v]split=2[bgsrc][fgsrc]`,
+        `[bgsrc]scale=w=${framePreset.width}:h=${framePreset.height}:force_original_aspect_ratio=increase,crop=${framePreset.width}:${framePreset.height},boxblur=${fadePreset.nativeBlur},eq=brightness=${formatFilterNumber(fadePreset.nativeBrightness, 3)}:saturation=${formatFilterNumber(fadePreset.nativeSaturation, 3)},setsar=1[bg]`,
+        `[bg]drawbox=x=0:y=0:w=iw:h=ih:color=${toFfmpegColor(DEFAULT_FRAME_BACKGROUND)}@${formatFilterNumber(fadePreset.nativeOverlayOpacity, 3)}:t=fill[bgdim]`,
+        `[fgsrc]scale=w=${framePreset.width}:h=${framePreset.height}:force_original_aspect_ratio=decrease,setsar=1[fg]`,
+        `[bgdim][fg]overlay=(W-w)/2:(H-h)/2:shortest=1:eof_action=pass[v0]`,
+      ]
     : [
       `[0:v]scale=w=${framePreset.width}:h=${framePreset.height}:force_original_aspect_ratio=decrease,pad=${framePreset.width}:${framePreset.height}:(ow-iw)/2:(oh-ih)/2:${toFfmpegColor(frameBackground)}[v0]`,
     ]

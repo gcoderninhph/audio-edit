@@ -9,6 +9,7 @@ import {
   getLocalProject,
   getLocalProjectVideoReference,
   listLocalProjects,
+  materializeLocalProjectVoiceover,
   releaseVideoUrl,
   saveLocalProject,
   saveLocalProjectVideo,
@@ -46,6 +47,10 @@ export function useEditorPersistence({
   setIsTranslating,
   setTranslateProgress,
   setTranslationJobId,
+  setIsGeneratingVoiceover,
+  setVoiceoverProgress,
+  setLastVoiceoverAudioName,
+  setVoiceoverTrack,
 }) {
   const [isUploading, setIsUploading] = useState(false);
   const [uploadProgress, setUploadProgress] = useState(0);
@@ -170,6 +175,30 @@ export function useEditorPersistence({
     setVideoFilename(data.video_filename || restoredVideo.storedFileName);
   }, [setVideoFileState, setVideoFilename, setVideoName, setVideoUrl, videoUrl]);
 
+  const restoreVoiceoverState = useCallback(async (projectId, data) => {
+    if (!data.voiceover_filename) {
+      setLastVoiceoverAudioName('');
+      setVoiceoverTrack(null);
+      return;
+    }
+
+    const restoredVoiceover = await materializeLocalProjectVoiceover(projectId);
+    if (!restoredVoiceover) {
+      setLastVoiceoverAudioName('');
+      setVoiceoverTrack(null);
+      return;
+    }
+
+    const fileName = data.voiceover_original_name || restoredVoiceover.fileName || 'voiceover.mp3';
+    setLastVoiceoverAudioName(fileName);
+    setVoiceoverTrack({
+      duration: restoredVoiceover.duration || 0,
+      fileName,
+      previewUrl: restoredVoiceover.previewUrl,
+      startTime: 0,
+    });
+  }, [setLastVoiceoverAudioName, setVoiceoverTrack]);
+
   const resumeSavedTranscription = useCallback((data) => {
     return restoreSavedTranscriptionJob(data, {
       performAutoSave,
@@ -211,14 +240,18 @@ export function useEditorPersistence({
     try {
       const data = await getLocalProject(id);
 
-      await restoreVideoState(id, data);
-
       setIsTranscribing(false);
       setTranscribeProgress(null);
       setTranscriptionJobId(null);
       setIsTranslating(false);
       setTranslateProgress(null);
       setTranslationJobId(null);
+      setIsGeneratingVoiceover(false);
+      setVoiceoverProgress(null);
+      setLastVoiceoverAudioName('');
+      setVoiceoverTrack(null);
+
+      await restoreVideoState(id, data);
 
       sessionIdRef.current = data.id;
       setSessionId(data.id);
@@ -227,6 +260,7 @@ export function useEditorPersistence({
       setScenes(data.scenes || []);
       setDeletedSceneIds(new Set(data.deleted_ids || []));
       setSubtitles(data.subtitles || []);
+      await restoreVoiceoverState(id, data);
 
       if (data.sensitivity !== undefined && data.sensitivity !== null) {
         setSensitivity(data.sensitivity);
@@ -251,14 +285,17 @@ export function useEditorPersistence({
   }, [
     resetHistory,
     restoreVideoState,
+    restoreVoiceoverState,
     resumeSavedTranscription,
     resumeSavedTranslation,
     setDeletedSceneIds,
     setFrameBackground,
     setFramePresetId,
+    setIsGeneratingVoiceover,
     setIsTranscribing,
     setIsTranslating,
     setIsRestoring,
+    setLastVoiceoverAudioName,
     setScenes,
     setSensitivity,
     setSessionId,
@@ -268,6 +305,8 @@ export function useEditorPersistence({
     setTranscriptionJobId,
     setTranslateProgress,
     setTranslationJobId,
+    setVoiceoverProgress,
+    setVoiceoverTrack,
   ]);
 
   const deleteSession = useCallback(async (id) => {
@@ -297,6 +336,10 @@ export function useEditorPersistence({
         setIsTranslating(false);
         setTranslateProgress(null);
         setTranslationJobId(null);
+        setIsGeneratingVoiceover(false);
+        setVoiceoverProgress(null);
+        setLastVoiceoverAudioName('');
+        setVoiceoverTrack(null);
         resetHistory();
 
         await waitForMediaRelease()
@@ -314,8 +357,10 @@ export function useEditorPersistence({
     setDeletedSceneIds,
     setFrameBackground,
     setFramePresetId,
+    setIsGeneratingVoiceover,
     setIsTranscribing,
     setIsTranslating,
+    setLastVoiceoverAudioName,
     setScenes,
     setSensitivity,
     setSessionId,
@@ -324,6 +369,8 @@ export function useEditorPersistence({
     setTranscriptionJobId,
     setTranslateProgress,
     setTranslationJobId,
+    setVoiceoverProgress,
+    setVoiceoverTrack,
     setVideoFileState,
     setVideoFilename,
     setVideoName,

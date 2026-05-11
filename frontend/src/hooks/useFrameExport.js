@@ -50,7 +50,16 @@ function mergeExportProgress(previous, update) {
   }
 }
 
-export function useFrameExport({ videoFile, keptScenes, filteredSubtitles }) {
+function createFullVideoScene(videoDuration) {
+  return {
+    id: '__full-video__',
+    start: 0,
+    end: videoDuration,
+    duration: videoDuration,
+  }
+}
+
+export function useFrameExport({ videoFile, keptScenes, filteredSubtitles, videoDuration = 0 }) {
   const [framePresetId, setFramePresetIdState] = useState(DEFAULT_FRAME_PRESET_ID)
   const [frameBackground, setFrameBackgroundState] = useState(DEFAULT_FRAME_BACKGROUND)
   const [isExporting, setIsExporting] = useState(false)
@@ -62,13 +71,24 @@ export function useFrameExport({ videoFile, keptScenes, filteredSubtitles }) {
   const framePreset = useMemo(() => getFramePresetById(framePresetId), [framePresetId])
   const frameSummary = useMemo(() => getFrameSummary(framePresetId), [framePresetId])
   const frameBackgroundLabel = useMemo(() => getFrameBackgroundLabel(frameBackground), [frameBackground])
+  const effectiveKeptScenes = useMemo(() => {
+    if (Array.isArray(keptScenes) && keptScenes.length > 0) {
+      return keptScenes
+    }
+
+    if (videoDuration > 0) {
+      return [createFullVideoScene(videoDuration)]
+    }
+
+    return []
+  }, [keptScenes, videoDuration])
   const exportSubtitles = useMemo(
-    () => buildExportSubtitles(filteredSubtitles, keptScenes),
-    [filteredSubtitles, keptScenes],
+    () => buildExportSubtitles(filteredSubtitles, effectiveKeptScenes),
+    [effectiveKeptScenes, filteredSubtitles],
   )
   const exportSignature = useMemo(
-    () => buildExportSignature(keptScenes, exportSubtitles, framePresetId, frameBackground),
-    [exportSubtitles, frameBackground, framePresetId, keptScenes],
+    () => buildExportSignature(effectiveKeptScenes, exportSubtitles, framePresetId, frameBackground),
+    [effectiveKeptScenes, exportSubtitles, frameBackground, framePresetId],
   )
   const hasFreshExport = exportUrl && lastExportSignature === exportSignature
 
@@ -122,10 +142,11 @@ export function useFrameExport({ videoFile, keptScenes, filteredSubtitles }) {
   }, [])
 
   const startExport = useCallback(async () => {
-    if (!videoFile || keptScenes.length === 0) {
+    if (!videoFile || effectiveKeptScenes.length === 0) {
       void logExportDebug('Export request ignored because no video or kept scenes were available', {
         hasVideoFile: Boolean(videoFile),
-        keptSceneCount: keptScenes.length,
+        keptSceneCount: effectiveKeptScenes.length,
+        videoDuration,
       }, 'warning')
       return
     }
@@ -134,7 +155,7 @@ export function useFrameExport({ videoFile, keptScenes, filteredSubtitles }) {
     void logExportDebug('Export requested from UI', {
       frameBackground: describeFrameBackground(frameBackground),
       framePresetId,
-      keptSceneCount: keptScenes.length,
+      keptSceneCount: effectiveKeptScenes.length,
       subtitleCount: exportSubtitles.length,
       videoSourceKind: videoFile?.kind || (videoFile instanceof File ? 'file' : 'blob'),
     })
@@ -144,14 +165,14 @@ export function useFrameExport({ videoFile, keptScenes, filteredSubtitles }) {
       ...createInitialExportProgress(),
       phase: 'preparing',
       percent: 0,
-      detail: `Khởi tạo export • ${keptScenes.length} cảnh • ${exportSubtitles.length} subtitle`,
-      sceneCount: keptScenes.length,
+      detail: `Khởi tạo export • ${effectiveKeptScenes.length} cảnh • ${exportSubtitles.length} subtitle`,
+      sceneCount: effectiveKeptScenes.length,
       subtitleCount: exportSubtitles.length,
       startedAt,
       logs: [{
         phase: 'preparing',
         level: 'info',
-        message: `Start export with ${keptScenes.length} scenes and ${exportSubtitles.length} subtitles`,
+        message: `Start export with ${effectiveKeptScenes.length} scenes and ${exportSubtitles.length} subtitles`,
         timestamp: startedAt,
       }],
     })
@@ -163,7 +184,7 @@ export function useFrameExport({ videoFile, keptScenes, filteredSubtitles }) {
     try {
       const result = await exportVideo(
         videoFile,
-        keptScenes,
+        effectiveKeptScenes,
         exportSubtitles,
         {
           presetId: framePresetId,
@@ -197,7 +218,7 @@ export function useFrameExport({ videoFile, keptScenes, filteredSubtitles }) {
     } finally {
       setIsExporting(false)
     }
-  }, [clearExportResult, exportSignature, exportSubtitles, frameBackground, framePresetId, keptScenes, videoFile])
+  }, [clearExportResult, effectiveKeptScenes, exportSignature, exportSubtitles, frameBackground, framePresetId, videoDuration, videoFile])
 
   return {
     framePresetId,

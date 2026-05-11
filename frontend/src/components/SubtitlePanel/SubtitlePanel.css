@@ -216,6 +216,16 @@
   align-items: center;
 }
 
+.subtitle-voiceover-btn {
+  width: 100%;
+}
+
+.subtitle-tool-note {
+  font-size: 0.72rem;
+  color: var(--text-secondary);
+  line-height: 1.4;
+}
+
 .subtitle-lang-select {
   flex: 1;
   padding: 6px 8px;

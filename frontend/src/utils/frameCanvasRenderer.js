@@ -1,7 +1,9 @@
 import {
   DEFAULT_FRAME_BACKGROUND,
   getFrameBackgroundFillColor,
+  getVideoFadePresetById,
   isImageFrameBackground,
+  isVideoFadeFrameBackground,
   sanitizeFrameBackground,
 } from './frameComposer'
 import { buildSubtitleRenderSpec, DEFAULT_SUBTITLE_FONT_FAMILY, wrapSubtitleText } from './subtitleRenderModel'
@@ -52,6 +54,15 @@ function getCoverImageLayout(framePreset, sourceWidth, sourceHeight) {
     width,
     height,
   }
+}
+
+function canDrawVideoFrame(videoElement) {
+  return Boolean(
+    videoElement
+      && videoElement.readyState >= 2
+      && (videoElement.videoWidth || 0) > 0
+      && (videoElement.videoHeight || 0) > 0,
+  )
 }
 
 export function loadFrameBackgroundImage(frameBackground) {
@@ -150,9 +161,54 @@ function drawSubtitleCard(context, subtitleText, framePreset, fontFamily = DEFAU
   )
 }
 
-function drawFrameBackground(context, framePreset, frameBackground, backgroundImage) {
+function drawVideoFadeBackground(context, framePreset, frameBackground, videoElement) {
+  if (!canDrawVideoFrame(videoElement)) {
+    return false
+  }
+
+  const fadePreset = getVideoFadePresetById(frameBackground?.presetId)
+  const layout = getCoverImageLayout(framePreset, videoElement.videoWidth, videoElement.videoHeight)
+  const vignetteGradient = context.createRadialGradient(
+    framePreset.width / 2,
+    framePreset.height / 2,
+    Math.min(framePreset.width, framePreset.height) * 0.16,
+    framePreset.width / 2,
+    framePreset.height / 2,
+    Math.max(framePreset.width, framePreset.height) * 0.76,
+  )
+  vignetteGradient.addColorStop(0, 'rgba(5, 8, 22, 0.04)')
+  vignetteGradient.addColorStop(1, `rgba(5, 8, 22, ${fadePreset.previewVignetteOpacity})`)
+
+  const verticalFade = context.createLinearGradient(0, 0, 0, framePreset.height)
+  verticalFade.addColorStop(0, `rgba(5, 8, 22, ${fadePreset.previewTopShadeOpacity})`)
+  verticalFade.addColorStop(0.45, 'rgba(5, 8, 22, 0.1)')
+  verticalFade.addColorStop(1, `rgba(5, 8, 22, ${fadePreset.previewBottomShadeOpacity})`)
+
+  context.save()
+  context.fillStyle = DEFAULT_FRAME_BACKGROUND
+  context.fillRect(0, 0, framePreset.width, framePreset.height)
+  context.filter = `blur(${fadePreset.previewBlurPx}px) saturate(${fadePreset.previewSaturation}) brightness(${fadePreset.previewBrightness})`
+  context.drawImage(videoElement, layout.x, layout.y, layout.width, layout.height)
+  context.filter = 'none'
+  context.fillStyle = `rgba(5, 8, 22, ${fadePreset.previewOverlayOpacity})`
+  context.fillRect(0, 0, framePreset.width, framePreset.height)
+  context.fillStyle = verticalFade
+  context.fillRect(0, 0, framePreset.width, framePreset.height)
+  context.fillStyle = vignetteGradient
+  context.fillRect(0, 0, framePreset.width, framePreset.height)
+  context.restore()
+
+  return true
+}
+
+function drawFrameBackground(context, framePreset, frameBackground, backgroundImage, videoElement) {
   context.fillStyle = getFrameBackgroundFillColor(frameBackground) || DEFAULT_FRAME_BACKGROUND
   context.fillRect(0, 0, framePreset.width, framePreset.height)
+
+  if (isVideoFadeFrameBackground(frameBackground)) {
+    drawVideoFadeBackground(context, framePreset, frameBackground, videoElement)
+    return
+  }
 
   if (!backgroundImage) {
     return
@@ -172,9 +228,9 @@ export function drawFrameComposition(context, {
 }) {
   context.save()
   context.clearRect(0, 0, framePreset.width, framePreset.height)
-  drawFrameBackground(context, framePreset, frameBackground, backgroundImage)
+  drawFrameBackground(context, framePreset, frameBackground, backgroundImage, videoElement)
 
-  if (videoElement && videoElement.readyState >= 2) {
+  if (canDrawVideoFrame(videoElement)) {
     const layout = getContainedVideoLayout(framePreset, videoElement.videoWidth, videoElement.videoHeight)
     context.drawImage(videoElement, layout.x, layout.y, layout.width, layout.height)
   }

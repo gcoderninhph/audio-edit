@@ -17,6 +17,58 @@ export const FRAME_BACKGROUND_OPTIONS = [
 export const DEFAULT_FRAME_PRESET_ID = FRAME_PRESETS[0].id
 export const DEFAULT_FRAME_BACKGROUND = FRAME_BACKGROUND_OPTIONS[0].value
 const IMAGE_BACKGROUND_KIND = 'image'
+const VIDEO_FADE_BACKGROUND_KIND = 'video-fade'
+
+export const VIDEO_FADE_PRESET_OPTIONS = [
+  {
+    id: 'soft',
+    label: 'Mềm',
+    nativeBlur: '20:2',
+    nativeBrightness: -0.04,
+    nativeOverlayOpacity: 0.18,
+    nativeSaturation: 1.04,
+    previewBlurPx: 36,
+    previewBrightness: 0.74,
+    previewOverlayOpacity: 0.16,
+    previewSaturation: 1.04,
+    previewTopShadeOpacity: 0.18,
+    previewBottomShadeOpacity: 0.28,
+    previewVignetteOpacity: 0.24,
+  },
+  {
+    id: 'cinematic',
+    label: 'Điện ảnh',
+    nativeBlur: '32:4',
+    nativeBrightness: -0.08,
+    nativeOverlayOpacity: 0.24,
+    nativeSaturation: 1.08,
+    previewBlurPx: 56,
+    previewBrightness: 0.62,
+    previewOverlayOpacity: 0.22,
+    previewSaturation: 1.08,
+    previewTopShadeOpacity: 0.26,
+    previewBottomShadeOpacity: 0.42,
+    previewVignetteOpacity: 0.34,
+  },
+  {
+    id: 'bold',
+    label: 'Đậm',
+    nativeBlur: '44:5',
+    nativeBrightness: -0.12,
+    nativeOverlayOpacity: 0.3,
+    nativeSaturation: 1.12,
+    previewBlurPx: 72,
+    previewBrightness: 0.52,
+    previewOverlayOpacity: 0.28,
+    previewSaturation: 1.12,
+    previewTopShadeOpacity: 0.34,
+    previewBottomShadeOpacity: 0.52,
+    previewVignetteOpacity: 0.44,
+  },
+]
+
+export const DEFAULT_VIDEO_FADE_PRESET_ID = VIDEO_FADE_PRESET_OPTIONS[1].id
+export const VIDEO_FADE_FRAME_BACKGROUND = Object.freeze(createVideoFadeFrameBackground())
 
 function loadImageFromDataUrl(dataUrl) {
   return new Promise((resolve, reject) => {
@@ -49,6 +101,25 @@ export function isImageFrameBackground(frameBackground) {
       && typeof frameBackground.dataUrl === 'string'
       && /^data:image\//i.test(frameBackground.dataUrl),
   )
+}
+
+export function isVideoFadeFrameBackground(frameBackground) {
+  return Boolean(
+    frameBackground
+      && typeof frameBackground === 'object'
+      && frameBackground.kind === VIDEO_FADE_BACKGROUND_KIND,
+  )
+}
+
+export function getVideoFadePresetById(presetId) {
+  return VIDEO_FADE_PRESET_OPTIONS.find((preset) => preset.id === presetId) || VIDEO_FADE_PRESET_OPTIONS[1]
+}
+
+export function createVideoFadeFrameBackground(presetId = DEFAULT_VIDEO_FADE_PRESET_ID) {
+  return {
+    kind: VIDEO_FADE_BACKGROUND_KIND,
+    presetId: getVideoFadePresetById(presetId).id,
+  }
 }
 
 export async function createImageFrameBackgroundFromFile(file, { maxDimension = 1600 } = {}) {
@@ -89,6 +160,11 @@ export function getFrameBackgroundLabel(frameBackground) {
     return 'Ảnh nền'
   }
 
+  if (isVideoFadeFrameBackground(frameBackground)) {
+    const preset = getVideoFadePresetById(frameBackground.presetId)
+    return `Fade video • ${preset.label}`
+  }
+
   return FRAME_BACKGROUND_OPTIONS.find((option) => option.value === frameBackground)?.label || 'Custom'
 }
 
@@ -107,6 +183,16 @@ export function describeFrameBackground(frameBackground) {
     }
   }
 
+  if (isVideoFadeFrameBackground(normalizedBackground)) {
+    const preset = getVideoFadePresetById(normalizedBackground.presetId)
+    return {
+      type: VIDEO_FADE_BACKGROUND_KIND,
+      label: getFrameBackgroundLabel(normalizedBackground),
+      presetId: preset.id,
+      presetLabel: preset.label,
+    }
+  }
+
   return {
     type: 'color',
     value: normalizedBackground,
@@ -120,12 +206,20 @@ export function serializeFrameBackground(frameBackground) {
     return `image:${normalizedBackground.name || 'background'}:${normalizedBackground.dataUrl.length}:${normalizedBackground.dataUrl.slice(0, 64)}`
   }
 
+  if (isVideoFadeFrameBackground(normalizedBackground)) {
+    return `${VIDEO_FADE_BACKGROUND_KIND}:${getVideoFadePresetById(normalizedBackground.presetId).id}`
+  }
+
   return normalizedBackground
 }
 
 export function sanitizeFrameBackground(frameBackground) {
   if (/^#[0-9a-f]{6}$/i.test(frameBackground || '')) {
     return frameBackground
+  }
+
+  if (isVideoFadeFrameBackground(frameBackground)) {
+    return createVideoFadeFrameBackground(frameBackground.presetId)
   }
 
   if (isImageFrameBackground(frameBackground)) {
