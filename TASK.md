@@ -8,6 +8,13 @@
   - Next step: open the saved `tap4.mp4` project in the running Electron window, press play, and confirm the timer advances from `00:00 / <video duration>` even before scene detection runs.
   - Validation: pending manual smoke test in the live Electron window; automated validation confirmed Electron window startup, backend health `200`, and no renderer listeners on ports `4173` or `5173`
 
+- [ ] Manually confirm exported audio mix and narration parity in the running desktop build
+  - Scope: frontend
+  - Owner files: `frontend/src/hooks/useFrameExport.js`, `frontend/src/utils/exportAudioMix.js`, `frontend/src/utils/exportAudioStage.js`, `frontend/src/utils/ffmpegManager.js`, `frontend/src/utils/nativeExportClient.js`, `frontend/electron/export/exportAudioStage.mjs`, `frontend/electron/export/exportCoordinator.mjs`
+  - Evidence: export now receives the same source-video and voiceover volume state used by the player audio sidebar, both native and FFmpeg.wasm export backends render a final mixed audio track before mux, and saved voiceover audio is now threaded into export instead of being ignored.
+  - Next step: in the running Electron app, restore or generate a voiceover, set clearly different video and voiceover volumes, export one file, and confirm the output contains narration and matches the configured balance.
+  - Validation: pending manual desktop export smoke test; automated validation confirmed VS Code diagnostics on touched files, `npm run lint`, `npm run build`, `frontend/src/utils/ffmpegManager.js` at 388 lines, `frontend/electron/export/exportCoordinator.mjs` at 339 lines, and desktop restart with Flask `/api/health` `200`.
+
 - [ ] Re-run export on the latest desktop build to confirm record-frame parity
   - Scope: frontend
   - Owner files: `frontend/src/components/VideoPlayer/VideoPlayer.jsx`, `frontend/src/utils/frameCanvasRenderer.js`, `frontend/src/utils/frameCanvasExport.js`, `frontend/src/utils/ffmpegManager.js`
@@ -23,6 +30,26 @@
   - Validation: pending
 
 ## Completed
+- [x] Make exported audio follow the configured mix and include the saved voiceover track
+  - Scope: frontend
+  - Owner files: `frontend/src/hooks/useFrameExport.js`, `frontend/src/hooks/useVideoEditor.js`, `frontend/src/components/VideoPlayer/VideoPlayer.jsx`, `frontend/src/components/VideoPlayer/VideoPlayerFrameControls.jsx`, `frontend/src/components/VideoPlayer/useVideoPlayerVoiceover.js`, `frontend/src/utils/exportAudioMix.js`, `frontend/src/utils/exportAudioStage.js`, `frontend/src/utils/ffmpegManager.js`, `frontend/src/utils/nativeExportClient.js`, `frontend/electron/export/exportAudioStage.mjs`, `frontend/electron/export/exportCoordinator.mjs`, `TASK.md`, `MAP.md`
+  - Split plan: extract the renderer fallback audio-stage helper into `frontend/src/utils/exportAudioStage.js` and the Electron main native audio-stage helper into `frontend/electron/export/exportAudioStage.mjs` so `frontend/src/utils/ffmpegManager.js` and `frontend/electron/export/exportCoordinator.mjs` stay under the 400-line guardrail while export audio mixing grows.
+  - Outcome: the source-video and voiceover volume controls now live in `useFrameExport` so preview and export share the same configured mix, the player audio sidebar copy now reflects that those controls affect export as well as preview, and both export backends now materialize the saved narration audio, render a final mixed audio track with the configured video and voiceover levels, then mux that track into the framed output instead of always keeping only the original cut-video audio. When the source video has no audio stream, export now falls back cleanly to voiceover-only or silent output instead of failing.
+  - Validation: VS Code diagnostics for touched frontend and Electron export files; line guardrail checked with `frontend/src/utils/ffmpegManager.js` at 388 lines, `frontend/electron/export/exportCoordinator.mjs` at 339 lines, `frontend/src/hooks/useVideoEditor.js` at 380 lines, `frontend/src/components/VideoPlayer/VideoPlayer.jsx` at 344 lines, `frontend/src/utils/exportAudioStage.js` at 94 lines, and `frontend/electron/export/exportAudioStage.mjs` at 94 lines; `npm run lint`; `npm run build`; restarted `npm run desktop:start`; confirmed Flask `/api/health` returned `200` on the updated desktop build.
+
+- [x] Reduce client-side voiceover playback artifacts and stop short narration from looping after it ends
+  - Scope: frontend
+  - Owner files: `frontend/src/components/VideoPlayer/VideoPlayer.jsx`, `frontend/src/components/VideoPlayer/useVideoPlayerVoiceover.js`, `TASK.md`, `MAP.md`
+  - Split plan: extract the voiceover playback and timeline-sync state machine into `frontend/src/components/VideoPlayer/useVideoPlayerVoiceover.js` so `frontend/src/components/VideoPlayer/VideoPlayer.jsx` can stay below the 400-line guardrail while the audio fix grows beyond a safe inline patch.
+  - Outcome: the preview player no longer re-seeks and replays the attached voiceover audio on nearly every timeline tick, and when the narration is shorter than the kept video timeline it now clamps to the true audio duration and stays paused at the end instead of looping the opening audio back over the remaining video. The saved project metadata for the active test project also still preserves a real `voiceover_duration`, so the player has the timing data it needs to stop cleanly.
+  - Validation: VS Code diagnostics for `frontend/src/components/VideoPlayer/VideoPlayer.jsx` and `frontend/src/components/VideoPlayer/useVideoPlayerVoiceover.js`; line guardrail checked with `frontend/src/components/VideoPlayer/VideoPlayer.jsx` at 392 lines and `frontend/src/components/VideoPlayer/useVideoPlayerVoiceover.js` at 146 lines; `npm run lint`; `npm run build`; restarted `npm run desktop:start`; confirmed backend health returned `{"status":"ok"}` on the updated desktop build.
+
+- [x] Preserve in-flight subtitle progress when returning to the dashboard
+  - Scope: frontend
+  - Owner files: `frontend/src/App.jsx`, `TASK.md`, `MAP.md`
+  - Outcome: clicking the editor header back-to-dashboard action while upload, scene detection, subtitle transcription, subtitle translation, or voiceover generation is still running no longer clears the active editor session; the app now opens the project browser while keeping the current session alive in memory, lets the user reopen that same project instantly, and blocks switching to a different project mid-process so the active background job cannot lose its progress updates.
+  - Validation: VS Code diagnostics for `frontend/src/App.jsx`; line guardrail checked with `frontend/src/App.jsx` at 312 lines; `npm run lint`; `npm run build`; restarted `npm run desktop:start`; confirmed Flask `/api/health` returned `200` on the updated desktop build.
+
 - [x] Move desktop project data into the repo-local projects folder in dev and keep backend voiceover preview faithful by default
   - Scope: frontend
   - Owner files: `frontend/electron/projectStore.mjs`, `frontend/electron/projectStoreShared.mjs`, `frontend/src/components/VideoPlayer/VideoPlayer.jsx`, `TASK.md`, `MAP.md`

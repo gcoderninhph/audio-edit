@@ -11,6 +11,7 @@ import VideoPlayerFrameControls from './VideoPlayerFrameControls';
 import VideoPlayerFrameSummaryBar from './VideoPlayerFrameSummaryBar';
 import VideoPlayerSidebar from './VideoPlayerSidebar';
 import VideoPlayerTransportControls from './VideoPlayerTransportControls';
+import useVideoPlayerVoiceover from './useVideoPlayerVoiceover';
 import DeveloperLocator from '../DeveloperLocator/DeveloperLocator';
 import './VideoPlayer.css';
 
@@ -41,6 +42,11 @@ export default function VideoPlayer({
   deletedSceneIds,
   subtitles,
   voiceoverTrack,
+  videoVolume,
+  voiceoverVolume,
+  onVideoVolumeChange,
+  onVoiceoverVolumeChange,
+  onToggleVideoMute,
   activeSidebarSection,
   onToggleSidebarSection,
   onCloseSidebarSection,
@@ -48,13 +54,9 @@ export default function VideoPlayer({
   const [isPlaying, setIsPlaying] = useState(false);
   const [duration, setDuration] = useState(0);
   const [realCurrentTime, setRealCurrentTime] = useState(0);
-  const [videoVolume, setVideoVolume] = useState(1);
-  const [voiceoverVolume, setVoiceoverVolume] = useState(1);
-  const [customizedAudioTrackKey, setCustomizedAudioTrackKey] = useState('');
   const [frameBackgroundImage, setFrameBackgroundImage] = useState(null);
   const seekBarRef = useRef(null);
   const canvasRef = useRef(null);
-  const voiceoverRef = useRef(null);
   const animationFrameRef = useRef(null);
   const framePreset = useMemo(() => getFramePresetById(framePresetId), [framePresetId]);
 
@@ -70,15 +72,6 @@ export default function VideoPlayer({
     return keptDuration;
   }, [duration, hasSceneCuts, keptDuration]);
   const frameBackgroundLabel = useMemo(() => getFrameBackgroundLabel(frameBackground), [frameBackground]);
-  const hasVoiceoverTrack = Boolean(voiceoverTrack?.previewUrl);
-  const currentAudioTrackKey = voiceoverTrack?.previewUrl || '';
-  const hasCustomizedCurrentAudioMix = Boolean(currentAudioTrackKey) && customizedAudioTrackKey === currentAudioTrackKey;
-  const effectiveVideoVolume = hasVoiceoverTrack
-    ? (hasCustomizedCurrentAudioMix ? videoVolume : 0)
-    : videoVolume;
-  const effectiveVoiceoverVolume = hasVoiceoverTrack
-    ? (hasCustomizedCurrentAudioMix ? voiceoverVolume : 1)
-    : 1;
   const sidebarTitle = useMemo(() => {
     if (activeSidebarSection === FRAME_SIDEBAR_SECTIONS.FRAME) {
       return 'Chỉnh khung video';
@@ -89,25 +82,20 @@ export default function VideoPlayer({
     }
 
     if (activeSidebarSection === FRAME_SIDEBAR_SECTIONS.AUDIO) {
-      return 'Chỉnh âm thanh xem trước';
+      return 'Chỉnh âm thanh preview va export';
     }
 
     return 'Chỉnh video';
   }, [activeSidebarSection]);
-
-  const syncVoiceoverTime = useCallback((force = false) => {
-    const audioElement = voiceoverRef.current;
-    if (!audioElement || !voiceoverTrack?.previewUrl) return;
-
-    const maxTime = voiceoverTrack.duration > 0
-      ? voiceoverTrack.duration
-      : (Number.isFinite(audioElement.duration) ? audioElement.duration : displayedDuration);
-    const targetTime = Math.max(0, Math.min(displayedTime - (voiceoverTrack.startTime || 0), maxTime));
-
-    if (force || Math.abs((audioElement.currentTime || 0) - targetTime) > 0.25) {
-      audioElement.currentTime = targetTime;
-    }
-  }, [displayedDuration, displayedTime, voiceoverTrack]);
+  const {
+    voiceoverRef,
+    hasVoiceoverTrack,
+  } = useVideoPlayerVoiceover({
+    displayedTime,
+    isPlaying,
+    voiceoverVolume,
+    voiceoverTrack,
+  });
 
   const syncPlaybackState = useCallback(() => {
     const mediaElement = videoRef.current;
@@ -270,11 +258,7 @@ export default function VideoPlayer({
       mediaElement.load();
       voiceoverElement?.pause();
     };
-  }, [videoRef]);
-
-  useEffect(() => {
-    syncVoiceoverTime(false);
-  }, [syncVoiceoverTime]);
+  }, [videoRef, voiceoverRef]);
 
   useEffect(() => {
     const mediaElement = videoRef.current;
@@ -282,32 +266,8 @@ export default function VideoPlayer({
       return;
     }
 
-    mediaElement.volume = effectiveVideoVolume;
-  }, [effectiveVideoVolume, videoRef]);
-
-  useEffect(() => {
-    const audioElement = voiceoverRef.current;
-    if (!audioElement) return;
-
-    if (!voiceoverTrack?.previewUrl) {
-      audioElement.pause();
-      audioElement.currentTime = 0;
-      return;
-    }
-
-    audioElement.volume = effectiveVoiceoverVolume;
-    syncVoiceoverTime(true);
-
-    if (!isPlaying) {
-      audioElement.pause();
-      return;
-    }
-
-    const playPromise = audioElement.play();
-    playPromise?.catch((error) => {
-      console.error('Voiceover playback failed:', error);
-    });
-  }, [effectiveVoiceoverVolume, isPlaying, syncVoiceoverTime, voiceoverTrack?.previewUrl]);
+    mediaElement.volume = videoVolume;
+  }, [videoRef, videoVolume]);
 
   const handlePlay = useCallback(() => syncPlaybackState(), [syncPlaybackState]);
   const handlePause = useCallback(() => setIsPlaying(false), []);
@@ -356,21 +316,6 @@ export default function VideoPlayer({
     maxWidth: `${Math.round((450 * framePreset.width) / framePreset.height)}px`,
   }), [frameBackground, framePreset.height, framePreset.width]);
 
-  const handleVideoVolumeChange = useCallback((nextVolume) => {
-    setCustomizedAudioTrackKey(currentAudioTrackKey);
-    setVideoVolume(Math.max(0, Math.min(1, nextVolume)));
-  }, [currentAudioTrackKey]);
-
-  const handleVoiceoverVolumeChange = useCallback((nextVolume) => {
-    setCustomizedAudioTrackKey(currentAudioTrackKey);
-    setVoiceoverVolume(Math.max(0, Math.min(1, nextVolume)));
-  }, [currentAudioTrackKey]);
-
-  const handleToggleVideoMute = useCallback(() => {
-    setCustomizedAudioTrackKey(currentAudioTrackKey);
-    setVideoVolume(effectiveVideoVolume > 0 ? 0 : 1);
-  }, [currentAudioTrackKey, effectiveVideoVolume]);
-
   return (
     <div className="video-player-container dev-locator-host" id="video-player">
       <DeveloperLocator code="panel.video-player" title="Video Player" />
@@ -386,10 +331,10 @@ export default function VideoPlayer({
           frameBackground={frameBackground}
           onFrameBackgroundChange={onFrameBackgroundChange}
           onBackgroundImageChange={handleBackgroundImageChange}
-          videoVolume={effectiveVideoVolume}
-          voiceoverVolume={effectiveVoiceoverVolume}
-          onVideoVolumeChange={handleVideoVolumeChange}
-          onVoiceoverVolumeChange={handleVoiceoverVolumeChange}
+          videoVolume={videoVolume}
+          voiceoverVolume={voiceoverVolume}
+          onVideoVolumeChange={onVideoVolumeChange}
+          onVoiceoverVolumeChange={onVoiceoverVolumeChange}
           hasVoiceoverTrack={hasVoiceoverTrack}
         />
       </VideoPlayerSidebar>
@@ -432,9 +377,9 @@ export default function VideoPlayer({
         progress={progress}
         onSeek={handleSeek}
         seekBarRef={seekBarRef}
-        videoVolume={effectiveVideoVolume}
-        onVideoVolumeChange={handleVideoVolumeChange}
-        onToggleVideoMute={handleToggleVideoMute}
+        videoVolume={videoVolume}
+        onVideoVolumeChange={onVideoVolumeChange}
+        onToggleVideoMute={onToggleVideoMute}
       />
 
       {currentScene && (

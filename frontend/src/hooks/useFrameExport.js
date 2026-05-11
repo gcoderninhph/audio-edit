@@ -22,6 +22,15 @@ function buildExportSignature(keptScenes, exportSubtitles, framePresetId, frameB
   return `${framePresetId}::${serializeFrameBackground(frameBackground)}::${sceneSignature}::${subtitleSignature}`
 }
 
+function clampVolume(value, fallback = 1) {
+  const normalizedValue = Number.isFinite(value) ? value : fallback
+  return Math.max(0, Math.min(1, normalizedValue))
+}
+
+function getAudioTrackKey(voiceoverTrack) {
+  return voiceoverTrack?.previewUrl || voiceoverTrack?.storedFileName || voiceoverTrack?.fileName || ''
+}
+
 function createInitialExportProgress() {
   return {
     phase: '',
@@ -59,9 +68,12 @@ function createFullVideoScene(videoDuration) {
   }
 }
 
-export function useFrameExport({ videoFile, keptScenes, filteredSubtitles, videoDuration = 0 }) {
+export function useFrameExport({ videoFile, keptScenes, filteredSubtitles, videoDuration = 0, voiceoverTrack }) {
   const [framePresetId, setFramePresetIdState] = useState(DEFAULT_FRAME_PRESET_ID)
   const [frameBackground, setFrameBackgroundState] = useState(DEFAULT_FRAME_BACKGROUND)
+  const [videoVolume, setVideoVolumeState] = useState(1)
+  const [voiceoverVolume, setVoiceoverVolumeState] = useState(1)
+  const [customizedAudioTrackKey, setCustomizedAudioTrackKey] = useState('')
   const [isExporting, setIsExporting] = useState(false)
   const [exportProgress, setExportProgress] = useState(createInitialExportProgress)
   const [exportUrl, setExportUrl] = useState(null)
@@ -86,11 +98,26 @@ export function useFrameExport({ videoFile, keptScenes, filteredSubtitles, video
     () => buildExportSubtitles(filteredSubtitles, effectiveKeptScenes),
     [effectiveKeptScenes, filteredSubtitles],
   )
+  const currentAudioTrackKey = useMemo(() => getAudioTrackKey(voiceoverTrack), [voiceoverTrack])
+  const hasVoiceoverTrack = Boolean(voiceoverTrack?.previewUrl)
+  const hasCustomizedCurrentAudioMix = Boolean(currentAudioTrackKey) && customizedAudioTrackKey === currentAudioTrackKey
+  const effectiveVideoVolume = hasVoiceoverTrack
+    ? (hasCustomizedCurrentAudioMix ? videoVolume : 0)
+    : videoVolume
+  const effectiveVoiceoverVolume = hasVoiceoverTrack
+    ? (hasCustomizedCurrentAudioMix ? voiceoverVolume : 1)
+    : 1
   const exportSignature = useMemo(
-    () => buildExportSignature(effectiveKeptScenes, exportSubtitles, framePresetId, frameBackground),
-    [effectiveKeptScenes, exportSubtitles, frameBackground, framePresetId],
+    () => `${buildExportSignature(effectiveKeptScenes, exportSubtitles, framePresetId, frameBackground)}::${currentAudioTrackKey}:${effectiveVideoVolume}:${effectiveVoiceoverVolume}`,
+    [currentAudioTrackKey, effectiveKeptScenes, effectiveVideoVolume, effectiveVoiceoverVolume, exportSubtitles, frameBackground, framePresetId],
   )
   const hasFreshExport = exportUrl && lastExportSignature === exportSignature
+
+  useEffect(() => {
+    setVideoVolumeState(1)
+    setVoiceoverVolumeState(1)
+    setCustomizedAudioTrackKey('')
+  }, [videoFile])
 
   const clearExportResult = useCallback(() => {
     setExportUrl((currentUrl) => {
@@ -141,6 +168,21 @@ export function useFrameExport({ videoFile, keptScenes, filteredSubtitles, video
     setFrameBackgroundState(sanitizeFrameBackground(nextFrameBackground))
   }, [])
 
+  const handleVideoVolumeChange = useCallback((nextVolume) => {
+    setCustomizedAudioTrackKey(currentAudioTrackKey)
+    setVideoVolumeState(clampVolume(nextVolume))
+  }, [currentAudioTrackKey])
+
+  const handleVoiceoverVolumeChange = useCallback((nextVolume) => {
+    setCustomizedAudioTrackKey(currentAudioTrackKey)
+    setVoiceoverVolumeState(clampVolume(nextVolume))
+  }, [currentAudioTrackKey])
+
+  const handleToggleVideoMute = useCallback(() => {
+    setCustomizedAudioTrackKey(currentAudioTrackKey)
+    setVideoVolumeState(effectiveVideoVolume > 0 ? 0 : 1)
+  }, [currentAudioTrackKey, effectiveVideoVolume])
+
   const startExport = useCallback(async () => {
     if (!videoFile || effectiveKeptScenes.length === 0) {
       void logExportDebug('Export request ignored because no video or kept scenes were available', {
@@ -155,9 +197,12 @@ export function useFrameExport({ videoFile, keptScenes, filteredSubtitles, video
     void logExportDebug('Export requested from UI', {
       frameBackground: describeFrameBackground(frameBackground),
       framePresetId,
+      hasVoiceoverTrack,
       keptSceneCount: effectiveKeptScenes.length,
       subtitleCount: exportSubtitles.length,
+      videoVolume: effectiveVideoVolume,
       videoSourceKind: videoFile?.kind || (videoFile instanceof File ? 'file' : 'blob'),
+      voiceoverVolume: effectiveVoiceoverVolume,
     })
     setIsExporting(true)
     clearExportResult()
@@ -187,8 +232,15 @@ export function useFrameExport({ videoFile, keptScenes, filteredSubtitles, video
         effectiveKeptScenes,
         exportSubtitles,
         {
-          presetId: framePresetId,
-          backgroundColor: frameBackground,
+          frameSettings: {
+            presetId: framePresetId,
+            backgroundColor: frameBackground,
+          },
+          audioMix: {
+            videoVolume: effectiveVideoVolume,
+            voiceoverVolume: hasVoiceoverTrack ? effectiveVoiceoverVolume : 0,
+          },
+          voiceoverTrack,
         },
         handleExportProgress,
       )
@@ -200,6 +252,7 @@ export function useFrameExport({ videoFile, keptScenes, filteredSubtitles, video
         exportSize: result.size,
         frameBackground: describeFrameBackground(frameBackground),
         framePresetId,
+        hasVoiceoverTrack,
       })
     } catch (error) {
       console.error('Export failed:', error)
@@ -218,13 +271,31 @@ export function useFrameExport({ videoFile, keptScenes, filteredSubtitles, video
     } finally {
       setIsExporting(false)
     }
-  }, [clearExportResult, effectiveKeptScenes, exportSignature, exportSubtitles, frameBackground, framePresetId, videoDuration, videoFile])
+  }, [
+    clearExportResult,
+    effectiveKeptScenes,
+    effectiveVideoVolume,
+    effectiveVoiceoverVolume,
+    exportSignature,
+    exportSubtitles,
+    frameBackground,
+    framePresetId,
+    hasVoiceoverTrack,
+    videoDuration,
+    videoFile,
+    voiceoverTrack,
+  ])
 
   return {
     framePresetId,
     setFramePresetId,
     frameBackground,
     setFrameBackground,
+    videoVolume: effectiveVideoVolume,
+    voiceoverVolume: effectiveVoiceoverVolume,
+    handleVideoVolumeChange,
+    handleVoiceoverVolumeChange,
+    handleToggleVideoMute,
     framePreset,
     frameSummary,
     frameBackgroundLabel,

@@ -3,6 +3,14 @@ import { toBlobURL } from '@ffmpeg/util';
 import { runNativeExport } from './nativeExportClient';
 import { renderFrameCompositionVideo } from './frameCanvasExport';
 import { logExportDebug, writeDesktopDebugLog } from './desktopLogger';
+import {
+  buildFinalMuxArgs,
+  getExportTimelineDurationSeconds,
+  getVoiceoverExportFileName,
+  isAudioMixMuted,
+  normalizeExportAudioMix,
+} from './exportAudioMix';
+import { materializeVoiceoverFile, renderExportAudioTrack } from './exportAudioStage';
 import { buildMergedSceneTrack } from './ffmpegSceneMerge';
 import { describeFrameBackground, getFramePresetById, sanitizeFrameBackground } from './frameComposer';
 import { materializeVideoFile } from './projectStorage';
@@ -106,24 +114,6 @@ async function mountInputSource(ffmpeg, sourceVideoFile, onProgress) {
   emitExportLog(onProgress, 'preparing', `Mounted source file at ${inputPath}`);
 
   return { mountPoint, inputPath };
-}
-
-function buildFinalMuxArgs(frameVideoPath) {
-  return [
-    '-i', frameVideoPath,
-    '-i', 'cut.mp4',
-    '-map', '0:v:0',
-    '-map', '1:a?',
-    '-c:v', 'libx264',
-    '-threads', '1',
-    '-preset', 'ultrafast',
-    '-crf', '23',
-    '-pix_fmt', 'yuv420p',
-    '-c:a', 'aac',
-    '-shortest',
-    '-movflags', '+faststart',
-    'output.mp4',
-  ];
 }
 
 async function cleanupFiles(ffmpeg, fileNames) {
@@ -247,12 +237,17 @@ export function isFFmpegReady() {
  * @param {function} onProgress - Progress callback ({ phase: string, percent: number })
  * @returns {Promise<{blob: Blob, url: string, size: number}>}
  */
-export async function exportVideo(inputFile, keptScenes, subtitles, frameSettings, onProgress = () => {}) {
+export async function exportVideo(inputFile, keptScenes, subtitles, exportOptions = {}, onProgress = () => {}) {
   if (!keptScenes || keptScenes.length === 0) {
     throw new Error('No scenes to export');
   }
 
+  const frameSettings = exportOptions?.frameSettings || exportOptions;
   const normalizedFrameBackground = sanitizeFrameBackground(frameSettings?.backgroundColor);
+  const normalizedAudioMix = normalizeExportAudioMix(exportOptions?.audioMix, exportOptions?.voiceoverTrack);
+  const timelineDurationSeconds = getExportTimelineDurationSeconds(keptScenes);
+  const shouldAttachVoiceover = normalizedAudioMix.hasVoiceoverTrack && !isAudioMixMuted(normalizedAudioMix.voiceoverVolume);
+  const voiceoverFile = shouldAttachVoiceover ? await materializeVoiceoverFile(exportOptions?.voiceoverTrack) : null;
 
   try {
     emitExportLog(onProgress, 'preparing', 'Attempt native fast export backend');
@@ -260,10 +255,13 @@ export async function exportVideo(inputFile, keptScenes, subtitles, frameSetting
       inputFile,
       keptScenes,
       subtitles,
+      audioMix: normalizedAudioMix,
       frameSettings: {
         ...frameSettings,
         backgroundColor: normalizedFrameBackground,
       },
+      voiceoverFile,
+      voiceoverTrack: exportOptions?.voiceoverTrack || null,
     }, onProgress);
   } catch (error) {
     emitExportLog(
@@ -273,6 +271,7 @@ export async function exportVideo(inputFile, keptScenes, subtitles, frameSetting
       'warning',
     );
     void logExportDebug('Fallback to renderer export backend', {
+      audioMix: normalizedAudioMix,
       code: error?.code || 'NATIVE_EXPORT_FAILED',
       frameBackground: describeFrameBackground(normalizedFrameBackground),
       message: error?.message || 'Unknown native export error',
@@ -368,19 +367,55 @@ export async function exportVideo(inputFile, keptScenes, subtitles, frameSetting
     await ffmpeg.writeFile(framedVideoPath, new Uint8Array(await recordedFrameResult.blob.arrayBuffer()));
     emitExportLog(onProgress, 'framing', `Recorded preview compositor to ${framedVideoPath}`);
 
+    const needsAudioRemix = shouldAttachVoiceover
+      || isAudioMixMuted(normalizedAudioMix.videoVolume)
+      || Math.abs(normalizedAudioMix.videoVolume - 1) > 0.001;
+    let finalAudioPath = 'cut.mp4';
+
+    if (needsAudioRemix) {
+      let voiceoverInputPath = '';
+
+      if (voiceoverFile) {
+        voiceoverInputPath = getVoiceoverExportFileName(voiceoverFile.name);
+        transientFiles.push(voiceoverInputPath);
+        await ffmpeg.writeFile(voiceoverInputPath, new Uint8Array(await voiceoverFile.arrayBuffer()));
+        emitExportLog(onProgress, 'audio', `Prepared voiceover input ${voiceoverInputPath}`);
+      }
+
+      finalAudioPath = await renderExportAudioTrack({
+        normalizedAudioMix,
+        timelineDurationSeconds,
+        voiceoverInputPath,
+        voiceoverTrack: exportOptions?.voiceoverTrack,
+        runStage: (args, progressConfig) => runFfmpegStage(ffmpeg, args, progressConfig, onProgress),
+        emitLog: (phase, message, level = 'info') => emitExportLog(onProgress, phase, message, level),
+        cleanupFiles: (fileNames) => cleanupFiles(ffmpeg, fileNames),
+      });
+
+      if (finalAudioPath) {
+        transientFiles.push(finalAudioPath);
+      }
+    }
+
     await runFfmpegStage(
       ffmpeg,
-      buildFinalMuxArgs(framedVideoPath),
+      buildFinalMuxArgs({
+        frameVideoPath: framedVideoPath,
+        audioPath: finalAudioPath,
+        timelineDurationSeconds,
+        outputPath: 'output.mp4',
+        optionalAudio: !needsAudioRemix,
+      }),
       {
-        phase: 'framing',
-        startPercent: 82,
-        endPercent: 88,
+        phase: needsAudioRemix ? 'audio' : 'framing',
+        startPercent: needsAudioRemix ? 88 : 82,
+        endPercent: needsAudioRemix ? 92 : 88,
       },
       onProgress,
     );
 
-    onProgress({ phase: 'reading', percent: 90 });
-  emitExportLog(onProgress, 'reading', 'Read output.mp4 from FFmpeg worker');
+    onProgress({ phase: 'reading', percent: 94 });
+    emitExportLog(onProgress, 'reading', 'Read output.mp4 from FFmpeg worker');
 
     // Read output
     const outputData = await ffmpeg.readFile('output.mp4');

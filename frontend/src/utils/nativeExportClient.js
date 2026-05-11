@@ -45,7 +45,7 @@ function createJobId() {
   return `native-export-${Date.now()}-${Math.round(Math.random() * 100000)}`
 }
 
-export async function runNativeExport({ inputFile, keptScenes, subtitles, frameSettings }, onProgress = () => {}) {
+export async function runNativeExport({ inputFile, keptScenes, subtitles, frameSettings, voiceoverFile, voiceoverTrack, audioMix }, onProgress = () => {}) {
   const nativeExportBridge = getNativeExportBridge()
   if (!nativeExportBridge) {
     throw createExportError('Native desktop export bridge is unavailable.', 'NATIVE_EXPORT_UNAVAILABLE')
@@ -57,9 +57,20 @@ export async function runNativeExport({ inputFile, keptScenes, subtitles, frameS
   const subtitleOverlay = await buildSubtitleOverlayAssets(subtitles, framePreset)
   const jobId = createJobId()
 
+  const voiceover = voiceoverFile
+    ? {
+      source: await buildDesktopExportSourceDescriptor(voiceoverFile),
+      fileName: voiceoverTrack?.fileName || voiceoverFile.name || 'voiceover.mp3',
+      mimeType: voiceoverTrack?.mimeType || voiceoverFile.type || 'audio/mpeg',
+      startTime: Number(voiceoverTrack?.startTime) || 0,
+    }
+    : null
+
   void logExportDebug('Attempt native fast export backend', {
+    audioMix: audioMix || null,
     frameBackground: describeFrameBackground(frameBackground),
     framePresetId: framePreset.id,
+    hasVoiceoverTrack: Boolean(voiceover),
     jobId,
     keptSceneCount: keptScenes.length,
     subtitleAssetCount: subtitleOverlay.assets.length,
@@ -88,7 +99,9 @@ export async function runNativeExport({ inputFile, keptScenes, subtitles, frameS
         presetId: framePreset.id,
         backgroundColor: frameBackground,
       },
+      audioMix: audioMix || null,
       subtitleOverlay,
+      voiceover,
     })
 
     const bytes = normalizeBinaryPayload(result?.bytes)

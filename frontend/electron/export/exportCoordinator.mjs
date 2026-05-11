@@ -3,8 +3,16 @@ import { mkdir, readFile, rm, writeFile } from 'node:fs/promises'
 import path from 'node:path'
 import { appendDebugLog } from '../debugLog.mjs'
 import { resolveProjectVideoPath } from '../projectStore.mjs'
+import {
+  buildFinalMuxArgs,
+  getExportTimelineDurationSeconds,
+  isAudioMixMuted,
+  normalizeExportAudioMix,
+} from '../../src/utils/exportAudioMix.js'
 import { describeFrameBackground, getFramePresetById, isImageFrameBackground, sanitizeFrameBackground } from '../../src/utils/frameComposer.js'
+import { renderNativeExportAudioTrack } from './exportAudioStage.mjs'
 import { frameMergedVideo } from './framePipeline.mjs'
+import { runNativeFfmpeg } from './nativeFfmpeg.mjs'
 import { extractSceneSegments, mergeSceneSegments } from './scenePipeline.mjs'
 
 const detachedRendererJobs = new Set()
@@ -237,6 +245,8 @@ async function runNativeExportJob(sender, payload = {}) {
       }))
       .filter((scene) => scene.duration > 0)
     : []
+  const normalizedAudioMix = normalizeExportAudioMix(payload.audioMix, payload.voiceover)
+  const timelineDurationSeconds = getExportTimelineDurationSeconds(keptScenes)
 
   if (keptScenes.length === 0) {
     throw createExportError('No kept scenes were provided for native export.', 'NATIVE_EXPORT_INVALID_INPUT')
@@ -253,6 +263,9 @@ async function runNativeExportJob(sender, payload = {}) {
 
   try {
     const { inputPath } = await resolveInputPath(payload.source, jobDirectory)
+    const { inputPath: voiceoverPath = '' } = payload.voiceover?.source
+      ? await resolveInputPath(payload.voiceover.source, jobDirectory)
+      : { inputPath: '' }
     const nativeFrameBackground = await writeFrameBackgroundAsset(jobDirectory, frameBackground)
     const overlayAssets = await writeOverlayAssets(jobDirectory, payload.subtitleOverlay)
     emitLog(sender, jobId, 'preparing', 'Resolved native export inputs', 'info', {
@@ -260,9 +273,11 @@ async function runNativeExportJob(sender, payload = {}) {
       stagePercent: 40,
       detail: `Nguồn: ${sanitizeFileName(path.basename(inputPath))} • ${overlayAssets.length} overlay`,
     }, {
+      audioMix: normalizedAudioMix,
       frameBackground: describeFrameBackground(frameBackground),
       inputPath,
       overlayCount: overlayAssets.length,
+      voiceoverPath: voiceoverPath || null,
     })
 
     const segmentPaths = await extractSceneSegments({
@@ -294,6 +309,43 @@ async function runNativeExportJob(sender, payload = {}) {
       emitLog,
       emitProgress,
     })
+    const needsAudioRemix = Boolean(voiceoverPath) && !isAudioMixMuted(normalizedAudioMix.voiceoverVolume)
+      || isAudioMixMuted(normalizedAudioMix.videoVolume)
+      || Math.abs(normalizedAudioMix.videoVolume - 1) > 0.001
+    let finalOutputPath = outputPath
+
+    if (needsAudioRemix) {
+      const mixedAudioPath = await renderNativeExportAudioTrack({
+        sender,
+        jobId,
+        emitLog,
+        emitProgress,
+        jobDirectory,
+        mergedPath,
+        voiceoverPath,
+        voiceoverTrack: payload.voiceover,
+        normalizedAudioMix,
+        timelineDurationSeconds,
+      })
+      const remuxedOutputPath = path.join(jobDirectory, 'output-remuxed.mp4')
+
+      emitLog(sender, jobId, 'audio', 'Remux framed video with configured export audio', 'info', {
+        percent: 99,
+        stagePercent: 50,
+        detail: 'Dang ghep video khung voi audio export',
+      }, {
+        mixedAudioPath: mixedAudioPath || null,
+      })
+
+      await runNativeFfmpeg(buildFinalMuxArgs({
+        frameVideoPath: outputPath,
+        audioPath: mixedAudioPath || '',
+        timelineDurationSeconds,
+        outputPath: remuxedOutputPath,
+        copyVideo: true,
+      }), { cwd: jobDirectory })
+      finalOutputPath = remuxedOutputPath
+    }
 
     emitProgress(sender, jobId, {
       phase: 'reading',
@@ -302,14 +354,14 @@ async function runNativeExportJob(sender, payload = {}) {
       detail: 'Đang đọc file export native...',
     })
 
-    const outputBytes = await readFile(outputPath)
+    const outputBytes = await readFile(finalOutputPath)
     emitLog(sender, jobId, 'done', `Native export completed (${formatMegabytes(outputBytes.byteLength)})`, 'info', {
       percent: 100,
       stagePercent: 100,
       detail: 'Hoàn thành native fast export',
     }, {
       encoder: encoderPlan.label,
-      outputPath,
+      outputPath: finalOutputPath,
     })
 
     return {

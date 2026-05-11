@@ -56,12 +56,12 @@ export default function VideoPlayerFrameControls({
   const controlsTitle = visibleSection === 'background'
     ? 'Thiết lập nền video'
     : visibleSection === 'audio'
-      ? 'Cân chỉnh âm thanh xem trước'
+      ? 'Cân chỉnh âm thanh preview va export'
       : 'Thiết lập khung video'
   const controlsSubtitle = visibleSection === 'background'
     ? 'Mở đúng phần nền cần dùng, phần còn lại được ẩn để nav trái gọn hơn.'
     : visibleSection === 'audio'
-      ? 'Tinh chỉnh riêng âm lượng video gốc và thuyết minh để phần nghe cân bằng hơn trong lúc xem trước.'
+      ? 'Tinh chỉnh riêng âm lượng video gốc và thuyết minh. Muc nay duoc dung cho ca preview lan file export.'
       : 'Chỉ giữ lại tùy chọn tỉ lệ khung để bạn chỉnh nhanh mà không làm rối vùng xem trước.'
 
   const handleChooseBackgroundImage = useCallback(() => {
@@ -246,7 +246,7 @@ export default function VideoPlayerFrameControls({
           <div className="video-frame-detail-panel">
             <div>
               <div className="video-frame-detail-title">Âm lượng video gốc</div>
-              <p className="video-frame-detail-copy">Giảm nền video khi lời thuyết minh cần nổi hơn, hoặc tăng lại nếu muốn giữ nhiều âm thanh gốc hơn.</p>
+              <p className="video-frame-detail-copy">Giảm nền video khi lời thuyết minh cần nổi hơn, hoặc tăng lại nếu muốn giữ nhiều âm thanh gốc hơn trong preview va luc export.</p>
             </div>
             <div className="video-frame-field-row">
               <label className="video-frame-field-label" htmlFor="video-preview-volume-range">Âm lượng video</label>
@@ -269,7 +269,7 @@ export default function VideoPlayerFrameControls({
           <div className="video-frame-detail-panel">
             <div>
               <div className="video-frame-detail-title">Âm lượng thuyết minh</div>
-              <p className="video-frame-detail-copy">Tinh chỉnh mức đọc của voiceover để lời nói không bị nền video lấn át hoặc quá gắt.</p>
+              <p className="video-frame-detail-copy">Tinh chỉnh mức đọc của voiceover để lời nói không bị nền video lấn át hoặc quá gắt trong preview va file xuat.</p>
             </div>
             <div className="video-frame-field-row">
               <label className="video-frame-field-label" htmlFor="voiceover-preview-volume-range">Âm lượng thuyết minh</label>
@@ -290,7 +290,7 @@ export default function VideoPlayerFrameControls({
             </div>
             <div className="video-frame-image-note">
               {hasVoiceoverTrack
-                ? 'Track thuyết minh đang hoạt động trên timeline và sẽ nghe theo mức âm lượng này trong lúc preview.'
+                ? 'Track thuyết minh dang hoat dong tren timeline va se dung muc am luong nay cho ca preview va export.'
                 : 'Chưa có track thuyết minh để chỉnh. Hãy tạo thuyết minh trước rồi quay lại mục này.'}
             </div>
           </div>

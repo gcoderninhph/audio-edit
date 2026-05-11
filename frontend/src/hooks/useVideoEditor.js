@@ -80,6 +80,11 @@ export function useVideoEditor() {
     setFramePresetId,
     frameBackground,
     setFrameBackground,
+    videoVolume,
+    voiceoverVolume,
+    handleVideoVolumeChange,
+    handleVoiceoverVolumeChange,
+    handleToggleVideoMute,
     framePreset,
     frameSummary,
     frameBackgroundLabel,
@@ -95,6 +100,7 @@ export function useVideoEditor() {
     keptScenes,
     filteredSubtitles,
     videoDuration,
+    voiceoverTrack,
   });
 
   const getCurrentSnapshot = useCallback(() => ({
@@ -403,6 +409,8 @@ export function useVideoEditor() {
     isFFmpegLoaded,
     startExport,
     framePresetId, setFramePresetId, frameBackground, setFrameBackground,
+    videoVolume, voiceoverVolume,
+    handleVideoVolumeChange, handleVoiceoverVolumeChange, handleToggleVideoMute,
     framePreset, frameSummary, frameBackgroundLabel,
     currentTime, setCurrentTime, seekToScene,
     subtitles, filteredSubtitles, isTranscribing, transcribeProgress, startTranscription,

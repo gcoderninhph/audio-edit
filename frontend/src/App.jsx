@@ -13,7 +13,16 @@ function App() {
   const editor = useVideoEditor();
   const [activeRightTab, setActiveRightTab] = useState('scenes');
   const [activePlayerSidebarSection, setActivePlayerSidebarSection] = useState(null);
+  const [isProjectBrowserOpen, setIsProjectBrowserOpen] = useState(false);
   const { redo, setCurrentTime, undo, videoRef } = editor;
+  const hasVideo = !!editor.videoUrl;
+  const hasActiveBackgroundTask = Boolean(
+    editor.isUploading
+    || editor.isDetecting
+    || editor.isTranscribing
+    || editor.isTranslating
+    || editor.isGeneratingVoiceover,
+  );
 
   const handleSeek = useCallback((time) => {
     if (videoRef.current) {
@@ -55,20 +64,44 @@ function App() {
 
   const handleOpenProject = useCallback((sessionId) => {
     setActivePlayerSidebarSection(null);
+
+    if (hasActiveBackgroundTask && editor.sessionId && editor.sessionId !== sessionId) {
+      alert('Project hien tai dang co tien trinh nen. Hay quay lai dung project do hoac doi tien trinh hoan tat truoc khi mo project khac.');
+      return;
+    }
+
+    setIsProjectBrowserOpen(false);
+
+    if (hasVideo && editor.sessionId === sessionId) {
+      return;
+    }
+
     editor.loadSession(sessionId);
-  }, [editor]);
+  }, [editor, hasActiveBackgroundTask, hasVideo]);
 
   const handleNewProject = useCallback((file) => {
+    if (hasActiveBackgroundTask && hasVideo) {
+      alert('Project hien tai dang co tien trinh nen. Hay doi tien trinh hoan tat truoc khi tao project moi.');
+      return;
+    }
+
     setActivePlayerSidebarSection(null);
+    setIsProjectBrowserOpen(false);
     editor.setVideoFile(file);
-  }, [editor]);
+  }, [editor, hasActiveBackgroundTask, hasVideo]);
 
   const handleCloseProject = useCallback(() => {
     setActivePlayerSidebarSection(null);
-    editor.closeProject();
-  }, [editor]);
 
-  const hasVideo = !!editor.videoUrl;
+    if (hasActiveBackgroundTask && hasVideo) {
+      setIsProjectBrowserOpen(true);
+      return;
+    }
+
+    setIsProjectBrowserOpen(false);
+    editor.closeProject();
+  }, [editor, hasActiveBackgroundTask, hasVideo]);
+
   // ── Loading Screen ──
   if (editor.isRestoring) {
     return (
@@ -87,7 +120,7 @@ function App() {
   }
 
   // ── Dashboard View (no video loaded) ──
-  if (!hasVideo) {
+  if (!hasVideo || isProjectBrowserOpen) {
     return (
       <div className="app">
         <Header />
@@ -183,6 +216,11 @@ function App() {
               deletedSceneIds={editor.deletedSceneIds}
               subtitles={editor.filteredSubtitles}
               voiceoverTrack={editor.voiceoverTrack}
+              videoVolume={editor.videoVolume}
+              voiceoverVolume={editor.voiceoverVolume}
+              onVideoVolumeChange={editor.handleVideoVolumeChange}
+              onVoiceoverVolumeChange={editor.handleVoiceoverVolumeChange}
+              onToggleVideoMute={editor.handleToggleVideoMute}
               activeSidebarSection={activePlayerSidebarSection}
               onToggleSidebarSection={handleTogglePlayerSidebarSection}
               onCloseSidebarSection={handleClosePlayerSidebar}
