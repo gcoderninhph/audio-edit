@@ -45,7 +45,7 @@ function createJobId() {
   return `native-export-${Date.now()}-${Math.round(Math.random() * 100000)}`
 }
 
-export async function runNativeExport({ inputFile, keptScenes, subtitles, frameSettings, voiceoverFile, voiceoverTrack, audioMix }, onProgress = () => {}) {
+export async function runNativeExport({ inputFile, keptScenes, subtitles, frameSettings, subtitleSettings, voiceoverFile, voiceoverTrack, audioMix }, onProgress = () => {}) {
   const nativeExportBridge = getNativeExportBridge()
   if (!nativeExportBridge) {
     throw createExportError('Native desktop export bridge is unavailable.', 'NATIVE_EXPORT_UNAVAILABLE')
@@ -54,7 +54,7 @@ export async function runNativeExport({ inputFile, keptScenes, subtitles, frameS
   const framePreset = getFramePresetById(frameSettings?.presetId)
   const frameBackground = sanitizeFrameBackground(frameSettings?.backgroundColor)
   const source = await buildDesktopExportSourceDescriptor(inputFile)
-  const subtitleOverlay = await buildSubtitleOverlayAssets(subtitles, framePreset)
+  const subtitleOverlay = await buildSubtitleOverlayAssets(subtitles, framePreset, undefined, subtitleSettings)
   const jobId = createJobId()
 
   const voiceover = voiceoverFile

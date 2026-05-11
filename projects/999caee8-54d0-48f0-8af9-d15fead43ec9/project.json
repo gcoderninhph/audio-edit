@@ -9,6 +9,14 @@
     "kind": "video-fade",
     "presetId": "cinematic"
   },
+  "subtitle_settings": {
+    "fontSizeScale": 1.8,
+    "anchor": "middle-center",
+    "fontFamily": "Times New Roman",
+    "fontColor": "#FFFFFF",
+    "backgroundColor": "#000000",
+    "backgroundOpacity": 0.25
+  },
   "scenes": [],
   "deleted_ids": [],
   "subtitles": [
@@ -514,5 +522,5 @@
   "voiceover_size": 2030906,
   "voiceover_duration": 126.902857,
   "created_at": "2026-05-11T07:46:48.993Z",
-  "updated_at": "2026-05-11T08:57:10.942Z"
+  "updated_at": "2026-05-11T09:54:26.276Z"
 }

@@ -22,6 +22,7 @@ import {
   writeProjectMetadata,
 } from './projectStoreShared.mjs'
 import { DEFAULT_FRAME_BACKGROUND, DEFAULT_FRAME_PRESET_ID } from '../src/utils/frameComposer.js'
+import { DEFAULT_SUBTITLE_SETTINGS, normalizeSubtitleSettings } from '../src/utils/subtitleRenderModel.js'
 
 function buildProjectRecord(projectId, payload, existingRecord = null) {
   const hasTranscriptionJobId = Object.prototype.hasOwnProperty.call(payload, 'transcriptionJobId')
@@ -41,6 +42,7 @@ function buildProjectRecord(projectId, payload, existingRecord = null) {
     video_mime_type: payload.videoMimeType ?? existingRecord?.video_mime_type ?? '',
     frame_preset_id: payload.framePresetId ?? existingRecord?.frame_preset_id ?? DEFAULT_FRAME_PRESET_ID,
     frame_background: payload.frameBackground ?? existingRecord?.frame_background ?? DEFAULT_FRAME_BACKGROUND,
+    subtitle_settings: normalizeSubtitleSettings(payload.subtitleSettings ?? existingRecord?.subtitle_settings ?? DEFAULT_SUBTITLE_SETTINGS),
     scenes: Array.isArray(payload.scenes) ? payload.scenes : existingRecord?.scenes ?? [],
     deleted_ids: Array.isArray(payload.deletedIds) ? payload.deletedIds : existingRecord?.deleted_ids ?? [],
     subtitles: Array.isArray(payload.subtitles) ? payload.subtitles : existingRecord?.subtitles ?? [],

@@ -7,6 +7,7 @@ import { useUndoHistory } from './useUndoHistory';
 import { useEditorPersistence } from './useEditorPersistence';
 import { useFrameExport } from './useFrameExport';
 import { runTranscriptionJob, runTranslationJob, runVoiceoverJob } from './subtitleJobActions';
+import { DEFAULT_SUBTITLE_SETTINGS } from '../utils/subtitleRenderModel';
 
 export function useVideoEditor() {
   const [videoFile, setVideoFileState] = useState(null);
@@ -80,6 +81,8 @@ export function useVideoEditor() {
     setFramePresetId,
     frameBackground,
     setFrameBackground,
+    subtitleSettings,
+    setSubtitleSettings,
     videoVolume,
     voiceoverVolume,
     handleVideoVolumeChange,
@@ -128,6 +131,7 @@ export function useVideoEditor() {
     videoName,
     framePresetId,
     frameBackground,
+    subtitleSettings,
     sensitivity,
     scenes,
     deletedSceneIds,
@@ -143,6 +147,7 @@ export function useVideoEditor() {
     setSessionId,
     setFramePresetId,
     setFrameBackground,
+    setSubtitleSettings,
     setScenes,
     setDeletedSceneIds,
     setSubtitles,
@@ -172,6 +177,7 @@ export function useVideoEditor() {
     setSessionId(newSessionId);
     setFramePresetId(DEFAULT_FRAME_PRESET_ID);
     setFrameBackground(DEFAULT_FRAME_BACKGROUND);
+    setSubtitleSettings(DEFAULT_SUBTITLE_SETTINGS);
     setScenes([]);
     setDeletedSceneIds(new Set());
     setThumbnails({});
@@ -186,7 +192,7 @@ export function useVideoEditor() {
 
     // Persist the selected source video into the desktop project store in background.
     uploadVideo(newSessionId, file);
-  }, [clearExportResult, resetHistory, setFrameBackground, setFramePresetId, uploadVideo, videoUrl]);
+  }, [clearExportResult, resetHistory, setFrameBackground, setFramePresetId, setSubtitleSettings, uploadVideo, videoUrl]);
 
   const closeProject = useCallback(() => {
     if (isDetecting) {
@@ -207,6 +213,7 @@ export function useVideoEditor() {
     setSessionId('');
     setFramePresetId(DEFAULT_FRAME_PRESET_ID);
     setFrameBackground(DEFAULT_FRAME_BACKGROUND);
+    setSubtitleSettings(DEFAULT_SUBTITLE_SETTINGS);
     setScenes([]);
     setDeletedSceneIds(new Set());
     setThumbnails({});
@@ -226,7 +233,7 @@ export function useVideoEditor() {
     setVoiceoverTrack(null);
     setIsDetecting(false);
     resetHistory();
-  }, [clearExportResult, isDetecting, resetHistory, setAutoSaveStatus, setFrameBackground, setFramePresetId, videoUrl]);
+  }, [clearExportResult, isDetecting, resetHistory, setAutoSaveStatus, setFrameBackground, setFramePresetId, setSubtitleSettings, videoUrl]);
 
   const startDetection = useCallback(async () => {
     if (!videoFile) return;
@@ -409,6 +416,7 @@ export function useVideoEditor() {
     isFFmpegLoaded,
     startExport,
     framePresetId, setFramePresetId, frameBackground, setFrameBackground,
+    subtitleSettings, setSubtitleSettings,
     videoVolume, voiceoverVolume,
     handleVideoVolumeChange, handleVoiceoverVolumeChange, handleToggleVideoMute,
     framePreset, frameSummary, frameBackgroundLabel,

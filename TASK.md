@@ -22,6 +22,13 @@
   - Next step: force or observe a renderer-record fallback export only when native export is unavailable, then confirm the output visually matches the frame preview while the log shows `Start record-frame compositor from preview renderer` during `framing`.
   - Validation: pending renderer-fallback parity check; the latest image-background export now uses native fast export instead of the record-frame fallback.
 
+- [ ] Manually confirm subtitle sidebar config from panel.timeline and exported subtitle placement
+  - Scope: frontend
+  - Owner files: `frontend/src/App.jsx`, `frontend/src/components/Timeline/Timeline.jsx`, `frontend/src/components/Timeline/Timeline.css`, `frontend/src/components/VideoPlayer/VideoPlayer.jsx`, `frontend/src/components/VideoPlayer/VideoPlayerFrameControls.jsx`, `frontend/src/components/VideoPlayer/VideoPlayerSubtitleControls.jsx`, `frontend/src/components/VideoPlayer/VideoPlayerSubtitleControls.css`, `frontend/src/hooks/useFrameExport.js`, `frontend/src/hooks/useVideoEditor.js`, `frontend/src/hooks/useEditorPersistence.js`, `frontend/src/utils/subtitleRenderModel.js`, `frontend/src/utils/frameCanvasRenderer.js`, `frontend/src/utils/frameCanvasExport.js`, `frontend/src/utils/subtitleOverlayAssets.js`, `frontend/src/utils/ffmpegManager.js`, `frontend/src/utils/nativeExportClient.js`, `frontend/electron/projectStore.mjs`
+  - Evidence: clicking the subtitle track in `panel.timeline` now opens the fixed left nav directly into a subtitle config section where font size, font family, font color, background color, background opacity, and anchor all live in the shared subtitle render model. The anchor picker uses a 3x3 grid, and left or right anchors now keep the subtitle text aligned with the subtitle background box instead of drifting toward the frame center.
+  - Next step: in the running Electron app, click the subtitle track on the timeline, change font family, text color, background color, background opacity, and several anchor positions, confirm the preview updates immediately, reload the same project to confirm the settings persist, then export one file and verify the subtitle styling matches the configured preview.
+  - Validation: pending manual desktop smoke test; automated validation confirmed VS Code diagnostics on all touched files, `npm run lint`, `npm run build`, and desktop restart with Flask `/api/health` `200`.
+
 ## Backlog
 - [ ] Optimize client RAM for long videos
   - Scope: frontend
@@ -30,6 +37,31 @@
   - Validation: pending
 
 ## Completed
+- [x] Split subtitle sidebar controls out of VideoPlayerFrameControls while adding subtitle font and color styling
+  - Scope: frontend
+  - Owner files: `frontend/src/components/VideoPlayer/VideoPlayerFrameControls.jsx`, `frontend/src/components/VideoPlayer/VideoPlayerFrameControls.css`, `frontend/src/components/VideoPlayer/VideoPlayerSubtitleControls.jsx`, `frontend/src/components/VideoPlayer/VideoPlayerSubtitleControls.css`, `frontend/src/utils/subtitleRenderModel.js`, `frontend/src/utils/frameCanvasRenderer.js`, `frontend/src/utils/subtitleAss.js`, `TASK.md`, `MAP.md`
+  - Split plan: move the subtitle-only sidebar UI out of `frontend/src/components/VideoPlayer/VideoPlayerFrameControls.jsx` into a dedicated `frontend/src/components/VideoPlayer/VideoPlayerSubtitleControls.jsx` module plus its own stylesheet so the original file stays below the 400-line guardrail while the new subtitle appearance controls add font family, text color, background color, and background opacity.
+  - Outcome: the subtitle section in the left nav now exposes configurable font family, font color, background color, background opacity, font scale, and the existing 3x3 anchor picker through a dedicated subtitle-controls component. These appearance settings are normalized in the shared subtitle render model, so preview, renderer-record export, native overlay export, and persisted desktop project metadata all reference the same subtitle style state instead of hard-coded colors and font defaults.
+  - Validation: VS Code diagnostics for all touched subtitle control and renderer files; `npm run lint`; `npm run build`; `frontend/src/components/VideoPlayer/VideoPlayerFrameControls.jsx` at 313 lines; `frontend/src/components/VideoPlayer/VideoPlayerSubtitleControls.jsx` at 186 lines; `frontend/src/utils/subtitleRenderModel.js` at 275 lines.
+
+- [x] Fix subtitle text alignment for non-center anchors
+  - Scope: frontend
+  - Owner files: `frontend/src/utils/frameCanvasRenderer.js`, `TASK.md`
+  - Outcome: subtitle text no longer stays pinned to the center of the frame when the subtitle box is anchored to the left or right. The shared canvas renderer now draws the text inside the subtitle card using the matching left, center, or right alignment, so preview and native subtitle overlay assets stay visually consistent across all nine anchor positions.
+  - Validation: VS Code diagnostics for `frontend/src/utils/frameCanvasRenderer.js`; `npm run lint`; `npm run build`.
+
+- [x] Redesign subtitle anchor selection as a 3x3 visual picker
+  - Scope: frontend
+  - Owner files: `frontend/src/components/VideoPlayer/VideoPlayerFrameControls.jsx`, `frontend/src/components/VideoPlayer/VideoPlayerFrameControls.css`, `TASK.md`, `MAP.md`
+  - Outcome: the subtitle config section in the fixed left nav no longer uses a dropdown for anchor selection. It now presents all nine anchor positions in a 3x3 visual grid, keeping the same stored anchor ids while making placement selection faster and easier to scan.
+  - Validation: VS Code diagnostics for `frontend/src/components/VideoPlayer/VideoPlayerFrameControls.jsx` and `frontend/src/components/VideoPlayer/VideoPlayerFrameControls.css`; `npm run lint`; `npm run build`; `frontend/src/components/VideoPlayer/VideoPlayerFrameControls.jsx` at 395 lines.
+
+- [x] Open the left nav from panel.timeline subtitles and add subtitle font-size plus anchor controls
+  - Scope: frontend
+  - Owner files: `frontend/src/App.jsx`, `frontend/src/components/Timeline/Timeline.jsx`, `frontend/src/components/Timeline/Timeline.css`, `frontend/src/components/VideoPlayer/VideoPlayer.jsx`, `frontend/src/components/VideoPlayer/VideoPlayerFrameControls.jsx`, `frontend/src/hooks/useFrameExport.js`, `frontend/src/hooks/useVideoEditor.js`, `frontend/src/hooks/useEditorPersistence.js`, `frontend/src/utils/subtitleRenderModel.js`, `frontend/src/utils/frameCanvasRenderer.js`, `frontend/src/utils/frameCanvasExport.js`, `frontend/src/utils/subtitleOverlayAssets.js`, `frontend/src/utils/subtitleAss.js`, `frontend/src/utils/ffmpegManager.js`, `frontend/src/utils/nativeExportClient.js`, `frontend/electron/projectStore.mjs`, `TASK.md`, `MAP.md`
+  - Outcome: clicking the subtitle track in `panel.timeline` now opens the fixed left nav into a dedicated `subtitle` config section, where the user can change subtitle font size and choose a new anchor point. Those settings are now stored as shared subtitle render state in `useFrameExport`, applied immediately to the preview canvas, reused by the renderer-record export and native subtitle-overlay export paths, and persisted in each desktop project so reopening the same project restores the configured subtitle layout.
+  - Validation: VS Code diagnostics for all touched frontend and Electron files; line guardrail checked with `frontend/src/hooks/useVideoEditor.js` at 388 lines, `frontend/src/hooks/useEditorPersistence.js` at 370 lines, `frontend/src/hooks/useFrameExport.js` at 296 lines, `frontend/src/components/VideoPlayer/VideoPlayerFrameControls.jsx` at 374 lines, `frontend/src/components/VideoPlayer/VideoPlayer.jsx` at 356 lines, `frontend/src/components/Timeline/Timeline.jsx` at 228 lines, `frontend/src/utils/subtitleRenderModel.js` at 178 lines, `frontend/src/utils/ffmpegManager.js` at 389 lines, and `frontend/electron/projectStore.mjs` at 336 lines; `npm run lint`; `npm run build`; restarted `npm run desktop:start`; confirmed Flask `/api/health` returned `200` on the updated desktop build.
+
 - [x] Make exported audio follow the configured mix and include the saved voiceover track
   - Scope: frontend
   - Owner files: `frontend/src/hooks/useFrameExport.js`, `frontend/src/hooks/useVideoEditor.js`, `frontend/src/components/VideoPlayer/VideoPlayer.jsx`, `frontend/src/components/VideoPlayer/VideoPlayerFrameControls.jsx`, `frontend/src/components/VideoPlayer/useVideoPlayerVoiceover.js`, `frontend/src/utils/exportAudioMix.js`, `frontend/src/utils/exportAudioStage.js`, `frontend/src/utils/ffmpegManager.js`, `frontend/src/utils/nativeExportClient.js`, `frontend/electron/export/exportAudioStage.mjs`, `frontend/electron/export/exportCoordinator.mjs`, `TASK.md`, `MAP.md`

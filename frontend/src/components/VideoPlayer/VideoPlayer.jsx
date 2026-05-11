@@ -5,6 +5,7 @@ import {
   getFrameBackgroundFillColor,
   getFramePresetById,
 } from '../../utils/frameComposer';
+import { getSubtitleAnchorOption } from '../../utils/subtitleRenderModel';
 import { drawFrameComposition, loadFrameBackgroundImage } from '../../utils/frameCanvasRenderer';
 import { getKeptScenes, getKeptDuration, mapRealToKeptTime, mapKeptToRealTime } from '../../utils/timeMapping';
 import VideoPlayerFrameControls from './VideoPlayerFrameControls';
@@ -19,6 +20,7 @@ const FRAME_SIDEBAR_SECTIONS = Object.freeze({
   FRAME: 'frame',
   BACKGROUND: 'background',
   AUDIO: 'audio',
+  SUBTITLE: 'subtitle',
 });
 
 function formatTime(seconds) {
@@ -37,6 +39,8 @@ export default function VideoPlayer({
   onFramePresetChange,
   frameBackground,
   onFrameBackgroundChange,
+  subtitleSettings,
+  onSubtitleSettingsChange,
   currentScene,
   scenes,
   deletedSceneIds,
@@ -85,8 +89,13 @@ export default function VideoPlayer({
       return 'Chỉnh âm thanh preview va export';
     }
 
+    if (activeSidebarSection === FRAME_SIDEBAR_SECTIONS.SUBTITLE) {
+      return 'Chỉnh subtitle preview va export';
+    }
+
     return 'Chỉnh video';
   }, [activeSidebarSection]);
+  const subtitleAnchorLabel = useMemo(() => getSubtitleAnchorOption(subtitleSettings?.anchor).label, [subtitleSettings]);
   const {
     voiceoverRef,
     hasVoiceoverTrack,
@@ -297,6 +306,7 @@ export default function VideoPlayer({
         backgroundImage: frameBackgroundImage,
         videoElement,
         subtitleText: activeSubtitle?.text || '',
+        subtitleSettings,
       });
       animationFrameRef.current = window.requestAnimationFrame(renderFrame);
     };
@@ -308,7 +318,7 @@ export default function VideoPlayer({
         window.cancelAnimationFrame(animationFrameRef.current);
       }
     };
-  }, [activeSubtitle?.text, frameBackground, frameBackgroundImage, framePreset, videoRef]);
+  }, [activeSubtitle?.text, frameBackground, frameBackgroundImage, framePreset, subtitleSettings, videoRef]);
 
   const frameStageStyle = useMemo(() => ({
     aspectRatio: `${framePreset.width} / ${framePreset.height}`,
@@ -330,6 +340,8 @@ export default function VideoPlayer({
           onFramePresetChange={onFramePresetChange}
           frameBackground={frameBackground}
           onFrameBackgroundChange={onFrameBackgroundChange}
+          subtitleSettings={subtitleSettings}
+          onSubtitleSettingsChange={onSubtitleSettingsChange}
           onBackgroundImageChange={handleBackgroundImageChange}
           videoVolume={videoVolume}
           voiceoverVolume={voiceoverVolume}
@@ -345,6 +357,7 @@ export default function VideoPlayer({
             activeSection={activeSidebarSection}
             framePresetLabel={framePreset.label}
             frameBackgroundLabel={frameBackgroundLabel}
+            subtitleLabel={subtitleAnchorLabel}
             onToggleSection={onToggleSidebarSection}
           />
 

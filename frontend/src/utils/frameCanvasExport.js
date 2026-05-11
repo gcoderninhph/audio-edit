@@ -1,5 +1,5 @@
 import { drawFrameComposition, loadFrameBackgroundImage } from './frameCanvasRenderer'
-import { DEFAULT_SUBTITLE_FONT_FAMILY } from './subtitleRenderModel'
+import { DEFAULT_SUBTITLE_FONT_FAMILY, DEFAULT_SUBTITLE_SETTINGS } from './subtitleRenderModel'
 
 function waitForEvent(target, eventName) {
   return new Promise((resolve, reject) => {
@@ -47,6 +47,7 @@ export async function renderFrameCompositionVideo({
   onProgress,
   onLog,
   fontFamily = DEFAULT_SUBTITLE_FONT_FAMILY,
+  subtitleSettings = DEFAULT_SUBTITLE_SETTINGS,
 }) {
   const sourceVideoUrl = URL.createObjectURL(sourceVideoBlob)
   const videoElement = document.createElement('video')
@@ -90,6 +91,7 @@ export async function renderFrameCompositionVideo({
     videoElement,
     subtitleText: getActiveSubtitleText(subtitles, 0),
     fontFamily,
+    subtitleSettings,
   })
   streamTrack?.requestFrame?.()
 
@@ -109,6 +111,7 @@ export async function renderFrameCompositionVideo({
       videoElement,
       subtitleText: getActiveSubtitleText(subtitles, videoElement.currentTime),
       fontFamily,
+      subtitleSettings,
     })
     streamTrack?.requestFrame?.()
 

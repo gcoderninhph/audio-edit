@@ -1,4 +1,14 @@
-import { buildSubtitleRenderSpec, wrapSubtitleText } from './subtitleRenderModel'
+import { buildSubtitleRenderSpec, DEFAULT_SUBTITLE_SETTINGS, wrapSubtitleText } from './subtitleRenderModel'
+
+function toAssColor(hexColor, opacity = 1) {
+  const normalizedHex = String(hexColor || '#FFFFFF').replace('#', '')
+  const red = normalizedHex.slice(0, 2)
+  const green = normalizedHex.slice(2, 4)
+  const blue = normalizedHex.slice(4, 6)
+  const alpha = Math.max(0, Math.min(255, Math.round((1 - Math.max(0, Math.min(1, opacity))) * 255)))
+
+  return `&H${alpha.toString(16).toUpperCase().padStart(2, '0')}${blue}${green}${red}`
+}
 
 function formatAssTime(seconds) {
   const totalCentiseconds = Math.max(0, Math.round(Number(seconds || 0) * 100))
@@ -18,21 +28,17 @@ function escapeAssText(text) {
     .replace(/\r?\n/g, '\\N')
 }
 
-function getAssBackColor() {
-  return '&H47000000'
-}
-
-export function jsonToAss(subtitles, framePreset, fontFamily) {
-  const renderSpec = buildSubtitleRenderSpec(framePreset, fontFamily)
+export function jsonToAss(subtitles, framePreset, fontFamily, subtitleSettings = DEFAULT_SUBTITLE_SETTINGS) {
+  const renderSpec = buildSubtitleRenderSpec(framePreset, fontFamily, subtitleSettings)
 
   const styleLine = [
     'Style: Default',
     renderSpec.fontFamily,
     renderSpec.fontSizePx,
-    '&H00FFFFFF',
+    toAssColor(renderSpec.fontColorHex, 1),
     '&H000000FF',
     '&H00000000',
-    getAssBackColor(),
+    toAssColor(renderSpec.backgroundColorHex, renderSpec.backgroundOpacity),
     '1',
     '0',
     '0',
@@ -44,10 +50,10 @@ export function jsonToAss(subtitles, framePreset, fontFamily) {
     '3',
     '0',
     '0',
-    '2',
+    renderSpec.assAlignment,
     renderSpec.sideMarginPx,
     renderSpec.sideMarginPx,
-    renderSpec.bottomMarginPx,
+    renderSpec.verticalAlign === 'middle' ? 0 : renderSpec.bottomMarginPx,
     '1',
   ].join(',')
 

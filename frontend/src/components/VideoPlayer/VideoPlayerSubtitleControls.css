@@ -1,0 +1,114 @@
+.subtitle-style-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.subtitle-style-field {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.subtitle-color-control {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-height: 44px;
+  padding: 10px 12px;
+  border-radius: 12px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  background: rgba(255, 255, 255, 0.04);
+  cursor: pointer;
+}
+
+.subtitle-color-control-input {
+  width: 36px;
+  height: 36px;
+  padding: 0;
+  border: none;
+  border-radius: 10px;
+  background: transparent;
+  cursor: pointer;
+}
+
+.subtitle-color-control-input::-webkit-color-swatch-wrapper {
+  padding: 0;
+}
+
+.subtitle-color-control-input::-webkit-color-swatch {
+  border: 2px solid rgba(255, 255, 255, 0.16);
+  border-radius: 10px;
+}
+
+.subtitle-color-control-value {
+  font-size: 0.8rem;
+  font-weight: 700;
+  color: var(--text-primary);
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.subtitle-anchor-grid {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.subtitle-anchor-grid-row {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.subtitle-anchor-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 52px;
+  border-radius: 14px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  background:
+    linear-gradient(180deg, rgba(148, 163, 184, 0.08), rgba(15, 23, 42, 0.76)),
+    rgba(15, 23, 42, 0.82);
+  cursor: pointer;
+  transition: all 0.2s var(--ease-out);
+}
+
+.subtitle-anchor-btn:hover {
+  transform: translateY(-1px);
+  border-color: rgba(96, 165, 250, 0.22);
+}
+
+.subtitle-anchor-btn:focus-visible,
+.subtitle-color-control:focus-within {
+  outline: 2px solid rgba(96, 165, 250, 0.7);
+  outline-offset: 2px;
+}
+
+.subtitle-anchor-btn.active {
+  border-color: rgba(96, 165, 250, 0.36);
+  background:
+    linear-gradient(180deg, rgba(59, 130, 246, 0.26), rgba(15, 23, 42, 0.88)),
+    rgba(15, 23, 42, 0.86);
+  box-shadow: 0 12px 22px rgba(15, 23, 42, 0.18);
+}
+
+.subtitle-anchor-btn-dot {
+  width: 14px;
+  height: 14px;
+  border-radius: 999px;
+  background: rgba(226, 232, 240, 0.34);
+  box-shadow: inset 0 0 0 2px rgba(255, 255, 255, 0.08);
+}
+
+.subtitle-anchor-btn.active .subtitle-anchor-btn-dot {
+  background: #f8fafc;
+  box-shadow: 0 0 0 6px rgba(96, 165, 250, 0.16);
+}
+
+@media (max-width: 560px) {
+  .subtitle-style-grid {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}

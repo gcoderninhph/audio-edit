@@ -359,6 +359,7 @@ export async function exportVideo(inputFile, keptScenes, subtitles, exportOption
       subtitles: subtitles || [],
       framePreset,
       frameBackground: normalizedFrameBackground,
+      subtitleSettings: exportOptions?.subtitleSettings || null,
       onProgress,
       onLog: (message) => emitExportLog(onProgress, 'framing', message),
     });

@@ -12,14 +12,19 @@ import {
   sanitizeFrameBackground,
   serializeFrameBackground,
 } from '../utils/frameComposer'
+import {
+  DEFAULT_SUBTITLE_SETTINGS,
+  normalizeSubtitleSettings,
+  serializeSubtitleSettings,
+} from '../utils/subtitleRenderModel'
 
-function buildExportSignature(keptScenes, exportSubtitles, framePresetId, frameBackground) {
+function buildExportSignature(keptScenes, exportSubtitles, framePresetId, frameBackground, subtitleSettings) {
   const sceneSignature = keptScenes.map((scene) => `${scene.id}:${scene.start}-${scene.end}`).join('|')
   const subtitleSignature = exportSubtitles
     .map((subtitle) => `${subtitle.id}:${subtitle.start}-${subtitle.end}:${subtitle.text}`)
     .join('|')
 
-  return `${framePresetId}::${serializeFrameBackground(frameBackground)}::${sceneSignature}::${subtitleSignature}`
+  return `${framePresetId}::${serializeFrameBackground(frameBackground)}::${serializeSubtitleSettings(subtitleSettings)}::${sceneSignature}::${subtitleSignature}`
 }
 
 function clampVolume(value, fallback = 1) {
@@ -71,6 +76,7 @@ function createFullVideoScene(videoDuration) {
 export function useFrameExport({ videoFile, keptScenes, filteredSubtitles, videoDuration = 0, voiceoverTrack }) {
   const [framePresetId, setFramePresetIdState] = useState(DEFAULT_FRAME_PRESET_ID)
   const [frameBackground, setFrameBackgroundState] = useState(DEFAULT_FRAME_BACKGROUND)
+  const [subtitleSettings, setSubtitleSettingsState] = useState(DEFAULT_SUBTITLE_SETTINGS)
   const [videoVolume, setVideoVolumeState] = useState(1)
   const [voiceoverVolume, setVoiceoverVolumeState] = useState(1)
   const [customizedAudioTrackKey, setCustomizedAudioTrackKey] = useState('')
@@ -108,8 +114,8 @@ export function useFrameExport({ videoFile, keptScenes, filteredSubtitles, video
     ? (hasCustomizedCurrentAudioMix ? voiceoverVolume : 1)
     : 1
   const exportSignature = useMemo(
-    () => `${buildExportSignature(effectiveKeptScenes, exportSubtitles, framePresetId, frameBackground)}::${currentAudioTrackKey}:${effectiveVideoVolume}:${effectiveVoiceoverVolume}`,
-    [currentAudioTrackKey, effectiveKeptScenes, effectiveVideoVolume, effectiveVoiceoverVolume, exportSubtitles, frameBackground, framePresetId],
+    () => `${buildExportSignature(effectiveKeptScenes, exportSubtitles, framePresetId, frameBackground, subtitleSettings)}::${currentAudioTrackKey}:${effectiveVideoVolume}:${effectiveVoiceoverVolume}`,
+    [currentAudioTrackKey, effectiveKeptScenes, effectiveVideoVolume, effectiveVoiceoverVolume, exportSubtitles, frameBackground, framePresetId, subtitleSettings],
   )
   const hasFreshExport = exportUrl && lastExportSignature === exportSignature
 
@@ -166,6 +172,14 @@ export function useFrameExport({ videoFile, keptScenes, filteredSubtitles, video
 
   const setFrameBackground = useCallback((nextFrameBackground) => {
     setFrameBackgroundState(sanitizeFrameBackground(nextFrameBackground))
+  }, [])
+
+  const setSubtitleSettings = useCallback((nextSubtitleSettings) => {
+    setSubtitleSettingsState((currentSubtitleSettings) => normalizeSubtitleSettings(
+      typeof nextSubtitleSettings === 'function'
+        ? nextSubtitleSettings(currentSubtitleSettings)
+        : nextSubtitleSettings,
+    ))
   }, [])
 
   const handleVideoVolumeChange = useCallback((nextVolume) => {
@@ -236,6 +250,7 @@ export function useFrameExport({ videoFile, keptScenes, filteredSubtitles, video
             presetId: framePresetId,
             backgroundColor: frameBackground,
           },
+          subtitleSettings,
           audioMix: {
             videoVolume: effectiveVideoVolume,
             voiceoverVolume: hasVoiceoverTrack ? effectiveVoiceoverVolume : 0,
@@ -281,6 +296,7 @@ export function useFrameExport({ videoFile, keptScenes, filteredSubtitles, video
     frameBackground,
     framePresetId,
     hasVoiceoverTrack,
+    subtitleSettings,
     videoDuration,
     videoFile,
     voiceoverTrack,
@@ -291,6 +307,8 @@ export function useFrameExport({ videoFile, keptScenes, filteredSubtitles, video
     setFramePresetId,
     frameBackground,
     setFrameBackground,
+    subtitleSettings,
+    setSubtitleSettings,
     videoVolume: effectiveVideoVolume,
     voiceoverVolume: effectiveVoiceoverVolume,
     handleVideoVolumeChange,

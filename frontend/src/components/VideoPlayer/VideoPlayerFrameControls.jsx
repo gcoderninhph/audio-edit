@@ -11,7 +11,12 @@ import {
   isImageFrameBackground,
   isVideoFadeFrameBackground,
 } from '../../utils/frameComposer'
+import {
+  DEFAULT_SUBTITLE_SETTINGS,
+  normalizeSubtitleSettings,
+} from '../../utils/subtitleRenderModel'
 import DeveloperLocator from '../DeveloperLocator/DeveloperLocator'
+import VideoPlayerSubtitleControls from './VideoPlayerSubtitleControls'
 import './VideoPlayerFrameControls.css'
 
 const FRAME_PRESET_COPY = {
@@ -27,6 +32,8 @@ export default function VideoPlayerFrameControls({
   onFramePresetChange,
   frameBackground,
   onFrameBackgroundChange,
+  subtitleSettings,
+  onSubtitleSettingsChange,
   onBackgroundImageChange,
   videoVolume,
   voiceoverVolume,
@@ -46,20 +53,28 @@ export default function VideoPlayerFrameControls({
   const isFrameSectionVisible = !visibleSection || visibleSection === 'frame'
   const isBackgroundSectionVisible = !visibleSection || visibleSection === 'background'
   const isAudioSectionVisible = visibleSection === 'audio'
+  const isSubtitleSectionVisible = visibleSection === 'subtitle'
+  const normalizedSubtitleSettings = normalizeSubtitleSettings(subtitleSettings || DEFAULT_SUBTITLE_SETTINGS)
   const videoVolumePercent = Math.round((videoVolume || 0) * 100)
   const voiceoverVolumePercent = Math.round((voiceoverVolume || 0) * 100)
   const controlsKicker = visibleSection === 'background'
     ? 'Chỉnh nền'
+    : visibleSection === 'subtitle'
+      ? 'Chỉnh subtitle'
     : visibleSection === 'audio'
       ? 'Chỉnh âm thanh'
       : 'Chỉnh khung'
   const controlsTitle = visibleSection === 'background'
     ? 'Thiết lập nền video'
+    : visibleSection === 'subtitle'
+      ? 'Thiết lập subtitle preview va export'
     : visibleSection === 'audio'
       ? 'Cân chỉnh âm thanh preview va export'
       : 'Thiết lập khung video'
   const controlsSubtitle = visibleSection === 'background'
     ? 'Mở đúng phần nền cần dùng, phần còn lại được ẩn để nav trái gọn hơn.'
+    : visibleSection === 'subtitle'
+      ? 'Mở nhanh từ track subtitle trên timeline để đổi cỡ chữ và điểm neo cho ca preview lan export.'
     : visibleSection === 'audio'
       ? 'Tinh chỉnh riêng âm lượng video gốc và thuyết minh. Muc nay duoc dung cho ca preview lan file export.'
       : 'Chỉ giữ lại tùy chọn tỉ lệ khung để bạn chỉnh nhanh mà không làm rối vùng xem trước.'
@@ -295,6 +310,13 @@ export default function VideoPlayerFrameControls({
             </div>
           </div>
         </section>
+      )}
+
+      {isSubtitleSectionVisible && (
+        <VideoPlayerSubtitleControls
+          subtitleSettings={normalizedSubtitleSettings}
+          onSubtitleSettingsChange={onSubtitleSettingsChange}
+        />
       )}
 
       <input

@@ -6,7 +6,13 @@ import {
   isVideoFadeFrameBackground,
   sanitizeFrameBackground,
 } from './frameComposer'
-import { buildSubtitleRenderSpec, DEFAULT_SUBTITLE_FONT_FAMILY, wrapSubtitleText } from './subtitleRenderModel'
+import {
+  buildSubtitleRenderSpec,
+  DEFAULT_SUBTITLE_FONT_FAMILY,
+  DEFAULT_SUBTITLE_SETTINGS,
+  resolveSubtitleCardPosition,
+  wrapSubtitleText,
+} from './subtitleRenderModel'
 
 const backgroundImageCache = new Map()
 
@@ -91,26 +97,31 @@ export function loadFrameBackgroundImage(frameBackground) {
   return nextPromise
 }
 
-export function buildSubtitleCardLayout(context, subtitleText, framePreset, fontFamily = DEFAULT_SUBTITLE_FONT_FAMILY) {
+export function buildSubtitleCardLayout(
+  context,
+  subtitleText,
+  framePreset,
+  fontFamily = DEFAULT_SUBTITLE_FONT_FAMILY,
+  subtitleSettings = DEFAULT_SUBTITLE_SETTINGS,
+) {
   if (!subtitleText) {
     return null
   }
 
-  const renderSpec = buildSubtitleRenderSpec(framePreset, fontFamily)
+  const renderSpec = buildSubtitleRenderSpec(framePreset, fontFamily, subtitleSettings)
   const wrappedText = wrapSubtitleText(subtitleText, renderSpec)
   const lines = wrappedText.split(/\r?\n/).filter(Boolean)
   if (lines.length === 0) {
     return null
   }
 
-  context.font = `600 ${renderSpec.fontSizePx}px ${fontFamily}`
+  context.font = `600 ${renderSpec.fontSizePx}px ${renderSpec.canvasFontFamily}`
 
   const textWidths = lines.map((line) => context.measureText(line).width)
   const textWidth = Math.max(...textWidths, 0)
   const boxWidth = Math.min(renderSpec.maxWidthPx, textWidth + (renderSpec.boxPaddingPx * 2.6))
   const boxHeight = (lines.length * renderSpec.lineHeightPx) + (renderSpec.boxPaddingPx * 2)
-  const boxX = (framePreset.width - boxWidth) / 2
-  const boxY = framePreset.height - renderSpec.bottomMarginPx - boxHeight
+  const { boxX, boxY } = resolveSubtitleCardPosition(framePreset, renderSpec, boxWidth, boxHeight)
 
   return {
     boxHeight,
@@ -130,10 +141,21 @@ export function renderSubtitleCardLayout(context, layout, { offsetX = 0, offsetY
 
   const boxX = layout.boxX - offsetX
   const boxY = layout.boxY - offsetY
+  const horizontalTextPadding = layout.renderSpec.boxPaddingPx * 1.3
+  const horizontalAlign = layout.renderSpec.horizontalAlign === 'left'
+    ? 'left'
+    : layout.renderSpec.horizontalAlign === 'right'
+      ? 'right'
+      : 'center'
+  const textX = horizontalAlign === 'left'
+    ? boxX + horizontalTextPadding
+    : horizontalAlign === 'right'
+      ? boxX + layout.boxWidth - horizontalTextPadding
+      : boxX + (layout.boxWidth / 2)
 
   context.save()
-  context.font = `600 ${layout.renderSpec.fontSizePx}px ${layout.renderSpec.fontFamily}`
-  context.textAlign = 'center'
+  context.font = `600 ${layout.renderSpec.fontSizePx}px ${layout.renderSpec.canvasFontFamily}`
+  context.textAlign = horizontalAlign
   context.textBaseline = 'middle'
 
   context.fillStyle = layout.renderSpec.backgroundColor
@@ -148,16 +170,22 @@ export function renderSubtitleCardLayout(context, layout, { offsetX = 0, offsetY
 
   layout.lines.forEach((line, index) => {
     const lineY = boxY + layout.renderSpec.boxPaddingPx + (layout.renderSpec.lineHeightPx * index) + (layout.renderSpec.lineHeightPx / 2)
-    context.fillText(line, (layout.frameWidth / 2) - offsetX, lineY)
+    context.fillText(line, textX, lineY)
   })
 
   context.restore()
 }
 
-function drawSubtitleCard(context, subtitleText, framePreset, fontFamily = DEFAULT_SUBTITLE_FONT_FAMILY) {
+function drawSubtitleCard(
+  context,
+  subtitleText,
+  framePreset,
+  fontFamily = DEFAULT_SUBTITLE_FONT_FAMILY,
+  subtitleSettings = DEFAULT_SUBTITLE_SETTINGS,
+) {
   renderSubtitleCardLayout(
     context,
-    buildSubtitleCardLayout(context, subtitleText, framePreset, fontFamily),
+    buildSubtitleCardLayout(context, subtitleText, framePreset, fontFamily, subtitleSettings),
   )
 }
 
@@ -225,6 +253,7 @@ export function drawFrameComposition(context, {
   videoElement,
   subtitleText,
   fontFamily = DEFAULT_SUBTITLE_FONT_FAMILY,
+  subtitleSettings = DEFAULT_SUBTITLE_SETTINGS,
 }) {
   context.save()
   context.clearRect(0, 0, framePreset.width, framePreset.height)
@@ -235,6 +264,6 @@ export function drawFrameComposition(context, {
     context.drawImage(videoElement, layout.x, layout.y, layout.width, layout.height)
   }
 
-  drawSubtitleCard(context, subtitleText, framePreset, fontFamily)
+  drawSubtitleCard(context, subtitleText, framePreset, fontFamily, subtitleSettings)
   context.restore()
 }

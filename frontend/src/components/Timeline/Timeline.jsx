@@ -17,7 +17,18 @@ function formatTime(seconds) {
   return `${String(mins).padStart(2, '0')}:${String(secs).padStart(2, '0')}`;
 }
 
-export default function Timeline({ scenes, deletedSceneIds, currentTime, duration = 0, currentScene, onSeek, subtitles, voiceoverTrack, onVoiceoverClick }) {
+export default function Timeline({
+  scenes,
+  deletedSceneIds,
+  currentTime,
+  duration = 0,
+  currentScene,
+  onSeek,
+  subtitles,
+  voiceoverTrack,
+  onSubtitleClick,
+  onVoiceoverClick,
+}) {
   const [hoveredScene, setHoveredScene] = useState(null);
   const [tooltipX, setTooltipX] = useState(0);
   const barRef = useRef(null);
@@ -76,6 +87,20 @@ export default function Timeline({ scenes, deletedSceneIds, currentTime, duratio
     event.preventDefault();
     onVoiceoverClick?.();
   }, [onVoiceoverClick]);
+
+  const handleSubtitleClick = useCallback((event) => {
+    event.stopPropagation();
+    onSubtitleClick?.();
+  }, [onSubtitleClick]);
+
+  const handleSubtitleKeyDown = useCallback((event) => {
+    if (event.key !== 'Enter' && event.key !== ' ') {
+      return;
+    }
+
+    event.preventDefault();
+    onSubtitleClick?.();
+  }, [onSubtitleClick]);
 
   const playheadPercent = useMemo(() => {
     if (totalDuration <= 0) return 0;
@@ -186,7 +211,8 @@ export default function Timeline({ scenes, deletedSceneIds, currentTime, duratio
 
         {/* Subtitles Track */}
         {timelineSubtitles.length > 0 && (
-          <div className="timeline-subtitles-bar">
+          <div className="timeline-subtitles-bar dev-locator-host" role="button" tabIndex={0} onClick={handleSubtitleClick} onKeyDown={handleSubtitleKeyDown} title="Subtitle track • click de chinh font size va diem neo">
+            <DeveloperLocator code="panel.timeline.subtitles" title="Timeline Subtitle Track" />
             {timelineSubtitles.map((subtitle) => (
               <div
                 key={subtitle.key}

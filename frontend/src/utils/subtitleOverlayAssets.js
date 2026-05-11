@@ -1,5 +1,5 @@
 import { buildSubtitleCardLayout, renderSubtitleCardLayout } from './frameCanvasRenderer'
-import { DEFAULT_SUBTITLE_FONT_FAMILY } from './subtitleRenderModel'
+import { DEFAULT_SUBTITLE_FONT_FAMILY, DEFAULT_SUBTITLE_SETTINGS } from './subtitleRenderModel'
 
 function createCanvasContext(width, height) {
   const canvas = document.createElement('canvas')
@@ -27,7 +27,12 @@ function canvasToPngBytes(canvas) {
   })
 }
 
-export async function buildSubtitleOverlayAssets(subtitles, framePreset, fontFamily = DEFAULT_SUBTITLE_FONT_FAMILY) {
+export async function buildSubtitleOverlayAssets(
+  subtitles,
+  framePreset,
+  fontFamily = DEFAULT_SUBTITLE_FONT_FAMILY,
+  subtitleSettings = DEFAULT_SUBTITLE_SETTINGS,
+) {
   if (!Array.isArray(subtitles) || subtitles.length === 0) {
     return { assets: [], events: [] }
   }
@@ -50,7 +55,7 @@ export async function buildSubtitleOverlayAssets(subtitles, framePreset, fontFam
 
     let asset = assetsByText.get(text)
     if (!asset) {
-      const layout = buildSubtitleCardLayout(measureContext, text, framePreset, fontFamily)
+      const layout = buildSubtitleCardLayout(measureContext, text, framePreset, fontFamily, subtitleSettings)
       if (!layout) {
         continue
       }

@@ -62,6 +62,10 @@ function App() {
     setActivePlayerSidebarSection('audio');
   }, []);
 
+  const handleOpenSubtitleConfig = useCallback(() => {
+    setActivePlayerSidebarSection('subtitle');
+  }, []);
+
   const handleOpenProject = useCallback((sessionId) => {
     setActivePlayerSidebarSection(null);
 
@@ -211,6 +215,8 @@ function App() {
               onFramePresetChange={editor.setFramePresetId}
               frameBackground={editor.frameBackground}
               onFrameBackgroundChange={editor.setFrameBackground}
+              subtitleSettings={editor.subtitleSettings}
+              onSubtitleSettingsChange={editor.setSubtitleSettings}
               currentScene={editor.currentScene}
               scenes={editor.scenes}
               deletedSceneIds={editor.deletedSceneIds}
@@ -298,6 +304,7 @@ function App() {
               onSeek={handleSeek}
               subtitles={editor.filteredSubtitles}
               voiceoverTrack={editor.voiceoverTrack}
+              onSubtitleClick={handleOpenSubtitleConfig}
               onVoiceoverClick={handleOpenVoiceoverAudioConfig}
             />
           </div>
