@@ -76,11 +76,13 @@ export async function runNativeExport({ inputFile, keptScenes, subtitles, frameS
     outputTarget: outputTarget || null,
     frameBackground: describeFrameBackground(frameBackground),
     framePresetId: framePreset.id,
+    framePresetSize: { width: framePreset.width, height: framePreset.height },
     hasVoiceoverTrack: Boolean(voiceover),
     jobId,
     keptSceneCount: keptScenes.length,
     subtitleAssetCount: subtitleOverlay.assets.length,
     subtitleEventCount: subtitleOverlay.events.length,
+    subtitleSettings: subtitleSettings || null,
   })
 
   const unsubscribe = nativeExportBridge.onProgress((payload) => {
@@ -103,6 +105,8 @@ export async function runNativeExport({ inputFile, keptScenes, subtitles, frameS
       })),
       frameSettings: {
         presetId: framePreset.id,
+        width: framePreset.width,
+        height: framePreset.height,
         backgroundColor: frameBackground,
       },
       exportQualityProfileId: exportQualityProfileId || null,

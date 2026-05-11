@@ -117,6 +117,31 @@ function formatMegabytes(bytes) {
   return `${(Math.max(0, Number(bytes) || 0) / (1024 * 1024)).toFixed(1)} MB`
 }
 
+function normalizeFrameDimension(value) {
+  const dimension = Math.round(Number(value) || 0)
+  if (dimension < 2 || dimension > 8192) {
+    return 0
+  }
+
+  return dimension % 2 === 0 ? dimension : dimension - 1
+}
+
+function resolveFramePreset(frameSettings = {}) {
+  const preset = getFramePresetById(frameSettings?.presetId)
+  const requestedWidth = normalizeFrameDimension(frameSettings?.width ?? frameSettings?.size?.width)
+  const requestedHeight = normalizeFrameDimension(frameSettings?.height ?? frameSettings?.size?.height)
+
+  if (!requestedWidth || !requestedHeight) {
+    return preset
+  }
+
+  return {
+    ...preset,
+    width: requestedWidth,
+    height: requestedHeight,
+  }
+}
+
 async function resolveInputPath(source, jobDirectory) {
   if (source?.kind === 'stored-project-video') {
     const videoPath = await resolveProjectVideoPath(source.projectId)
@@ -234,7 +259,7 @@ async function writeFrameBackgroundAsset(jobDirectory, frameBackground) {
 async function runNativeExportJob(sender, payload = {}) {
   const jobId = payload.jobId || `native-export-${Date.now()}`
   const jobDirectory = buildJobDirectory(jobId)
-  const framePreset = getFramePresetById(payload.frameSettings?.presetId)
+  const framePreset = resolveFramePreset(payload.frameSettings)
   const frameBackground = sanitizeFrameBackground(payload.frameSettings?.backgroundColor)
   const exportQualityProfileId = payload.exportQualityProfileId || null
   const outputTarget = resolveExportOutputTarget(payload.outputTarget, payload.source?.fileName || 'output.mp4')
@@ -285,6 +310,13 @@ async function runNativeExportJob(sender, payload = {}) {
     }, {
       audioMix: normalizedAudioMix,
       frameBackground: describeFrameBackground(frameBackground),
+      framePreset: {
+        id: framePreset.id,
+        label: framePreset.label,
+        width: framePreset.width,
+        height: framePreset.height,
+        requestedPresetId: payload.frameSettings?.presetId || null,
+      },
       inputPath,
       overlayCount: overlayAssets.length,
       outputPath: outputTarget.filePath,

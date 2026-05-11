@@ -117,7 +117,7 @@ export function useVideoEditor() {
     keptScenes,
     filteredSubtitles,
     videoDuration,
-    voiceoverTrack: localizedVoiceoverTrack,
+    voiceoverTrack,
   });
 
   const getCurrentSnapshot = useCallback(() => ({

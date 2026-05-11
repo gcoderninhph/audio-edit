@@ -278,6 +278,7 @@ export function useFrameExport({ videoFile, keptScenes, filteredSubtitles, video
       exportQualityProfileId,
       frameBackground: describeFrameBackground(frameBackground),
       framePresetId,
+      subtitleSettings,
       hasVoiceoverTrack,
       keptSceneCount: effectiveKeptScenes.length,
       subtitleCount: exportSubtitles.length,

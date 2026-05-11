@@ -107,7 +107,7 @@ export function buildFinalMuxArgs({
   optionalAudio = false,
   videoEncoding = null,
 }) {
-  const args = ['-i', frameVideoPath];
+  const args = ['-hide_banner', '-y', '-i', frameVideoPath];
 
   if (audioPath) {
     args.push('-i', audioPath);
