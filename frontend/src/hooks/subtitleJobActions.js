@@ -6,7 +6,9 @@ import { createVoiceoverFromSubtitles } from '../utils/voiceoverUtils';
 import {
   DEFAULT_SUBTITLE_LANGUAGE_KEY,
   getSubtitleLanguageLabel,
+  isVoiceoverSubtitleLanguageSupported,
   isTranslatableSubtitleLanguage,
+  normalizeVoiceoverLanguageKey,
   setSubtitleTrackSubtitles,
 } from '../utils/subtitleTracks';
 
@@ -207,6 +209,7 @@ export async function runTranslationJob({
 }
 
 export async function runVoiceoverJob({
+  activeSubtitleLanguage,
   subtitles,
   sessionIdRef,
   setIsGeneratingVoiceover,
@@ -214,9 +217,11 @@ export async function runVoiceoverJob({
   setLastVoiceoverAudioName,
   setVoiceoverTrack,
 }) {
-  if (!Array.isArray(subtitles) || subtitles.length === 0) {
+  if (!Array.isArray(subtitles) || subtitles.length === 0 || !isVoiceoverSubtitleLanguageSupported(activeSubtitleLanguage)) {
     return;
   }
+
+  const voiceoverLanguageKey = normalizeVoiceoverLanguageKey(activeSubtitleLanguage)
 
   const currentSessionId = sessionIdRef.current;
   if (!currentSessionId) {
@@ -246,6 +251,7 @@ export async function runVoiceoverJob({
       bytes: result.audioBlob,
       duration: result.duration,
       fileName: result.fileName || 'voiceover.mp3',
+      languageKey: voiceoverLanguageKey,
       mimeType: result.mimeType || 'audio/mpeg',
     });
 
@@ -260,6 +266,7 @@ export async function runVoiceoverJob({
     setVoiceoverTrack(previewUrl ? {
       duration: savedVoiceover.duration || result.duration || 0,
       fileName,
+      languageKey: savedVoiceover.languageKey || voiceoverLanguageKey,
       previewUrl,
       startTime: 0,
     } : null);

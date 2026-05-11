@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef, useMemo } from 'react';
 import DeveloperLocator from '../DeveloperLocator/DeveloperLocator';
-import { DEFAULT_SUBTITLE_LANGUAGE_KEY } from '../../utils/subtitleTracks';
+import { DEFAULT_SUBTITLE_LANGUAGE_KEY, isVoiceoverSubtitleLanguageSupported } from '../../utils/subtitleTracks';
 import './SubtitlePanel.css';
 
 function formatTime(seconds) {
@@ -44,6 +44,8 @@ export default function SubtitlePanel({
   const hasOriginalSubtitles = Boolean(subtitleLanguageOptions?.find((option) => option.id === DEFAULT_SUBTITLE_LANGUAGE_KEY)?.hasSubtitles);
   const isOriginalLanguageSelected = selectedLanguageOption.id === DEFAULT_SUBTITLE_LANGUAGE_KEY;
   const canTranslateSelectedLanguage = hasOriginalSubtitles && selectedLanguageOption.translatable;
+  const isVoiceoverSupportedLanguage = isVoiceoverSubtitleLanguageSupported(activeSubtitleLanguage);
+  const canGenerateVoiceover = isVoiceoverSupportedLanguage && hasVisibleSubs;
   const missingSelectedTranslation = !hasVisibleSubs && hasOriginalSubtitles && !isOriginalLanguageSelected;
 
   // Find the currently active subtitle index based on currentTime
@@ -213,10 +215,16 @@ export default function SubtitlePanel({
                 className="btn btn-primary btn-sm subtitle-tool-btn subtitle-voiceover-btn"
                 style={{ background: '#f59e0b' }}
                 onClick={onStartVoiceover}
-                disabled={!hasVisibleSubs}
+                disabled={!canGenerateVoiceover}
               >
-                🔊 Generate voiceover
+                {isVoiceoverSupportedLanguage ? '🔊 Generate voiceover' : '🔒 Voiceover only for Vietnamese'}
               </button>
+
+              {!isVoiceoverSupportedLanguage && (
+                <div className="subtitle-tool-note subtitle-tool-warning">
+                  Voiceover is temporarily available only for Vietnamese subtitles. Switch Display language to Vietnamese to generate and show narration.
+                </div>
+              )}
 
               {lastVoiceoverAudioName && (
                 <div className="subtitle-tool-note">

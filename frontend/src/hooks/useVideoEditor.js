@@ -10,6 +10,7 @@ import { useFrameExport } from './useFrameExport';
 import { useSubtitleTracks } from './useSubtitleTracks';
 import { DEFAULT_EXPORT_QUALITY_PROFILE_ID } from '../utils/exportQualityProfile';
 import { DEFAULT_SUBTITLE_SETTINGS } from '../utils/subtitleRenderModel';
+import { getVoiceoverTrackForLanguage } from '../utils/subtitleTracks';
 
 export function useVideoEditor() {
   const [videoFile, setVideoFileState] = useState(null);
@@ -17,21 +18,16 @@ export function useVideoEditor() {
   const [videoDuration, setVideoDuration] = useState(0);
   const [videoName, setVideoName] = useState('');
   const [videoFilename, setVideoFilename] = useState(''); // server filename
-
   const [sessionId, setSessionId] = useState('');
-
   const [scenes, setScenes] = useState([]);
   const [isDetecting, setIsDetecting] = useState(false);
   const [detectProgress, setDetectProgress] = useState(0);
   const [sensitivity, setSensitivity] = useState(2.5);
-
   const [deletedSceneIds, setDeletedSceneIds] = useState(new Set());
-
   const [thumbnails, setThumbnails] = useState({});
   const [isTranscribing, setIsTranscribing] = useState(false);
   const [transcribeProgress, setTranscribeProgress] = useState(null);
   const [transcriptionJobId, setTranscriptionJobId] = useState(null);
-
   const [isTranslating, setIsTranslating] = useState(false);
   const [translateProgress, setTranslateProgress] = useState(null);
   const [translationJobId, setTranslationJobId] = useState(null);
@@ -39,13 +35,10 @@ export function useVideoEditor() {
   const [voiceoverProgress, setVoiceoverProgress] = useState(null);
   const [lastVoiceoverAudioName, setLastVoiceoverAudioName] = useState('');
   const [voiceoverTrack, setVoiceoverTrack] = useState(null);
-
   const [currentTime, setCurrentTime] = useState(0);
-
   const videoRef = useRef(null);
   const sessionIdRef = useRef('');
   const detectAbortControllerRef = useRef(null);
-
   const {
     activeSubtitleLanguage,
     originalSubtitles,
@@ -58,7 +51,6 @@ export function useVideoEditor() {
     updateActiveSubtitle,
     visibleSubtitles: subtitles,
   } = useSubtitleTracks();
-
   const { pushState, undo: undoAction, redo: redoAction, canUndo, canRedo, resetHistory } = useUndoHistory(30);
 
   useEffect(() => {
@@ -73,10 +65,11 @@ export function useVideoEditor() {
 
   const keptScenes = useMemo(() => getKeptScenes(scenes, deletedSceneIds), [scenes, deletedSceneIds]);
   const keptDuration = useMemo(() => getKeptDuration(keptScenes), [keptScenes]);
-
   const currentScene = useMemo(() => getCurrentSceneAtTime(scenes, currentTime), [scenes, currentTime]);
 
   const filteredSubtitles = useMemo(() => filterVisibleSubtitles(subtitles, scenes, deletedSceneIds), [subtitles, scenes, deletedSceneIds]);
+  const localizedVoiceoverTrack = useMemo(() => getVoiceoverTrackForLanguage(voiceoverTrack, activeSubtitleLanguage), [activeSubtitleLanguage, voiceoverTrack]);
+  const localizedVoiceoverAudioName = localizedVoiceoverTrack ? lastVoiceoverAudioName : '';
   const voiceoverSubtitles = useMemo(() => {
     if (!filteredSubtitles.length) {
       return [];
@@ -124,7 +117,7 @@ export function useVideoEditor() {
     keptScenes,
     filteredSubtitles,
     videoDuration,
-    voiceoverTrack,
+    voiceoverTrack: localizedVoiceoverTrack,
   });
 
   const getCurrentSnapshot = useCallback(() => ({
@@ -360,12 +353,7 @@ export function useVideoEditor() {
     setCurrentTime(scene.start);
   }, []);
 
-  const {
-    startTranscription,
-    startTranslation,
-    startVoiceover,
-    updateSubtitle,
-  } = useVideoEditorSubtitleActions({
+  const { startTranscription, startTranslation, startVoiceover, updateSubtitle } = useVideoEditorSubtitleActions({
     activeSubtitleLanguage,
     deletedSceneIds,
     getCurrentSnapshot,
@@ -434,7 +422,7 @@ export function useVideoEditor() {
     activeSubtitleLanguage, setActiveSubtitleLanguage, subtitleLanguageOptions,
     subtitles, filteredSubtitles, isTranscribing, transcribeProgress, startTranscription,
     isTranslating, translateProgress, startTranslation,
-    isGeneratingVoiceover, voiceoverProgress, lastVoiceoverAudioName, voiceoverTrack, startVoiceover, updateSubtitle,
+    isGeneratingVoiceover, voiceoverProgress, lastVoiceoverAudioName: localizedVoiceoverAudioName, voiceoverTrack: localizedVoiceoverTrack, startVoiceover, updateSubtitle,
     undo: performUndo, redo: performRedo, canUndo, canRedo, historyList, loadHistoryList, loadSession, deleteSession,
   };
 }

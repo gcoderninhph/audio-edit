@@ -70,6 +70,7 @@ export async function saveLocalProjectVoiceoverAudio(projectId, payload) {
   return getProjectStore().saveVoiceoverFile({
     projectId,
     originalName: payload?.fileName || 'voiceover.mp3',
+    languageKey: payload?.languageKey || null,
     mimeType: payload?.mimeType || 'audio/mpeg',
     duration: Number.isFinite(payload?.duration) ? payload.duration : 0,
     bytes,
@@ -131,6 +132,7 @@ export async function materializeLocalProjectVoiceover(projectId) {
   return {
     duration: Number.isFinite(voiceoverRecord.duration) ? voiceoverRecord.duration : 0,
     fileName: voiceoverRecord.fileName || voiceoverRecord.storedFileName || 'voiceover.mp3',
+    languageKey: voiceoverRecord.languageKey || null,
     mimeType: voiceoverRecord.mimeType || 'audio/mpeg',
     previewUrl: URL.createObjectURL(blob),
     storedFileName: voiceoverRecord.storedFileName || '',

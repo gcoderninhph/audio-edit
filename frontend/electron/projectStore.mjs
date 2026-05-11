@@ -1,5 +1,6 @@
 import { copyFile, readFile, readdir, rm, stat, writeFile } from 'node:fs/promises'
 import { appendDebugLog } from './debugLog.mjs'
+import { getCurrentProjectVoiceoverTrack, migrateStoredVoiceover, normalizeVoiceoverTrackManifest } from './projectVoiceoverStore.mjs'
 import {
   assertProjectId,
   buildProjectVideoUrl,
@@ -8,6 +9,8 @@ import {
   ensureProjectDirectory,
   ensureProjectsRoot,
   ensureProjectVoiceoverDirectory,
+  getLegacySiblingProjectVoiceoverDirectory,
+  getLegacySiblingProjectVoiceoverPath,
   getProjectsRootCandidates,
   getLegacyProjectVoiceoverPath,
   getProjectDirectory,
@@ -25,11 +28,7 @@ import { readProjectSubtitleTracks, writeProjectSubtitleTracks } from './project
 import { DEFAULT_FRAME_BACKGROUND, DEFAULT_FRAME_PRESET_ID } from '../src/utils/frameComposer.js'
 import { DEFAULT_EXPORT_QUALITY_PROFILE_ID, normalizeExportQualityProfileId } from '../src/utils/exportQualityProfile.js'
 import { DEFAULT_SUBTITLE_SETTINGS, normalizeSubtitleSettings } from '../src/utils/subtitleRenderModel.js'
-import {
-  DEFAULT_SUBTITLE_LANGUAGE_KEY,
-  getOriginalSubtitles,
-  normalizeActiveSubtitleLanguage,
-} from '../src/utils/subtitleTracks.js'
+import { DEFAULT_SUBTITLE_LANGUAGE_KEY, DEFAULT_VOICEOVER_LANGUAGE_KEY, getOriginalSubtitles, normalizeActiveSubtitleLanguage, normalizeVoiceoverLanguageKey } from '../src/utils/subtitleTracks.js'
 
 function buildProjectRecord(projectId, payload, existingRecord = null) {
   const hasTranscriptionJobId = Object.prototype.hasOwnProperty.call(payload, 'transcriptionJobId')
@@ -39,6 +38,7 @@ function buildProjectRecord(projectId, payload, existingRecord = null) {
   const hasVoiceoverMimeType = Object.prototype.hasOwnProperty.call(payload, 'voiceoverMimeType')
   const hasVoiceoverSize = Object.prototype.hasOwnProperty.call(payload, 'voiceoverSize')
   const hasVoiceoverDuration = Object.prototype.hasOwnProperty.call(payload, 'voiceoverDuration')
+  const hasVoiceoverLanguageKey = Object.prototype.hasOwnProperty.call(payload, 'voiceoverLanguageKey')
   const createdAt = existingRecord?.created_at || new Date().toISOString()
 
   return {
@@ -67,6 +67,12 @@ function buildProjectRecord(projectId, payload, existingRecord = null) {
     voiceover_mime_type: hasVoiceoverMimeType ? payload.voiceoverMimeType : existingRecord?.voiceover_mime_type ?? null,
     voiceover_size: hasVoiceoverSize ? payload.voiceoverSize : existingRecord?.voiceover_size ?? 0,
     voiceover_duration: hasVoiceoverDuration ? payload.voiceoverDuration : existingRecord?.voiceover_duration ?? 0,
+    voiceover_tracks: payload.voiceoverTracks && typeof payload.voiceoverTracks === 'object'
+      ? payload.voiceoverTracks
+      : normalizeVoiceoverTrackManifest(existingRecord),
+    voiceover_language_key: hasVoiceoverLanguageKey
+      ? normalizeVoiceoverLanguageKey(payload.voiceoverLanguageKey)
+      : existingRecord?.voiceover_language_key ?? DEFAULT_VOICEOVER_LANGUAGE_KEY,
     created_at: createdAt,
     updated_at: new Date().toISOString(),
   }
@@ -112,32 +118,52 @@ async function saveVoiceoverFile(payload) {
   const voiceoverDirectory = await ensureProjectVoiceoverDirectory(projectId)
   const existingRecord = await readProjectMetadata(projectId)
   const voiceoverBytes = toBuffer(payload?.bytes)
+  const voiceoverLanguageKey = normalizeVoiceoverLanguageKey(payload?.languageKey || existingRecord?.voiceover_language_key || DEFAULT_VOICEOVER_LANGUAGE_KEY)
+  const existingVoiceoverTracks = normalizeVoiceoverTrackManifest(existingRecord)
+  const previousTrack = existingVoiceoverTracks[voiceoverLanguageKey]
 
   if (!voiceoverBytes) {
     throw new Error('Missing voiceover audio content for desktop persistence.')
   }
 
-  const storedFileName = buildStoredVoiceoverName(payload?.originalName)
-  if (existingRecord?.voiceover_filename && existingRecord.voiceover_filename !== storedFileName) {
+  const storedFileName = buildStoredVoiceoverName(payload?.originalName, voiceoverLanguageKey)
+  if (previousTrack?.file_name && previousTrack.file_name !== storedFileName) {
     for (const projectsRoot of getProjectsRootCandidates(existingRecord?._storage_root)) {
-      await rm(getProjectVoiceoverPath(projectId, existingRecord.voiceover_filename, projectsRoot), { force: true }).catch(() => undefined)
-      await rm(getLegacyProjectVoiceoverPath(projectId, existingRecord.voiceover_filename, projectsRoot), { force: true }).catch(() => undefined)
+      await rm(getProjectVoiceoverPath(projectId, previousTrack.file_name, projectsRoot), { force: true }).catch(() => undefined)
+      await rm(getLegacySiblingProjectVoiceoverPath(projectId, previousTrack.file_name, projectsRoot), { force: true }).catch(() => undefined)
+      await rm(getLegacyProjectVoiceoverPath(projectId, previousTrack.file_name, projectsRoot), { force: true }).catch(() => undefined)
     }
   }
 
   const targetPath = getProjectVoiceoverPath(projectId, storedFileName)
   await writeFile(targetPath, voiceoverBytes)
   for (const projectsRoot of getProjectsRootCandidates(existingRecord?._storage_root)) {
+    await rm(getLegacySiblingProjectVoiceoverPath(projectId, storedFileName, projectsRoot), { force: true }).catch(() => undefined)
     await rm(getLegacyProjectVoiceoverPath(projectId, storedFileName, projectsRoot), { force: true }).catch(() => undefined)
   }
 
   const fileStats = await stat(targetPath)
+  const voiceoverOriginalName = payload?.originalName || previousTrack?.original_name || existingRecord?.voiceover_original_name || storedFileName
+  const voiceoverMimeType = payload?.mimeType || previousTrack?.mime_type || existingRecord?.voiceover_mime_type || 'audio/mpeg'
+  const voiceoverDuration = Number.isFinite(payload?.duration) ? payload.duration : previousTrack?.duration ?? existingRecord?.voiceover_duration ?? 0
+  const nextVoiceoverTracks = {
+    ...existingVoiceoverTracks,
+    [voiceoverLanguageKey]: {
+      duration: voiceoverDuration,
+      file_name: storedFileName,
+      mime_type: voiceoverMimeType,
+      original_name: voiceoverOriginalName,
+      size: fileStats.size,
+    },
+  }
   const nextRecord = buildProjectRecord(projectId, {
     voiceoverFilename: storedFileName,
-    voiceoverOriginalName: payload?.originalName || existingRecord?.voiceover_original_name || storedFileName,
-    voiceoverMimeType: payload?.mimeType || existingRecord?.voiceover_mime_type || 'audio/mpeg',
+    voiceoverOriginalName: voiceoverOriginalName,
+    voiceoverMimeType: voiceoverMimeType,
     voiceoverSize: fileStats.size,
-    voiceoverDuration: Number.isFinite(payload?.duration) ? payload.duration : existingRecord?.voiceover_duration ?? 0,
+    voiceoverDuration: voiceoverDuration,
+    voiceoverLanguageKey: voiceoverLanguageKey,
+    voiceoverTracks: nextVoiceoverTracks,
   }, existingRecord)
 
   await writeProjectMetadata(projectId, nextRecord)
@@ -145,6 +171,7 @@ async function saveVoiceoverFile(payload) {
   return {
     storedFileName,
     fileName: nextRecord.voiceover_original_name,
+    languageKey: nextRecord.voiceover_language_key,
     mimeType: nextRecord.voiceover_mime_type || 'audio/mpeg',
     size: nextRecord.voiceover_size || fileStats.size,
     duration: nextRecord.voiceover_duration || 0,
@@ -229,6 +256,7 @@ async function getProject(projectId) {
     active_subtitle_language: normalizeActiveSubtitleLanguage(projectRecord.active_subtitle_language, subtitleTracks),
     subtitle_tracks: subtitleTracks,
     subtitles: getOriginalSubtitles(subtitleTracks),
+    voiceover_tracks: normalizeVoiceoverTrackManifest(projectRecord),
   }
 }
 
@@ -328,42 +356,42 @@ async function readProjectVideoBytes(projectId) {
 
 async function getProjectVoiceover(projectId) {
   const projectRecord = await getProject(projectId)
-  if (!projectRecord.voiceover_filename) {
+  const voiceoverData = getCurrentProjectVoiceoverTrack(projectRecord)
+  if (!voiceoverData) {
     return null
   }
 
   return {
     projectId: projectRecord.id,
-    fileName: projectRecord.voiceover_original_name || projectRecord.voiceover_filename,
-    storedFileName: projectRecord.voiceover_filename,
-    mimeType: projectRecord.voiceover_mime_type || 'audio/mpeg',
-    size: projectRecord.voiceover_size || 0,
-    duration: projectRecord.voiceover_duration || 0,
+    fileName: voiceoverData.track.original_name || voiceoverData.track.file_name,
+    languageKey: voiceoverData.languageKey,
+    storedFileName: voiceoverData.track.file_name,
+    mimeType: voiceoverData.track.mime_type || 'audio/mpeg',
+    size: voiceoverData.track.size || 0,
+    duration: voiceoverData.track.duration || 0,
   }
 }
 
 async function readProjectVoiceoverBytes(projectId) {
   const projectRecord = await getProject(projectId)
-  if (!projectRecord.voiceover_filename) {
+  const voiceoverData = getCurrentProjectVoiceoverTrack(projectRecord)
+  if (!voiceoverData) {
     return null
   }
 
   for (const projectsRoot of getProjectsRootCandidates(projectRecord._storage_root)) {
     const candidatePaths = [
-      getProjectVoiceoverPath(projectRecord.id, projectRecord.voiceover_filename, projectsRoot),
+      getProjectVoiceoverPath(projectRecord.id, voiceoverData.track.file_name, projectsRoot),
+      getLegacySiblingProjectVoiceoverPath(projectRecord.id, voiceoverData.track.file_name, projectsRoot),
+      getLegacySiblingProjectVoiceoverPath(projectRecord.id, projectRecord.voiceover_filename, projectsRoot),
+      getLegacyProjectVoiceoverPath(projectRecord.id, voiceoverData.track.file_name, projectsRoot),
       getLegacyProjectVoiceoverPath(projectRecord.id, projectRecord.voiceover_filename, projectsRoot),
     ]
 
     for (const candidatePath of candidatePaths) {
       try {
         const voiceoverBytes = await readFile(candidatePath)
-        return {
-          fileName: projectRecord.voiceover_original_name || projectRecord.voiceover_filename,
-          storedFileName: projectRecord.voiceover_filename,
-          mimeType: projectRecord.voiceover_mime_type || 'audio/mpeg',
-          duration: projectRecord.voiceover_duration || 0,
-          bytes: new Uint8Array(voiceoverBytes),
-        }
+        return migrateStoredVoiceover(projectRecord, candidatePath, voiceoverBytes, buildProjectRecord)
 
       } catch (error) {
         if (error?.code !== 'ENOENT') {
@@ -384,6 +412,7 @@ async function deleteProject(projectId) {
       for (const projectsRoot of getProjectsRootCandidates()) {
         await rm(getProjectDirectory(normalizedProjectId, projectsRoot), { recursive: true, force: true })
         await rm(getProjectVoiceoverDirectory(normalizedProjectId, projectsRoot), { recursive: true, force: true })
+        await rm(getLegacySiblingProjectVoiceoverDirectory(normalizedProjectId, projectsRoot), { recursive: true, force: true })
       }
       break
     } catch (error) {

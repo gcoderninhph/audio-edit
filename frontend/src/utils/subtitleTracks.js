@@ -9,6 +9,7 @@ const BUILTIN_SUBTITLE_LANGUAGE_OPTIONS = Object.freeze([
 
 export const DEFAULT_SUBTITLE_LANGUAGE_KEY = 'original'
 export const DEFAULT_TRANSLATION_LANGUAGE_KEY = 'vietnamese'
+export const DEFAULT_VOICEOVER_LANGUAGE_KEY = DEFAULT_TRANSLATION_LANGUAGE_KEY
 
 const LANGUAGE_KEY_ALIASES = BUILTIN_SUBTITLE_LANGUAGE_OPTIONS.reduce((aliases, option) => {
   aliases.set(option.id, option.id)
@@ -77,6 +78,24 @@ export function getSubtitleLanguageLabel(languageKey) {
 
 export function isTranslatableSubtitleLanguage(languageKey) {
   return normalizeSubtitleLanguageKey(languageKey) !== DEFAULT_SUBTITLE_LANGUAGE_KEY
+}
+
+export function normalizeVoiceoverLanguageKey(languageKey) {
+  return normalizeSubtitleLanguageKey(languageKey, DEFAULT_VOICEOVER_LANGUAGE_KEY)
+}
+
+export function isVoiceoverSubtitleLanguageSupported(languageKey) {
+  return normalizeVoiceoverLanguageKey(languageKey) === DEFAULT_VOICEOVER_LANGUAGE_KEY
+}
+
+export function getVoiceoverTrackForLanguage(voiceoverTrack, activeLanguageKey) {
+  if (!voiceoverTrack) {
+    return null
+  }
+
+  return normalizeVoiceoverLanguageKey(voiceoverTrack.languageKey) === normalizeSubtitleLanguageKey(activeLanguageKey)
+    ? { ...voiceoverTrack, languageKey: normalizeVoiceoverLanguageKey(voiceoverTrack.languageKey) }
+    : null
 }
 
 export function normalizeSubtitleTracks(subtitleTracks = null, fallbackSubtitles = []) {

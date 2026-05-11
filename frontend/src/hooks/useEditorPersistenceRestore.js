@@ -8,6 +8,7 @@ import {
   materializeLocalProjectVoiceover,
   releaseVideoUrl,
 } from '../utils/projectStorage'
+import { normalizeVoiceoverLanguageKey } from '../utils/subtitleTracks'
 
 export function useEditorPersistenceRestore({
   performAutoSave,
@@ -60,6 +61,7 @@ export function useEditorPersistenceRestore({
     setVoiceoverTrack({
       duration: restoredVoiceover.duration || 0,
       fileName,
+      languageKey: restoredVoiceover.languageKey || data.voiceover_language_key || normalizeVoiceoverLanguageKey(),
       previewUrl: restoredVoiceover.previewUrl,
       startTime: 0,
     })

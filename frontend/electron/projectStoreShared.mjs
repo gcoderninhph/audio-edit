@@ -4,6 +4,7 @@ import path from 'node:path'
 
 const PROJECTS_DIR_NAME = 'projects'
 const PROJECT_METADATA_FILE = 'project.json'
+const PROJECT_VOICEOVERS_DIR_NAME = 'voiceovers'
 
 function getWorkspaceProjectsRoot() {
   return path.resolve(app.getAppPath(), '..', PROJECTS_DIR_NAME)
@@ -49,10 +50,14 @@ export async function ensureProjectsRoot(projectsRoot = getProjectsRoot()) {
 }
 
 export function getProjectDirectory(projectId, projectsRoot = getProjectsRoot()) {
-  return path.join(getProjectsRoot(), projectId)
+  return path.join(projectsRoot, projectId)
 }
 
 export function getProjectVoiceoverDirectory(projectId, projectsRoot = getProjectsRoot()) {
+  return path.join(getProjectDirectory(projectId, projectsRoot), PROJECT_VOICEOVERS_DIR_NAME)
+}
+
+export function getLegacySiblingProjectVoiceoverDirectory(projectId, projectsRoot = getProjectsRoot()) {
   return path.join(projectsRoot, `${projectId}-voiceover`)
 }
 
@@ -66,6 +71,10 @@ export function getProjectVideoPath(projectId, fileName, projectsRoot = getProje
 
 export function getProjectVoiceoverPath(projectId, fileName, projectsRoot = getProjectsRoot()) {
   return path.join(getProjectVoiceoverDirectory(projectId, projectsRoot), fileName)
+}
+
+export function getLegacySiblingProjectVoiceoverPath(projectId, fileName, projectsRoot = getProjectsRoot()) {
+  return path.join(getLegacySiblingProjectVoiceoverDirectory(projectId, projectsRoot), fileName)
 }
 
 export function getLegacyProjectVoiceoverPath(projectId, fileName, projectsRoot = getProjectsRoot()) {
@@ -91,7 +100,8 @@ export function buildStoredVideoName(originalName = '') {
 
 export function buildStoredVoiceoverName(originalName = '') {
   const extension = path.extname(originalName) || '.mp3'
-  return `voiceover${extension.toLowerCase()}`
+  const languageKey = String(arguments[1] || 'default').trim().toLowerCase().replace(/[^a-z0-9._-]+/g, '-') || 'default'
+  return `voiceover-${languageKey}${extension.toLowerCase()}`
 }
 
 export function toBuffer(bytes) {

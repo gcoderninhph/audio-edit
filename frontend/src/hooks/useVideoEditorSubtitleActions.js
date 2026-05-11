@@ -74,6 +74,7 @@ export function useVideoEditorSubtitleActions({
 
   const startVoiceover = useCallback(async () => {
     await runVoiceoverJob({
+      activeSubtitleLanguage,
       subtitles: voiceoverSubtitles,
       sessionIdRef,
       setIsGeneratingVoiceover,
@@ -81,7 +82,7 @@ export function useVideoEditorSubtitleActions({
       setLastVoiceoverAudioName,
       setVoiceoverTrack,
     })
-  }, [sessionIdRef, setIsGeneratingVoiceover, setLastVoiceoverAudioName, setVoiceoverProgress, setVoiceoverTrack, voiceoverSubtitles])
+  }, [activeSubtitleLanguage, sessionIdRef, setIsGeneratingVoiceover, setLastVoiceoverAudioName, setVoiceoverProgress, setVoiceoverTrack, voiceoverSubtitles])
 
   const updateSubtitle = useCallback((id, newText) => {
     pushState(getCurrentSnapshot())
