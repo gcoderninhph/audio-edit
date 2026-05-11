@@ -24,6 +24,12 @@ contextBridge.exposeInMainWorld('desktopBridge', {
       }
     },
   },
+  exportOutput: {
+    getDefaultDirectory: () => ipcRenderer.invoke('export-output:get-default-directory'),
+    chooseDirectory: () => ipcRenderer.invoke('export-output:choose-directory'),
+    saveBytes: (payload) => ipcRenderer.invoke('export-output:save-bytes', payload),
+    revealFile: (filePath) => ipcRenderer.invoke('export-output:reveal-file', filePath),
+  },
   systemResources: {
     getSubtitleFont: () => ipcRenderer.invoke('system-resources:get-subtitle-font'),
   },

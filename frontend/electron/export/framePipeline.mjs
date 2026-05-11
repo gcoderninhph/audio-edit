@@ -237,9 +237,8 @@ function buildChunkArgs({ mergedPath, chunk, chunkOverlayAssets, workerPlan, fra
   ]
 }
 
-async function concatFrameChunks({ sender, emitLog, emitProgress, jobDirectory, jobId, chunkPaths }) {
+async function concatFrameChunks({ sender, emitLog, emitProgress, jobDirectory, jobId, chunkPaths, outputPath }) {
   const manifestPath = path.join(jobDirectory, 'frame-chunks.txt')
-  const outputPath = path.join(jobDirectory, 'output.mp4')
   const manifestContent = `${chunkPaths.map((chunkPath) => `file '${escapeConcatPath(chunkPath)}'`).join('\n')}\n`
 
   await writeFile(manifestPath, manifestContent, 'utf8')
@@ -279,6 +278,7 @@ export async function frameMergedVideo({
   jobId,
   jobDirectory,
   mergedPath,
+  outputPath,
   exportQualityProfileId,
   keptScenes,
   framePreset,
@@ -388,13 +388,14 @@ export async function frameMergedVideo({
     emitAggregateProgress({ force: true })
   })
 
-  const outputPath = await concatFrameChunks({
+  const finalOutputPath = await concatFrameChunks({
     sender,
     emitLog,
     emitProgress,
     jobDirectory,
     jobId,
     chunkPaths,
+    outputPath,
   })
 
   emitProgress(sender, jobId, {
@@ -405,11 +406,11 @@ export async function frameMergedVideo({
   })
   emitLog(sender, jobId, 'framing', 'Native chunked frame encode completed', 'info', {}, {
     chunkCount: chunks.length,
-    outputPath,
+    outputPath: finalOutputPath,
   })
 
   return {
-    outputPath,
+    outputPath: finalOutputPath,
     encoderPlan,
   }
 }

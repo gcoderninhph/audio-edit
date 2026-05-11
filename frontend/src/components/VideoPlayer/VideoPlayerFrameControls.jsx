@@ -12,14 +12,11 @@ import {
   isVideoFadeFrameBackground,
 } from '../../utils/frameComposer'
 import {
-  EXPORT_QUALITY_PROFILE_OPTIONS,
-  getExportQualityProfileById,
-} from '../../utils/exportQualityProfile'
-import {
   DEFAULT_SUBTITLE_SETTINGS,
   normalizeSubtitleSettings,
 } from '../../utils/subtitleRenderModel'
 import DeveloperLocator from '../DeveloperLocator/DeveloperLocator'
+import VideoPlayerExportControls from './VideoPlayerExportControls'
 import VideoPlayerSubtitleControls from './VideoPlayerSubtitleControls'
 import './VideoPlayerFrameControls.css'
 
@@ -36,6 +33,10 @@ export default function VideoPlayerFrameControls({
   onFramePresetChange,
   exportQualityProfileId,
   onExportQualityProfileChange,
+  exportFileName,
+  onExportFileNameChange,
+  exportOutputDirectory,
+  onChooseExportOutputDirectory,
   frameBackground,
   onFrameBackgroundChange,
   subtitleSettings,
@@ -49,7 +50,6 @@ export default function VideoPlayerFrameControls({
 }) {
   const backgroundInputRef = useRef(null)
   const activeFramePreset = getFramePresetById(framePresetId)
-  const activeExportQualityProfile = getExportQualityProfileById(exportQualityProfileId)
   const fadePreset = getVideoFadePresetById(frameBackground?.presetId)
   const isVideoFadeActive = isVideoFadeFrameBackground(frameBackground)
   const isImageActive = isImageFrameBackground(frameBackground)
@@ -58,6 +58,7 @@ export default function VideoPlayerFrameControls({
   const activeBackgroundLabel = getFrameBackgroundLabel(frameBackground)
   const selectedColorValue = selectedColor?.value || DEFAULT_FRAME_BACKGROUND
   const isFrameSectionVisible = !visibleSection || visibleSection === 'frame'
+  const isExportSectionVisible = visibleSection === 'export'
   const isBackgroundSectionVisible = !visibleSection || visibleSection === 'background'
   const isAudioSectionVisible = visibleSection === 'audio'
   const isSubtitleSectionVisible = visibleSection === 'subtitle'
@@ -66,6 +67,8 @@ export default function VideoPlayerFrameControls({
   const voiceoverVolumePercent = Math.round((voiceoverVolume || 0) * 100)
   const controlsKicker = visibleSection === 'background'
     ? 'Background'
+    : visibleSection === 'export'
+      ? 'Export'
     : visibleSection === 'subtitle'
       ? 'Subtitles'
     : visibleSection === 'audio'
@@ -73,18 +76,22 @@ export default function VideoPlayerFrameControls({
       : 'Frame'
   const controlsTitle = visibleSection === 'background'
     ? 'Video background settings'
+    : visibleSection === 'export'
+      ? 'Export output settings'
     : visibleSection === 'subtitle'
       ? 'Preview and export subtitle settings'
     : visibleSection === 'audio'
       ? 'Preview and export audio settings'
-      : 'Video frame and export settings'
+      : 'Video frame settings'
   const controlsSubtitle = visibleSection === 'background'
     ? 'Only the active background controls stay visible so the sidebar remains focused.'
+    : visibleSection === 'export'
+      ? 'Choose the file size profile, local output folder, and final export file name before rendering.'
     : visibleSection === 'subtitle'
       ? 'Open this from the timeline subtitle track to adjust subtitle styling for both preview and export.'
     : visibleSection === 'audio'
       ? 'Adjust source video and voiceover levels separately. These values are used for both preview and export.'
-      : 'Choose the export ratio and how aggressively the final video should be compressed.'
+      : 'Keep the frame ratio controls close at hand without cluttering the preview area.'
 
   const handleChooseBackgroundImage = useCallback(() => {
     backgroundInputRef.current?.click()
@@ -121,7 +128,7 @@ export default function VideoPlayerFrameControls({
           <div className="video-frame-section-head">
             <div>
               <span className="video-frame-section-label">Export ratio</span>
-              <strong className="video-frame-section-value">{activeFramePreset.label} • {activeExportQualityProfile.label}</strong>
+              <strong className="video-frame-section-value">{activeFramePreset.label}</strong>
             </div>
             <span className="video-frame-section-caption">{FRAME_PRESET_COPY[activeFramePreset.id]}</span>
           </div>
@@ -140,29 +147,18 @@ export default function VideoPlayerFrameControls({
               </button>
             ))}
           </div>
-
-          <div className="video-frame-detail-panel dev-locator-host">
-            <DeveloperLocator code="panel.video-player.frame-controls.export-profile" title="Export Profile Control" />
-            <div>
-              <div className="video-frame-detail-title">Export quality</div>
-              <p className="video-frame-detail-copy">Reduce the final file size by using a more compressed export profile. Smaller files may soften fine detail.</p>
-            </div>
-            <div className="video-frame-field-row">
-              <label className="video-frame-field-label" htmlFor="export-quality-profile-select">Profile</label>
-              <select
-                id="export-quality-profile-select"
-                className="video-frame-field-select"
-                value={activeExportQualityProfile.id}
-                onChange={(event) => onExportQualityProfileChange?.(event.target.value)}
-              >
-                {EXPORT_QUALITY_PROFILE_OPTIONS.map((profile) => (
-                  <option key={profile.id} value={profile.id}>{profile.label}</option>
-                ))}
-              </select>
-            </div>
-            <div className="video-frame-image-note">{activeExportQualityProfile.helper}</div>
-          </div>
         </section>
+      )}
+
+      {isExportSectionVisible && (
+        <VideoPlayerExportControls
+          exportQualityProfileId={exportQualityProfileId}
+          onExportQualityProfileChange={onExportQualityProfileChange}
+          exportFileName={exportFileName}
+          onExportFileNameChange={onExportFileNameChange}
+          exportOutputDirectory={exportOutputDirectory}
+          onChooseExportOutputDirectory={onChooseExportOutputDirectory}
+        />
       )}
 
       {isBackgroundSectionVisible && (

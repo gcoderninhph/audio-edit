@@ -21,9 +21,15 @@ import {
   wait,
   writeProjectMetadata,
 } from './projectStoreShared.mjs'
+import { readProjectSubtitleTracks, writeProjectSubtitleTracks } from './projectSubtitleStore.mjs'
 import { DEFAULT_FRAME_BACKGROUND, DEFAULT_FRAME_PRESET_ID } from '../src/utils/frameComposer.js'
 import { DEFAULT_EXPORT_QUALITY_PROFILE_ID, normalizeExportQualityProfileId } from '../src/utils/exportQualityProfile.js'
 import { DEFAULT_SUBTITLE_SETTINGS, normalizeSubtitleSettings } from '../src/utils/subtitleRenderModel.js'
+import {
+  DEFAULT_SUBTITLE_LANGUAGE_KEY,
+  getOriginalSubtitles,
+  normalizeActiveSubtitleLanguage,
+} from '../src/utils/subtitleTracks.js'
 
 function buildProjectRecord(projectId, payload, existingRecord = null) {
   const hasTranscriptionJobId = Object.prototype.hasOwnProperty.call(payload, 'transcriptionJobId')
@@ -48,6 +54,11 @@ function buildProjectRecord(projectId, payload, existingRecord = null) {
     scenes: Array.isArray(payload.scenes) ? payload.scenes : existingRecord?.scenes ?? [],
     deleted_ids: Array.isArray(payload.deletedIds) ? payload.deletedIds : existingRecord?.deleted_ids ?? [],
     subtitles: Array.isArray(payload.subtitles) ? payload.subtitles : existingRecord?.subtitles ?? [],
+    subtitle_tracks: payload.subtitleTrackManifest ?? existingRecord?.subtitle_tracks ?? {},
+    active_subtitle_language: normalizeActiveSubtitleLanguage(
+      payload.activeSubtitleLanguage ?? existingRecord?.active_subtitle_language ?? DEFAULT_SUBTITLE_LANGUAGE_KEY,
+      payload.subtitleTrackManifest ?? existingRecord?.subtitle_tracks ?? null,
+    ),
     sensitivity: payload.sensitivity ?? existingRecord?.sensitivity ?? 2.5,
     transcription_job_id: hasTranscriptionJobId ? payload.transcriptionJobId : existingRecord?.transcription_job_id ?? null,
     translation_job_id: hasTranslationJobId ? payload.translationJobId : existingRecord?.translation_job_id ?? null,
@@ -143,7 +154,14 @@ async function saveVoiceoverFile(payload) {
 async function saveProject(payload) {
   const projectId = assertProjectId(payload?.sessionId)
   const existingRecord = await readProjectMetadata(projectId)
-  const nextRecord = buildProjectRecord(projectId, payload, existingRecord)
+  const subtitleTracks = payload?.subtitleTracks ?? existingRecord?.subtitle_tracks ?? payload?.subtitles ?? []
+  const subtitleTrackManifest = await writeProjectSubtitleTracks(projectId, subtitleTracks)
+  const nextRecord = buildProjectRecord(projectId, {
+    ...payload,
+    activeSubtitleLanguage: payload?.activeSubtitleLanguage ?? existingRecord?.active_subtitle_language ?? DEFAULT_SUBTITLE_LANGUAGE_KEY,
+    subtitleTrackManifest,
+    subtitles: getOriginalSubtitles(subtitleTracks),
+  }, existingRecord)
 
   await writeProjectMetadata(projectId, nextRecord)
 
@@ -204,7 +222,14 @@ async function getProject(projectId) {
     throw new Error('Project not found.')
   }
 
-  return projectRecord
+  const subtitleTracks = await readProjectSubtitleTracks(projectRecord)
+
+  return {
+    ...projectRecord,
+    active_subtitle_language: normalizeActiveSubtitleLanguage(projectRecord.active_subtitle_language, subtitleTracks),
+    subtitle_tracks: subtitleTracks,
+    subtitles: getOriginalSubtitles(subtitleTracks),
+  }
 }
 
 export async function resolveProjectVideoPath(projectId) {

@@ -1,5 +1,5 @@
 import { app } from 'electron'
-import { mkdir, readFile, rm, writeFile } from 'node:fs/promises'
+import { mkdir, rm, stat, writeFile } from 'node:fs/promises'
 import path from 'node:path'
 import { appendDebugLog } from '../debugLog.mjs'
 import { resolveProjectVideoPath } from '../projectStore.mjs'
@@ -11,6 +11,7 @@ import {
 } from '../../src/utils/exportAudioMix.js'
 import { describeFrameBackground, getFramePresetById, isImageFrameBackground, sanitizeFrameBackground } from '../../src/utils/frameComposer.js'
 import { renderNativeExportAudioTrack } from './exportAudioStage.mjs'
+import { resolveExportOutputTarget } from './exportOutputIpc.mjs'
 import { frameMergedVideo } from './framePipeline.mjs'
 import { runNativeFfmpeg } from './nativeFfmpeg.mjs'
 import { extractSceneSegments, mergeSceneSegments } from './scenePipeline.mjs'
@@ -236,6 +237,7 @@ async function runNativeExportJob(sender, payload = {}) {
   const framePreset = getFramePresetById(payload.frameSettings?.presetId)
   const frameBackground = sanitizeFrameBackground(payload.frameSettings?.backgroundColor)
   const exportQualityProfileId = payload.exportQualityProfileId || null
+  const outputTarget = resolveExportOutputTarget(payload.outputTarget, payload.source?.fileName || 'output.mp4')
   const keptScenes = Array.isArray(payload.keptScenes)
     ? payload.keptScenes
       .map((scene) => ({
@@ -267,6 +269,13 @@ async function runNativeExportJob(sender, payload = {}) {
     const { inputPath: voiceoverPath = '' } = payload.voiceover?.source
       ? await resolveInputPath(payload.voiceover.source, jobDirectory)
       : { inputPath: '' }
+    const needsAudioRemix = Boolean(voiceoverPath) && !isAudioMixMuted(normalizedAudioMix.voiceoverVolume)
+      || isAudioMixMuted(normalizedAudioMix.videoVolume)
+      || Math.abs(normalizedAudioMix.videoVolume - 1) > 0.001
+    const framedVideoPath = needsAudioRemix ? path.join(jobDirectory, 'framed-output.mp4') : outputTarget.filePath
+
+    await mkdir(outputTarget.directory, { recursive: true })
+
     const nativeFrameBackground = await writeFrameBackgroundAsset(jobDirectory, frameBackground)
     const overlayAssets = await writeOverlayAssets(jobDirectory, payload.subtitleOverlay)
     emitLog(sender, jobId, 'preparing', 'Resolved native export inputs', 'info', {
@@ -278,6 +287,7 @@ async function runNativeExportJob(sender, payload = {}) {
       frameBackground: describeFrameBackground(frameBackground),
       inputPath,
       overlayCount: overlayAssets.length,
+      outputPath: outputTarget.filePath,
       voiceoverPath: voiceoverPath || null,
     })
 
@@ -303,6 +313,7 @@ async function runNativeExportJob(sender, payload = {}) {
       jobId,
       jobDirectory,
       mergedPath,
+      outputPath: framedVideoPath,
       exportQualityProfileId,
       keptScenes,
       framePreset,
@@ -311,9 +322,6 @@ async function runNativeExportJob(sender, payload = {}) {
       emitLog,
       emitProgress,
     })
-    const needsAudioRemix = Boolean(voiceoverPath) && !isAudioMixMuted(normalizedAudioMix.voiceoverVolume)
-      || isAudioMixMuted(normalizedAudioMix.videoVolume)
-      || Math.abs(normalizedAudioMix.videoVolume - 1) > 0.001
     let finalOutputPath = outputPath
 
     if (needsAudioRemix) {
@@ -329,7 +337,7 @@ async function runNativeExportJob(sender, payload = {}) {
         normalizedAudioMix,
         timelineDurationSeconds,
       })
-      const remuxedOutputPath = path.join(jobDirectory, 'output-remuxed.mp4')
+      const remuxedOutputPath = outputTarget.filePath
 
       emitLog(sender, jobId, 'audio', 'Remux framed video with configured export audio', 'info', {
         percent: 99,
@@ -350,17 +358,17 @@ async function runNativeExportJob(sender, payload = {}) {
     }
 
     emitProgress(sender, jobId, {
-      phase: 'reading',
+      phase: 'saving',
       percent: 99,
       stagePercent: 0,
-      detail: 'Đang đọc file export native...',
+      detail: `Saving export to ${outputTarget.fileName}...`,
     })
 
-    const outputBytes = await readFile(finalOutputPath)
-    emitLog(sender, jobId, 'done', `Native export completed (${formatMegabytes(outputBytes.byteLength)})`, 'info', {
+    const outputStats = await stat(finalOutputPath)
+    emitLog(sender, jobId, 'done', `Native export completed (${formatMegabytes(outputStats.size)})`, 'info', {
       percent: 100,
       stagePercent: 100,
-      detail: 'Hoàn thành native fast export',
+      detail: `Saved native export to ${outputTarget.fileName}`,
     }, {
       encoder: encoderPlan.label,
       outputPath: finalOutputPath,
@@ -368,9 +376,10 @@ async function runNativeExportJob(sender, payload = {}) {
 
     return {
       backend: 'native-fast',
-      bytes: outputBytes,
+      fileName: outputTarget.fileName,
+      filePath: finalOutputPath,
       mimeType: 'video/mp4',
-      size: outputBytes.byteLength,
+      size: outputStats.size,
     }
   } catch (error) {
     emitLog(sender, jobId, 'error', error.message, 'error', {}, {

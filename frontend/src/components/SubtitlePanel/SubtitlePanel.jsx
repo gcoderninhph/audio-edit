@@ -1,5 +1,6 @@
 import { useState, useEffect, useRef, useMemo } from 'react';
 import DeveloperLocator from '../DeveloperLocator/DeveloperLocator';
+import { DEFAULT_SUBTITLE_LANGUAGE_KEY } from '../../utils/subtitleTracks';
 import './SubtitlePanel.css';
 
 function formatTime(seconds) {
@@ -14,6 +15,9 @@ export default function SubtitlePanel({
   currentTime,
   onUpdateSubtitle,
   onSeekToTime,
+  activeSubtitleLanguage,
+  onActiveSubtitleLanguageChange,
+  subtitleLanguageOptions,
   // Transcription
   onStartTranscription,
   isTranscribing,
@@ -30,15 +34,21 @@ export default function SubtitlePanel({
   const [editingId, setEditingId] = useState(null);
   const [editingText, setEditingText] = useState('');
   const [toolsExpanded, setToolsExpanded] = useState(false);
-  const [targetLang, setTargetLang] = useState('Vietnamese');
   const listRef = useRef(null);
   const activeItemRef = useRef(null);
 
-  const hasSubs = subtitles && subtitles.length > 0;
+  const hasVisibleSubs = subtitles && subtitles.length > 0;
+  const selectedLanguageOption = subtitleLanguageOptions?.find((option) => option.id === activeSubtitleLanguage)
+    || subtitleLanguageOptions?.find((option) => option.id === DEFAULT_SUBTITLE_LANGUAGE_KEY)
+    || { id: DEFAULT_SUBTITLE_LANGUAGE_KEY, label: 'Original', hasSubtitles: false, translatable: false };
+  const hasOriginalSubtitles = Boolean(subtitleLanguageOptions?.find((option) => option.id === DEFAULT_SUBTITLE_LANGUAGE_KEY)?.hasSubtitles);
+  const isOriginalLanguageSelected = selectedLanguageOption.id === DEFAULT_SUBTITLE_LANGUAGE_KEY;
+  const canTranslateSelectedLanguage = hasOriginalSubtitles && selectedLanguageOption.translatable;
+  const missingSelectedTranslation = !hasVisibleSubs && hasOriginalSubtitles && !isOriginalLanguageSelected;
 
   // Find the currently active subtitle index based on currentTime
   const activeSubIndex = useMemo(() => {
-    if (!hasSubs) return -1;
+    if (!hasVisibleSubs) return -1;
     for (let i = subtitles.length - 1; i >= 0; i--) {
       if (currentTime >= subtitles[i].start) {
         if (currentTime <= subtitles[i].end) return i;
@@ -46,7 +56,7 @@ export default function SubtitlePanel({
       }
     }
     return 0;
-  }, [subtitles, currentTime, hasSubs]);
+  }, [subtitles, currentTime, hasVisibleSubs]);
 
   // Auto-scroll logic
   useEffect(() => {
@@ -135,12 +145,12 @@ export default function SubtitlePanel({
   }
 
   // ── Tools section (create / translate) ──
-  const showToolsAlways = !hasSubs; // Always show when no subs exist
+  const showToolsAlways = !hasVisibleSubs;
 
   const toolsSection = (
     <div className={`subtitle-tools ${showToolsAlways || toolsExpanded ? 'expanded' : ''}`}>
       {/* Header toggle (only when subs exist) */}
-      {hasSubs && (
+      {hasVisibleSubs && (
         <button
           className="subtitle-tools-toggle"
           onClick={() => setToolsExpanded(!toolsExpanded)}
@@ -157,36 +167,53 @@ export default function SubtitlePanel({
             className="btn btn-primary btn-sm subtitle-tool-btn"
             onClick={onStartTranscription}
           >
-            {hasSubs ? '🔄 Recreate subtitles (original)' : '📝 Generate subtitles automatically'}
+            {hasOriginalSubtitles ? '🔄 Recreate subtitles (original)' : '📝 Generate subtitles automatically'}
           </button>
 
-          {hasSubs && (
+          {hasOriginalSubtitles && (
             <>
-              <div className="subtitle-translate-row">
-                <select
-                  value={targetLang}
-                  onChange={e => setTargetLang(e.target.value)}
-                  className="subtitle-lang-select"
-                >
-                  <option value="Vietnamese">Vietnamese</option>
-                  <option value="English">English</option>
-                  <option value="Japanese">Japanese</option>
-                  <option value="Korean">Korean</option>
-                  <option value="Chinese">Chinese</option>
-                </select>
-                <button
-                  className="btn btn-primary btn-sm"
-                  style={{ background: '#3b82f6' }}
-                  onClick={() => onStartTranslation(targetLang)}
-                >
-                  🌐 Translate
-                </button>
+              <div className="subtitle-language-row">
+                <label className="subtitle-tools-label" htmlFor="subtitle-language-select">Display language</label>
+                <div className="subtitle-input-button-group">
+                  <select
+                    id="subtitle-language-select"
+                    value={activeSubtitleLanguage}
+                    onChange={(event) => onActiveSubtitleLanguageChange?.(event.target.value)}
+                    className="subtitle-lang-select subtitle-input-button-group-input"
+                  >
+                    {subtitleLanguageOptions?.map((option) => (
+                      <option key={option.id} value={option.id}>
+                        {option.label}{option.translatable && !option.hasSubtitles ? ' (not translated)' : ''}
+                      </option>
+                    ))}
+                  </select>
+
+                  <button
+                    className="btn btn-primary btn-sm subtitle-input-button-group-action"
+                    style={{ background: '#3b82f6' }}
+                    disabled={!canTranslateSelectedLanguage}
+                    onClick={() => onStartTranslation(activeSubtitleLanguage)}
+                  >
+                    {selectedLanguageOption.hasSubtitles ? '🌐 Retranslate' : '🌐 Translate'}
+                  </button>
+                </div>
               </div>
+
+              <div className="subtitle-tool-note">
+                Translation always starts from the original subtitle track, so the generated subtitles from the video are never overwritten.
+              </div>
+
+              {missingSelectedTranslation && (
+                <div className="subtitle-tool-note subtitle-tool-warning">
+                  {selectedLanguageOption.label} has not been translated yet. Press Translate to create that language from the original subtitles.
+                </div>
+              )}
 
               <button
                 className="btn btn-primary btn-sm subtitle-tool-btn subtitle-voiceover-btn"
                 style={{ background: '#f59e0b' }}
                 onClick={onStartVoiceover}
+                disabled={!hasVisibleSubs}
               >
                 🔊 Generate voiceover
               </button>
@@ -203,18 +230,27 @@ export default function SubtitlePanel({
     </div>
   );
 
-  // ── No subtitles yet ──
-  if (!hasSubs) {
+  // ── No subtitles or selected translation yet ──
+  if (!hasVisibleSubs) {
     return (
       <div className="subtitle-panel-container dev-locator-host">
-        <DeveloperLocator code="panel.subtitle.empty" title="Subtitle Empty Panel" />
+        <DeveloperLocator code={missingSelectedTranslation ? 'panel.subtitle.language-empty' : 'panel.subtitle.empty'} title="Subtitle Empty Panel" />
+        {hasOriginalSubtitles && (
+          <div className="subtitle-panel-header">
+            <span className="subtitle-panel-title">Subtitles ({selectedLanguageOption.label} · 0 lines)</span>
+          </div>
+        )}
+        {toolsSection}
         <div className="subtitle-panel-empty-inner">
           <div className="empty-icon">📝</div>
-          <div style={{ fontWeight: 600, marginBottom: '4px' }}>No subtitles yet</div>
-          <div style={{ fontSize: '0.75rem', opacity: 0.6, marginBottom: '16px' }}>
-            Generate subtitles automatically from the audio with AI
+          <div style={{ fontWeight: 600, marginBottom: '4px' }}>
+            {missingSelectedTranslation ? `No ${selectedLanguageOption.label} subtitles saved yet` : 'No subtitles yet'}
           </div>
-          {toolsSection}
+          <div className="subtitle-empty-hint">
+            {missingSelectedTranslation
+              ? 'Choose Translate to create this language from the original subtitle track.'
+              : 'Generate subtitles automatically from the audio with AI.'}
+          </div>
         </div>
       </div>
     );
@@ -225,7 +261,7 @@ export default function SubtitlePanel({
     <div className="subtitle-panel-container dev-locator-host">
       <DeveloperLocator code="panel.subtitle.list" title="Subtitle Panel" />
       <div className="subtitle-panel-header">
-        <span className="subtitle-panel-title">Subtitles ({subtitles.length} lines)</span>
+        <span className="subtitle-panel-title">Subtitles ({selectedLanguageOption.label} · {subtitles.length} lines)</span>
       </div>
 
       {/* Collapsible tools */}

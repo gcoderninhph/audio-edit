@@ -18,6 +18,7 @@ import './VideoPlayer.css';
 
 const FRAME_SIDEBAR_SECTIONS = Object.freeze({
   FRAME: 'frame',
+  EXPORT: 'export',
   BACKGROUND: 'background',
   AUDIO: 'audio',
   SUBTITLE: 'subtitle',
@@ -39,6 +40,10 @@ export default function VideoPlayer({
   onFramePresetChange,
   exportQualityProfileId,
   onExportQualityProfileChange,
+  exportFileName,
+  onExportFileNameChange,
+  exportOutputDirectory,
+  onChooseExportOutputDirectory,
   frameBackground,
   onFrameBackgroundChange,
   subtitleSettings,
@@ -80,7 +85,11 @@ export default function VideoPlayer({
   const frameBackgroundLabel = useMemo(() => getFrameBackgroundLabel(frameBackground), [frameBackground]);
   const sidebarTitle = useMemo(() => {
     if (activeSidebarSection === FRAME_SIDEBAR_SECTIONS.FRAME) {
-      return 'Adjust frame and export size';
+      return 'Adjust video frame';
+    }
+
+    if (activeSidebarSection === FRAME_SIDEBAR_SECTIONS.EXPORT) {
+      return 'Adjust export output';
     }
 
     if (activeSidebarSection === FRAME_SIDEBAR_SECTIONS.BACKGROUND) {
@@ -342,6 +351,10 @@ export default function VideoPlayer({
           onFramePresetChange={onFramePresetChange}
           exportQualityProfileId={exportQualityProfileId}
           onExportQualityProfileChange={onExportQualityProfileChange}
+          exportFileName={exportFileName}
+          onExportFileNameChange={onExportFileNameChange}
+          exportOutputDirectory={exportOutputDirectory}
+          onChooseExportOutputDirectory={onChooseExportOutputDirectory}
           frameBackground={frameBackground}
           onFrameBackgroundChange={onFrameBackgroundChange}
           subtitleSettings={subtitleSettings}

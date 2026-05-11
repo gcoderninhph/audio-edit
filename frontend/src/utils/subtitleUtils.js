@@ -1,4 +1,5 @@
 import { apiFetch } from './runtimeConfig';
+import { DEFAULT_TRANSLATION_LANGUAGE_KEY, normalizeSubtitleLanguageKey } from './subtitleTracks';
 
 function normalizeTranslationErrorMessage(message, fallbackMessage) {
   const normalizedMessage = String(message || '').trim();
@@ -83,6 +84,37 @@ export function srtToJson(srtText) {
     }
   }
   return subtitles;
+}
+
+export function buildTranslationJobId(languageKey, requestId, outputFileName) {
+  return `${normalizeSubtitleLanguageKey(languageKey)}|${requestId}|${outputFileName}`
+}
+
+export function parseTranslationJobId(jobId) {
+  const parts = String(jobId || '').split('|')
+  if (parts.length >= 3) {
+    const [languageKey, requestId, ...outputFileNameParts] = parts
+    return {
+      languageKey: normalizeSubtitleLanguageKey(languageKey),
+      outputFileName: outputFileNameParts.join('|'),
+      requestId,
+    }
+  }
+
+  if (parts.length === 2) {
+    const [requestId, outputFileName] = parts
+    return {
+      languageKey: DEFAULT_TRANSLATION_LANGUAGE_KEY,
+      outputFileName,
+      requestId,
+    }
+  }
+
+  return {
+    languageKey: DEFAULT_TRANSLATION_LANGUAGE_KEY,
+    outputFileName: '',
+    requestId: '',
+  }
 }
 
 // Quản lý tiến trình dịch với LLM-Subtrans

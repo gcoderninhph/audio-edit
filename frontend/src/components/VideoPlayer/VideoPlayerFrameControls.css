@@ -240,6 +240,22 @@
   color: #0f172a;
 }
 
+.video-frame-field-input {
+  min-height: 40px;
+  padding: 0 12px;
+  border-radius: 12px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  background: rgba(255, 255, 255, 0.04);
+  color: var(--text-primary);
+  font-size: 0.8rem;
+  font-weight: 700;
+  outline: none;
+}
+
+.video-frame-field-input::placeholder {
+  color: var(--text-muted);
+}
+
 .video-frame-upload-btn {
   min-height: 42px;
   padding: 0 14px;

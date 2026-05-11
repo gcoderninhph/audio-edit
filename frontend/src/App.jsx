@@ -66,6 +66,10 @@ function App() {
     setActivePlayerSidebarSection('subtitle');
   }, []);
 
+  const handleOpenExportConfig = useCallback(() => {
+    setActivePlayerSidebarSection('export');
+  }, []);
+
   const handleOpenProject = useCallback((sessionId) => {
     setActivePlayerSidebarSection(null);
 
@@ -213,8 +217,12 @@ function App() {
               onDurationChange={editor.setVideoDuration}
               framePresetId={editor.framePresetId}
               onFramePresetChange={editor.setFramePresetId}
-              exportQualityProfileId={editor.exportQualityProfileId}
-              onExportQualityProfileChange={editor.setExportQualityProfileId}
+              exportQualityProfileId={editor.exportConfig.qualityProfileId}
+              onExportQualityProfileChange={editor.exportConfig.setQualityProfileId}
+              exportFileName={editor.exportConfig.fileName}
+              onExportFileNameChange={editor.exportConfig.setFileName}
+              exportOutputDirectory={editor.exportConfig.outputDirectory}
+              onChooseExportOutputDirectory={editor.exportConfig.chooseOutputDirectory}
               frameBackground={editor.frameBackground}
               onFrameBackgroundChange={editor.setFrameBackground}
               subtitleSettings={editor.subtitleSettings}
@@ -280,6 +288,9 @@ function App() {
                 currentTime={editor.currentTime}
                 onUpdateSubtitle={editor.updateSubtitle}
                 onSeekToTime={handleSeek}
+                activeSubtitleLanguage={editor.activeSubtitleLanguage}
+                onActiveSubtitleLanguageChange={editor.setActiveSubtitleLanguage}
+                subtitleLanguageOptions={editor.subtitleLanguageOptions}
                 onStartTranscription={editor.startTranscription}
                 isTranscribing={editor.isTranscribing}
                 transcribeProgress={editor.transcribeProgress}
@@ -322,16 +333,13 @@ function App() {
               duration={editor.videoDuration}
               isExporting={editor.isExporting}
               exportProgress={editor.exportProgress}
-              exportUrl={editor.exportUrl}
-              exportSize={editor.exportSize}
+              exportResult={editor.exportResult}
               videoName={editor.videoName}
               frameSummary={editor.frameSummary}
               frameBackgroundLabel={editor.frameBackgroundLabel}
+              exportConfig={editor.exportConfig}
+              onOpenExportConfig={handleOpenExportConfig}
               onExport={editor.startExport}
-              onLoadHistoryList={editor.loadHistoryList}
-              onLoadSession={editor.loadSession}
-              onDeleteSession={editor.deleteSession}
-              historyList={editor.historyList}
             />
           </div>
         </div>

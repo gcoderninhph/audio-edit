@@ -2,22 +2,35 @@ import { getTranscriptionJobSnapshot, resumeTranscription } from '../utils/audio
 import {
   downloadTranslatedSubtitles,
   getTranslationJobSnapshot,
+  parseTranslationJobId,
   resumeTranslation,
 } from '../utils/subtitleUtils';
+import {
+  DEFAULT_SUBTITLE_LANGUAGE_KEY,
+  normalizeActiveSubtitleLanguage,
+  normalizeSubtitleTracks,
+  setSubtitleTrackSubtitles,
+} from '../utils/subtitleTracks';
 
 function getSavedDeletedIds(data) {
   return Array.from(new Set(data.deleted_ids || []));
+}
+
+function getSavedSubtitleTracks(data) {
+  return normalizeSubtitleTracks(data.subtitle_tracks || data.subtitles || [])
 }
 
 export async function restoreSavedTranscriptionJob(data, dependencies) {
   if (!data.transcription_job_id) return;
 
   const deletedIds = getSavedDeletedIds(data);
+  const savedSubtitleTracks = getSavedSubtitleTracks(data)
   const {
     performAutoSave,
     sessionIdRef,
     setIsTranscribing,
-    setSubtitles,
+    setActiveSubtitleLanguage,
+    setSubtitleTracks,
     setTranscribeProgress,
     setTranscriptionJobId,
   } = dependencies;
@@ -34,16 +47,32 @@ export async function restoreSavedTranscriptionJob(data, dependencies) {
       setTranscriptionJobId(null);
       setIsTranscribing(false);
       setTranscribeProgress(null);
-      void performAutoSave(data.scenes || [], deletedIds, data.subtitles || [], null, data.translation_job_id);
+      void performAutoSave({
+        activeSubtitleLanguageData: data.active_subtitle_language || DEFAULT_SUBTITLE_LANGUAGE_KEY,
+        deletedIdsData: deletedIds,
+        scenesData: data.scenes || [],
+        subtitleTracksData: savedSubtitleTracks,
+        transJobId: null,
+        translJobId: data.translation_job_id,
+      });
       return;
     }
 
     if (snapshot.state === 'finished') {
-      setSubtitles(snapshot.subtitles);
+      const nextSubtitleTracks = setSubtitleTrackSubtitles(savedSubtitleTracks, DEFAULT_SUBTITLE_LANGUAGE_KEY, snapshot.subtitles)
+      setSubtitleTracks(nextSubtitleTracks);
+      setActiveSubtitleLanguage(DEFAULT_SUBTITLE_LANGUAGE_KEY);
       setTranscriptionJobId(null);
       setIsTranscribing(false);
       setTranscribeProgress(null);
-      void performAutoSave(data.scenes || [], deletedIds, snapshot.subtitles, null, data.translation_job_id);
+      void performAutoSave({
+        activeSubtitleLanguageData: DEFAULT_SUBTITLE_LANGUAGE_KEY,
+        deletedIdsData: deletedIds,
+        scenesData: data.scenes || [],
+        subtitleTracksData: nextSubtitleTracks,
+        transJobId: null,
+        translJobId: data.translation_job_id,
+      });
       return;
     }
 
@@ -54,11 +83,20 @@ export async function restoreSavedTranscriptionJob(data, dependencies) {
     const nextSubtitles = await resumeTranscription(data.transcription_job_id, updateTranscribeProgress, { initialDelayMs: 0 });
     if (sessionIdRef.current !== data.id) return;
 
-    setSubtitles(nextSubtitles);
+    const nextSubtitleTracks = setSubtitleTrackSubtitles(savedSubtitleTracks, DEFAULT_SUBTITLE_LANGUAGE_KEY, nextSubtitles)
+    setSubtitleTracks(nextSubtitleTracks);
+    setActiveSubtitleLanguage(DEFAULT_SUBTITLE_LANGUAGE_KEY);
     setTranscriptionJobId(null);
     setIsTranscribing(false);
     setTranscribeProgress(null);
-    void performAutoSave(data.scenes || [], deletedIds, nextSubtitles, null, data.translation_job_id);
+    void performAutoSave({
+      activeSubtitleLanguageData: DEFAULT_SUBTITLE_LANGUAGE_KEY,
+      deletedIdsData: deletedIds,
+      scenesData: data.scenes || [],
+      subtitleTracksData: nextSubtitleTracks,
+      transJobId: null,
+      translJobId: data.translation_job_id,
+    });
   } catch (error) {
     if (sessionIdRef.current !== data.id) return;
 
@@ -66,20 +104,30 @@ export async function restoreSavedTranscriptionJob(data, dependencies) {
     setTranscriptionJobId(null);
     setIsTranscribing(false);
     setTranscribeProgress(null);
-    void performAutoSave(data.scenes || [], deletedIds, data.subtitles || [], null, data.translation_job_id);
+    void performAutoSave({
+      activeSubtitleLanguageData: data.active_subtitle_language || DEFAULT_SUBTITLE_LANGUAGE_KEY,
+      deletedIdsData: deletedIds,
+      scenesData: data.scenes || [],
+      subtitleTracksData: savedSubtitleTracks,
+      transJobId: null,
+      translJobId: data.translation_job_id,
+    });
   }
 }
 
 export async function restoreSavedTranslationJob(data, dependencies) {
   if (!data.translation_job_id) return;
 
-  const [requestId, outputFileName] = data.translation_job_id.split('|');
+  const { languageKey, outputFileName, requestId } = parseTranslationJobId(data.translation_job_id)
   const deletedIds = getSavedDeletedIds(data);
+  const savedSubtitleTracks = getSavedSubtitleTracks(data)
+  const targetLanguageKey = normalizeActiveSubtitleLanguage(languageKey || data.active_subtitle_language, savedSubtitleTracks)
   const {
     performAutoSave,
     sessionIdRef,
     setIsTranslating,
-    setSubtitles,
+    setActiveSubtitleLanguage,
+    setSubtitleTracks,
     setTranslateProgress,
     setTranslationJobId,
   } = dependencies;
@@ -89,7 +137,14 @@ export async function restoreSavedTranslationJob(data, dependencies) {
   };
 
   if (!requestId || !outputFileName) {
-    void performAutoSave(data.scenes || [], deletedIds, data.subtitles || [], data.transcription_job_id, null);
+    void performAutoSave({
+      activeSubtitleLanguageData: data.active_subtitle_language || DEFAULT_SUBTITLE_LANGUAGE_KEY,
+      deletedIdsData: deletedIds,
+      scenesData: data.scenes || [],
+      subtitleTracksData: savedSubtitleTracks,
+      transJobId: data.transcription_job_id,
+      translJobId: null,
+    });
     return;
   }
 
@@ -101,7 +156,14 @@ export async function restoreSavedTranslationJob(data, dependencies) {
       setTranslationJobId(null);
       setIsTranslating(false);
       setTranslateProgress(null);
-      void performAutoSave(data.scenes || [], deletedIds, data.subtitles || [], data.transcription_job_id, null);
+      void performAutoSave({
+        activeSubtitleLanguageData: data.active_subtitle_language || DEFAULT_SUBTITLE_LANGUAGE_KEY,
+        deletedIdsData: deletedIds,
+        scenesData: data.scenes || [],
+        subtitleTracksData: savedSubtitleTracks,
+        transJobId: data.transcription_job_id,
+        translJobId: null,
+      });
       return;
     }
 
@@ -110,11 +172,20 @@ export async function restoreSavedTranslationJob(data, dependencies) {
       const nextSubtitles = await downloadTranslatedSubtitles(requestId, outputFileName);
       if (sessionIdRef.current !== data.id) return;
 
-      setSubtitles(nextSubtitles);
+      const nextSubtitleTracks = setSubtitleTrackSubtitles(savedSubtitleTracks, targetLanguageKey, nextSubtitles)
+      setSubtitleTracks(nextSubtitleTracks);
+      setActiveSubtitleLanguage(targetLanguageKey);
       setTranslationJobId(null);
       setIsTranslating(false);
       setTranslateProgress(null);
-      void performAutoSave(data.scenes || [], deletedIds, nextSubtitles, data.transcription_job_id, null);
+      void performAutoSave({
+        activeSubtitleLanguageData: targetLanguageKey,
+        deletedIdsData: deletedIds,
+        scenesData: data.scenes || [],
+        subtitleTracksData: nextSubtitleTracks,
+        transJobId: data.transcription_job_id,
+        translJobId: null,
+      });
       return;
     }
 
@@ -125,11 +196,20 @@ export async function restoreSavedTranslationJob(data, dependencies) {
     const nextSubtitles = await resumeTranslation(requestId, outputFileName, updateTranslateProgress, { initialDelayMs: 0 });
     if (sessionIdRef.current !== data.id) return;
 
-    setSubtitles(nextSubtitles);
+    const nextSubtitleTracks = setSubtitleTrackSubtitles(savedSubtitleTracks, targetLanguageKey, nextSubtitles)
+    setSubtitleTracks(nextSubtitleTracks);
+    setActiveSubtitleLanguage(targetLanguageKey);
     setTranslationJobId(null);
     setIsTranslating(false);
     setTranslateProgress(null);
-    void performAutoSave(data.scenes || [], deletedIds, nextSubtitles, data.transcription_job_id, null);
+    void performAutoSave({
+      activeSubtitleLanguageData: targetLanguageKey,
+      deletedIdsData: deletedIds,
+      scenesData: data.scenes || [],
+      subtitleTracksData: nextSubtitleTracks,
+      transJobId: data.transcription_job_id,
+      translJobId: null,
+    });
   } catch (error) {
     if (sessionIdRef.current !== data.id) return;
 
@@ -137,6 +217,13 @@ export async function restoreSavedTranslationJob(data, dependencies) {
     setTranslationJobId(null);
     setIsTranslating(false);
     setTranslateProgress(null);
-    void performAutoSave(data.scenes || [], deletedIds, data.subtitles || [], data.transcription_job_id, null);
+    void performAutoSave({
+      activeSubtitleLanguageData: data.active_subtitle_language || DEFAULT_SUBTITLE_LANGUAGE_KEY,
+      deletedIdsData: deletedIds,
+      scenesData: data.scenes || [],
+      subtitleTracksData: savedSubtitleTracks,
+      transJobId: data.transcription_job_id,
+      translJobId: null,
+    });
   }
 }

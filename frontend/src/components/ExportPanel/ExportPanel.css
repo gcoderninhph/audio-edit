@@ -32,6 +32,22 @@
   color: var(--text-muted);
 }
 
+.export-quality-helper {
+  margin-top: 6px;
+  font-size: 0.72rem;
+  color: var(--text-muted);
+}
+
+.export-target-helper {
+  margin-top: 4px;
+  font-size: 0.72rem;
+  color: var(--text-secondary);
+}
+
+.export-quality-helper strong {
+  color: var(--text-secondary);
+}
+
 .export-frame-info strong {
   color: var(--text-secondary);
 }
@@ -41,6 +57,39 @@
   gap: 8px;
   flex-wrap: wrap;
   align-items: center;
+}
+
+.export-quality-control {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 10px;
+  border-radius: var(--radius-md);
+  border: 1px solid var(--border-color);
+  background: var(--bg-secondary);
+}
+
+.export-quality-summary {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.export-quality-label {
+  font-size: 0.72rem;
+  font-weight: 600;
+  color: var(--text-secondary);
+  white-space: nowrap;
+}
+
+.export-quality-value {
+  font-size: 0.8rem;
+  font-weight: 800;
+  color: var(--text-primary);
+}
+
+.export-config-btn {
+  white-space: nowrap;
 }
 
 .export-btn {
@@ -190,6 +239,13 @@
   color: var(--text-secondary);
 }
 
+.export-result-path {
+  max-width: min(62vw, 560px);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 .download-btn {
   background: var(--success);
   color: white;
@@ -208,62 +264,6 @@
   background: #16a34a;
   box-shadow: 0 0 15px var(--success-glow);
   transform: translateY(-1px);
-}
-
-/* History */
-.history-section {
-  margin-top: 20px;
-  padding-top: 20px;
-  border-top: 1px solid var(--border-color);
-}
-
-.history-title {
-  font-size: 0.85rem;
-  font-weight: 600;
-  color: var(--text-secondary);
-  margin-bottom: 12px;
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-}
-
-.history-list {
-  display: flex;
-  flex-direction: column;
-  gap: 6px;
-  max-height: 200px;
-  overflow-y: auto;
-}
-
-.history-item {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  padding: 8px 12px;
-  background: var(--bg-secondary);
-  border-radius: var(--radius-sm);
-  font-size: 0.75rem;
-  transition: all 0.2s var(--ease-out);
-  cursor: pointer;
-}
-
-.history-item:hover {
-  background: var(--bg-card-hover);
-}
-
-.history-item-name {
-  color: var(--text-primary);
-  font-weight: 500;
-}
-
-.history-item-date {
-  color: var(--text-muted);
-  font-size: 0.65rem;
-}
-
-.history-item-actions {
-  display: flex;
-  gap: 4px;
 }
 
 /* Save dialog */

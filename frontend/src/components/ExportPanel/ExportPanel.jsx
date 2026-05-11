@@ -1,5 +1,11 @@
-import { useState, useCallback } from 'react';
 import DeveloperLocator from '../DeveloperLocator/DeveloperLocator';
+import {
+  getExportQualityProfileById,
+} from '../../utils/exportQualityProfile';
+import {
+  getExportDirectoryLabel,
+  getExportFileNameLabel,
+} from '../../utils/exportOutputTarget';
 import './ExportPanel.css';
 
 function formatFileSize(bytes) {
@@ -28,6 +34,7 @@ const PHASE_LABELS = {
   merging: '🔗 Merging video...',
   framing: '🖼️ Rendering frame and subtitles...',
   reading: '📖 Reading result...',
+  saving: '💾 Writing output file...',
   done: '✅ Complete!',
   error: '❌ Export failed',
 };
@@ -40,42 +47,36 @@ export default function ExportPanel({
   duration = 0,
   isExporting,
   exportProgress,
-  exportUrl,
-  exportSize,
+  exportResult,
   videoName,
   frameSummary,
   frameBackgroundLabel,
+  exportConfig,
+  onOpenExportConfig,
   onExport,
-  onLoadHistoryList,
-  onLoadSession,
-  onDeleteSession,
-  historyList,
 }) {
-  const [showHistory, setShowHistory] = useState(false);
-
   const hasScenes = scenes && scenes.length > 0;
   const hasDeletedScenes = deletedSceneIds && deletedSceneIds.size > 0;
   const canExport = keptScenes.length > 0 || duration > 0;
+  const exportUrl = exportResult?.url || null;
+  const exportSavedFilePath = exportResult?.savedFilePath || '';
+  const exportSize = exportResult?.size || 0;
+  const activeExportQualityProfile = getExportQualityProfileById(exportConfig?.qualityProfileId);
 
   const handleExport = () => {
     if (canExport) onExport();
   };
 
-  const handleToggleHistory = useCallback(async () => {
-    const next = !showHistory;
-    setShowHistory(next);
-    if (next) {
-      await onLoadHistoryList();
-    }
-  }, [showHistory, onLoadHistoryList]);
-
   const handleDownload = () => {
     if (!exportUrl) return;
     const a = document.createElement('a');
     a.href = exportUrl;
-    const baseName = videoName ? videoName.replace(/\.[^.]+$/, '') : 'output';
-    a.download = `${baseName}_edited.mp4`;
+    a.download = getExportFileNameLabel(exportConfig?.fileName || videoName || 'output');
     a.click();
+  };
+
+  const handleRevealSavedFile = () => {
+    void exportResult?.revealSavedFile?.();
   };
 
   return (
@@ -99,13 +100,21 @@ export default function ExportPanel({
           </div>
         </div>
         <div className="export-actions">
-          <button
-            className="btn btn-ghost btn-sm"
-            onClick={handleToggleHistory}
-            title="View saved sessions"
-          >
-            📋 History
-          </button>
+          <div className="export-quality-control dev-locator-host">
+            <DeveloperLocator code="panel.export.quality" title="Export Quality Control" />
+            <div className="export-quality-summary">
+              <span className="export-quality-label">Export config</span>
+              <strong className="export-quality-value">{activeExportQualityProfile.label}</strong>
+            </div>
+            <button
+              type="button"
+              className="btn btn-ghost btn-sm export-config-btn"
+              onClick={onOpenExportConfig}
+              disabled={isExporting}
+            >
+              ⚙️ Config
+            </button>
+          </div>
           <button
             className="btn btn-primary export-btn"
             onClick={handleExport}
@@ -115,6 +124,14 @@ export default function ExportPanel({
             {isExporting ? '⏳ Processing...' : '🎬 Export Video'}
           </button>
         </div>
+      </div>
+
+      <div className="export-quality-helper">
+        File size profile: <strong>{activeExportQualityProfile.label}</strong> • File: <strong>{getExportFileNameLabel(exportConfig?.fileName)}</strong> • Folder: <strong>{getExportDirectoryLabel(exportConfig?.outputDirectory)}</strong>
+      </div>
+
+      <div className="export-target-helper">
+        {activeExportQualityProfile.helper}
       </div>
 
       {/* Export Progress */}
@@ -158,62 +175,26 @@ export default function ExportPanel({
       )}
 
       {/* Export Result */}
-      {exportUrl && !isExporting && (
+      {(exportUrl || exportSavedFilePath) && !isExporting && (
         <div className="export-result">
           <div className="export-result-info">
             <div className="export-result-icon">✅</div>
             <div>
-              <div className="export-result-text">Your video is ready!</div>
+              <div className="export-result-text">{exportSavedFilePath ? 'Your video was written to the local export folder!' : 'Your video is ready!'}</div>
               <div className="export-result-size">{formatFileSize(exportSize)}</div>
+              {exportSavedFilePath && (
+                <div className="export-result-size export-result-path">{exportSavedFilePath}</div>
+              )}
             </div>
           </div>
-          <button className="download-btn" onClick={handleDownload} id="download-btn">
-            📥 Download
-          </button>
-        </div>
-      )}
-
-      {/* History (sessions) */}
-      {showHistory && (
-        <div className="history-section">
-          <div className="history-title">
-            <span>📋 Saved sessions</span>
-            <button className="btn btn-ghost btn-sm" onClick={onLoadHistoryList}>🔄</button>
-          </div>
-          {historyList && historyList.length > 0 ? (
-            <div className="history-list">
-              {historyList.map((item) => (
-                <div key={item.id} className="history-item dev-locator-host">
-                  <DeveloperLocator code={`history.item.${item.id}`} title="History Item" />
-                  <div onClick={() => onLoadSession(item.id)} style={{ flex: 1, cursor: 'pointer' }}>
-                    <div className="history-item-name">{item.video_original_name || 'Untitled'}</div>
-                    <div className="history-item-date">
-                      {item.updated_at ? new Date(item.updated_at).toLocaleString('en-US') : ''}
-                    </div>
-                  </div>
-                  <div className="history-item-actions">
-                    <button
-                      className="btn btn-ghost btn-sm"
-                      onClick={() => onLoadSession(item.id)}
-                      title="Load session"
-                    >
-                      📂
-                    </button>
-                    <button
-                      className="btn btn-danger btn-sm"
-                      onClick={() => onDeleteSession(item.id)}
-                      title="Delete"
-                    >
-                      🗑️
-                    </button>
-                  </div>
-                </div>
-              ))}
-            </div>
+          {exportSavedFilePath ? (
+            <button className="download-btn" onClick={handleRevealSavedFile} id="download-btn">
+              📂 Show File
+            </button>
           ) : (
-            <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)', textAlign: 'center', padding: '16px' }}>
-              No saved sessions yet
-            </div>
+            <button className="download-btn" onClick={handleDownload} id="download-btn">
+              📥 Download
+            </button>
           )}
         </div>
       )}

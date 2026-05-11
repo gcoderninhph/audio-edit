@@ -45,7 +45,11 @@ function createJobId() {
   return `native-export-${Date.now()}-${Math.round(Math.random() * 100000)}`
 }
 
-export async function runNativeExport({ inputFile, keptScenes, subtitles, frameSettings, subtitleSettings, exportQualityProfileId, voiceoverFile, voiceoverTrack, audioMix }, onProgress = () => {}) {
+function getFileNameFromPath(filePath = '') {
+  return String(filePath || '').split(/[\\/]/).pop() || 'output.mp4'
+}
+
+export async function runNativeExport({ inputFile, keptScenes, subtitles, frameSettings, subtitleSettings, exportQualityProfileId, outputTarget, voiceoverFile, voiceoverTrack, audioMix }, onProgress = () => {}) {
   const nativeExportBridge = getNativeExportBridge()
   if (!nativeExportBridge) {
     throw createExportError('Native desktop export bridge is unavailable.', 'NATIVE_EXPORT_UNAVAILABLE')
@@ -69,6 +73,7 @@ export async function runNativeExport({ inputFile, keptScenes, subtitles, frameS
   void logExportDebug('Attempt native fast export backend', {
     audioMix: audioMix || null,
     exportQualityProfileId: exportQualityProfileId || null,
+    outputTarget: outputTarget || null,
     frameBackground: describeFrameBackground(frameBackground),
     framePresetId: framePreset.id,
     hasVoiceoverTrack: Boolean(voiceover),
@@ -101,10 +106,26 @@ export async function runNativeExport({ inputFile, keptScenes, subtitles, frameS
         backgroundColor: frameBackground,
       },
       exportQualityProfileId: exportQualityProfileId || null,
+      outputTarget: outputTarget || null,
       audioMix: audioMix || null,
       subtitleOverlay,
       voiceover,
     })
+
+    if (result?.filePath) {
+      void logExportDebug('Native fast export completed directly to local file', {
+        backend: result?.backend || 'native-fast',
+        filePath: result.filePath,
+        size: result.size || 0,
+      })
+
+      return {
+        backend: result?.backend || 'native-fast',
+        savedFileName: result.fileName || getFileNameFromPath(result.filePath),
+        savedFilePath: result.filePath,
+        size: result.size || 0,
+      }
+    }
 
     const bytes = normalizeBinaryPayload(result?.bytes)
     const blob = new Blob([bytes], { type: result?.mimeType || 'video/mp4' })

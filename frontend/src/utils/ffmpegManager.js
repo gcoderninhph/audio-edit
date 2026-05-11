@@ -10,6 +10,7 @@ import {
   isAudioMixMuted,
   normalizeExportAudioMix,
 } from './exportAudioMix';
+import { saveExportBytesToFile } from './exportOutputTarget';
 import { getExportQualityProfileById, getFallbackVideoEncodingSettings } from './exportQualityProfile';
 import { materializeVoiceoverFile, renderExportAudioTrack } from './exportAudioStage';
 import { buildMergedSceneTrack } from './ffmpegSceneMerge';
@@ -263,6 +264,7 @@ export async function exportVideo(inputFile, keptScenes, subtitles, exportOption
         backgroundColor: normalizedFrameBackground,
       },
       exportQualityProfileId: exportQualityProfile.id,
+      outputTarget: exportOptions?.outputTarget || null,
       subtitleSettings: exportOptions?.subtitleSettings || null,
       voiceoverFile,
       voiceoverTrack: exportOptions?.voiceoverTrack || null,
@@ -426,15 +428,39 @@ export async function exportVideo(inputFile, keptScenes, subtitles, exportOption
 
     // Read output
     const outputData = await ffmpeg.readFile('output.mp4');
-    const blob = new Blob([outputData], { type: 'video/mp4' });
-    const url = URL.createObjectURL(blob);
+    let blob = null;
+    let savedResult = null;
+    let url = null;
+
+    if (exportOptions?.outputTarget) {
+      onProgress({ phase: 'saving', percent: 94, stagePercent: 30, detail: 'Writing the fallback export to the selected local file...' });
+      emitExportLog(onProgress, 'saving', 'Write fallback export result to the selected local file');
+      savedResult = await saveExportBytesToFile({
+        bytes: outputData,
+        fallbackFileName: sourceVideoFile.name || 'output.mp4',
+        outputTarget: exportOptions.outputTarget,
+      });
+      onProgress({ phase: 'saving', percent: 98, stagePercent: 100, detail: `Saved fallback export to ${savedResult.fileName}` });
+      emitExportLog(onProgress, 'saving', `Saved fallback export to ${savedResult.filePath}`);
+    } else {
+      blob = new Blob([outputData], { type: 'video/mp4' });
+      url = URL.createObjectURL(blob);
+    }
 
     // Cleanup
     await cleanupFiles(ffmpeg, ['cut.mp4', 'output.mp4', ...transientFiles].filter(Boolean));
     await cleanupMountPoint(ffmpeg, inputMountPoint);
 
     onProgress({ phase: 'done', percent: 100 });
-    emitExportLog(onProgress, 'done', `Export completed (${Math.round(blob.size / 1024)} KB)`);
+    emitExportLog(onProgress, 'done', `Export completed (${Math.round((savedResult?.size || blob?.size || outputData.byteLength) / 1024)} KB)`);
+
+    if (savedResult) {
+      return {
+        savedFileName: savedResult.fileName,
+        savedFilePath: savedResult.filePath,
+        size: savedResult.size,
+      };
+    }
 
     return { blob, url, size: blob.size };
   } catch (error) {

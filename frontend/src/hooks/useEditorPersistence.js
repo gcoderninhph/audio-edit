@@ -2,16 +2,12 @@ import { useState, useCallback, useEffect, useRef } from 'react';
 import { DEFAULT_FRAME_BACKGROUND, DEFAULT_FRAME_PRESET_ID, sanitizeFrameBackground } from '../utils/frameComposer';
 import { DEFAULT_EXPORT_QUALITY_PROFILE_ID, normalizeExportQualityProfileId } from '../utils/exportQualityProfile';
 import { DEFAULT_SUBTITLE_SETTINGS, normalizeSubtitleSettings } from '../utils/subtitleRenderModel';
-import {
-  restoreSavedTranscriptionJob,
-  restoreSavedTranslationJob,
-} from './editorPersistenceJobRestore';
+import { DEFAULT_SUBTITLE_LANGUAGE_KEY, getOriginalSubtitles } from '../utils/subtitleTracks';
+import { useEditorPersistenceRestore } from './useEditorPersistenceRestore';
 import {
   deleteLocalProject,
   getLocalProject,
-  getLocalProjectVideoReference,
   listLocalProjects,
-  materializeLocalProjectVoiceover,
   releaseVideoUrl,
   saveLocalProject,
   saveLocalProjectVideo,
@@ -29,7 +25,8 @@ export function useEditorPersistence({
   sensitivity,
   scenes,
   deletedSceneIds,
-  subtitles,
+  subtitleTracks,
+  activeSubtitleLanguage,
   transcriptionJobId,
   translationJobId,
   videoUrl,
@@ -45,7 +42,7 @@ export function useEditorPersistence({
   setExportQualityProfileId,
   setScenes,
   setDeletedSceneIds,
-  setSubtitles,
+  setActiveSubtitleLanguage,
   setSensitivity,
   setIsTranscribing,
   setTranscribeProgress,
@@ -57,6 +54,9 @@ export function useEditorPersistence({
   setVoiceoverProgress,
   setLastVoiceoverAudioName,
   setVoiceoverTrack,
+  setSubtitleTracks,
+  restoreSubtitleState,
+  resetSubtitleState,
 }) {
   const [isUploading, setIsUploading] = useState(false);
   const [uploadProgress, setUploadProgress] = useState(0);
@@ -78,9 +78,19 @@ export function useEditorPersistence({
     });
   }, []);
 
-  const performAutoSave = useCallback(async (scenesData, deletedIdsData, subtitlesData, transJobId, translJobId) => {
+  const performAutoSave = useCallback(async ({
+    scenesData,
+    deletedIdsData,
+    subtitleTracksData,
+    activeSubtitleLanguageData,
+    transJobId,
+    translJobId,
+  } = {}) => {
     const sid = sessionIdRef.current;
     if (!sid || !videoFilename) return;
+
+    const nextSubtitleTracks = subtitleTracksData || subtitleTracks
+    const nextActiveSubtitleLanguage = activeSubtitleLanguageData || activeSubtitleLanguage
 
     setAutoSaveStatus('saving');
     try {
@@ -94,7 +104,9 @@ export function useEditorPersistence({
         exportQualityProfileId,
         scenes: scenesData,
         deletedIds: deletedIdsData,
-        subtitles: subtitlesData,
+        activeSubtitleLanguage: nextActiveSubtitleLanguage,
+        subtitleTracks: nextSubtitleTracks,
+        subtitles: getOriginalSubtitles(nextSubtitleTracks),
         sensitivity,
         transcriptionJobId: transJobId,
         translationJobId: translJobId,
@@ -105,7 +117,32 @@ export function useEditorPersistence({
       console.error('Auto-save failed:', error);
       setAutoSaveStatus('');
     }
-  }, [exportQualityProfileId, frameBackground, framePresetId, sessionIdRef, sensitivity, subtitleSettings, videoFilename, videoName]);
+  }, [activeSubtitleLanguage, exportQualityProfileId, frameBackground, framePresetId, sessionIdRef, sensitivity, subtitleSettings, subtitleTracks, videoFilename, videoName]);
+
+  const {
+    restoreVideoState,
+    restoreVoiceoverState,
+    resumeSavedTranscription,
+    resumeSavedTranslation,
+  } = useEditorPersistenceRestore({
+    performAutoSave,
+    sessionIdRef,
+    setActiveSubtitleLanguage,
+    setIsTranscribing,
+    setIsTranslating,
+    setLastVoiceoverAudioName,
+    setSubtitleTracks,
+    setTranscribeProgress,
+    setTranscriptionJobId,
+    setTranslateProgress,
+    setTranslationJobId,
+    setVideoFileState,
+    setVideoFilename,
+    setVideoName,
+    setVideoUrl,
+    setVoiceoverTrack,
+    videoUrl,
+  })
 
   useEffect(() => {
     if (autoSaveTimerRef.current) {
@@ -118,7 +155,14 @@ export function useEditorPersistence({
     }
 
     autoSaveTimerRef.current = setTimeout(() => {
-      performAutoSave(scenes, Array.from(deletedSceneIds), subtitles, transcriptionJobId, translationJobId);
+      performAutoSave({
+        activeSubtitleLanguageData: activeSubtitleLanguage,
+        deletedIdsData: Array.from(deletedSceneIds),
+        scenesData: scenes,
+        subtitleTracksData: subtitleTracks,
+        transJobId: transcriptionJobId,
+        translJobId: translationJobId,
+      });
     }, 2000);
 
     return () => {
@@ -129,11 +173,12 @@ export function useEditorPersistence({
     };
   }, [
     deletedSceneIds,
+    activeSubtitleLanguage,
     isRestoring,
     performAutoSave,
     scenes,
     sessionId,
-    subtitles,
+    subtitleTracks,
     transcriptionJobId,
     translationJobId,
     subtitleSettings,
@@ -171,79 +216,6 @@ export function useEditorPersistence({
     }
   }, []);
 
-  const restoreVideoState = useCallback(async (projectId, data) => {
-    if (!data.video_filename) return;
-
-    const restoredVideo = await getLocalProjectVideoReference(projectId);
-    if (!restoredVideo) return;
-
-    releaseVideoUrl(videoUrl);
-    setVideoFileState(restoredVideo.source);
-    setVideoUrl(restoredVideo.url);
-    setVideoName(data.video_original_name || restoredVideo.name || 'video.mp4');
-    setVideoFilename(data.video_filename || restoredVideo.storedFileName);
-  }, [setVideoFileState, setVideoFilename, setVideoName, setVideoUrl, videoUrl]);
-
-  const restoreVoiceoverState = useCallback(async (projectId, data) => {
-    if (!data.voiceover_filename) {
-      setLastVoiceoverAudioName('');
-      setVoiceoverTrack(null);
-      return;
-    }
-
-    const restoredVoiceover = await materializeLocalProjectVoiceover(projectId);
-    if (!restoredVoiceover) {
-      setLastVoiceoverAudioName('');
-      setVoiceoverTrack(null);
-      return;
-    }
-
-    const fileName = data.voiceover_original_name || restoredVoiceover.fileName || 'voiceover.mp3';
-    setLastVoiceoverAudioName(fileName);
-    setVoiceoverTrack({
-      duration: restoredVoiceover.duration || 0,
-      fileName,
-      previewUrl: restoredVoiceover.previewUrl,
-      startTime: 0,
-    });
-  }, [setLastVoiceoverAudioName, setVoiceoverTrack]);
-
-  const resumeSavedTranscription = useCallback((data) => {
-    return restoreSavedTranscriptionJob(data, {
-      performAutoSave,
-      sessionIdRef,
-      setIsTranscribing,
-      setSubtitles,
-      setTranscribeProgress,
-      setTranscriptionJobId,
-    });
-  }, [
-    performAutoSave,
-    sessionIdRef,
-    setIsTranscribing,
-    setSubtitles,
-    setTranscribeProgress,
-    setTranscriptionJobId,
-  ]);
-
-  const resumeSavedTranslation = useCallback((data) => {
-    return restoreSavedTranslationJob(data, {
-      performAutoSave,
-      sessionIdRef,
-      setIsTranslating,
-      setSubtitles,
-      setTranslateProgress,
-      setTranslationJobId,
-    });
-  }, [
-    performAutoSave,
-    sessionIdRef,
-    setIsTranslating,
-    setSubtitles,
-    setTranslateProgress,
-    setTranslationJobId,
-  ]);
-
   const loadSession = useCallback(async (id) => {
     setIsRestoring(true);
     try {
@@ -270,7 +242,7 @@ export function useEditorPersistence({
       setExportQualityProfileId(normalizeExportQualityProfileId(data.export_quality_profile_id || DEFAULT_EXPORT_QUALITY_PROFILE_ID));
       setScenes(data.scenes || []);
       setDeletedSceneIds(new Set(data.deleted_ids || []));
-      setSubtitles(data.subtitles || []);
+      restoreSubtitleState(data.subtitle_tracks || data.subtitles || [], data.active_subtitle_language || DEFAULT_SUBTITLE_LANGUAGE_KEY);
       await restoreVoiceoverState(id, data);
 
       if (data.sensitivity !== undefined && data.sensitivity !== null) {
@@ -312,7 +284,6 @@ export function useEditorPersistence({
     setSensitivity,
     setSessionId,
     setSubtitleSettings,
-    setSubtitles,
     sessionIdRef,
     setTranscribeProgress,
     setTranscriptionJobId,
@@ -320,6 +291,7 @@ export function useEditorPersistence({
     setTranslationJobId,
     setVoiceoverProgress,
     setVoiceoverTrack,
+    restoreSubtitleState,
   ]);
 
   const deleteSession = useCallback(async (id) => {
@@ -343,7 +315,7 @@ export function useEditorPersistence({
         setExportQualityProfileId(DEFAULT_EXPORT_QUALITY_PROFILE_ID);
         setScenes([]);
         setDeletedSceneIds(new Set());
-        setSubtitles([]);
+        resetSubtitleState();
         setSensitivity(2.5);
         setIsTranscribing(false);
         setTranscribeProgress(null);
@@ -381,7 +353,6 @@ export function useEditorPersistence({
     setSensitivity,
     setSessionId,
     setSubtitleSettings,
-    setSubtitles,
     setTranscribeProgress,
     setTranscriptionJobId,
     setTranslateProgress,
@@ -394,6 +365,7 @@ export function useEditorPersistence({
     setVideoUrl,
     videoUrl,
     waitForMediaRelease,
+    resetSubtitleState,
   ]);
 
   return {
