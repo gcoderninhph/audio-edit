@@ -16,7 +16,7 @@ export default function UploadZone({ onFileSelect, selectedFile }) {
     if (file && file.type.startsWith('video/')) {
       onFileSelect(file);
     } else {
-      alert('Vui lòng chọn file video hợp lệ');
+      alert('Please choose a valid video file.');
     }
   }, [onFileSelect]);
 
@@ -63,8 +63,8 @@ export default function UploadZone({ onFileSelect, selectedFile }) {
             <line x1="12" y1="3" x2="12" y2="15" />
           </svg>
         </div>
-        <h3 className="upload-title">Kéo & thả video vào đây</h3>
-        <p className="upload-subtitle">hoặc click để chọn file từ máy tính</p>
+        <h3 className="upload-title">Drag and drop a video here</h3>
+        <p className="upload-subtitle">or click to browse files on your computer</p>
         <div className="upload-formats">
           <span>MP4</span>
           <span>WebM</span>

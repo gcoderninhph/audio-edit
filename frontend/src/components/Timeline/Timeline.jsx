@@ -196,7 +196,7 @@ export default function Timeline({
                 width: '100%',
                 background: 'linear-gradient(135deg, rgba(34, 197, 94, 0.85), rgba(14, 165, 233, 0.55))',
               }}
-              title={totalDuration > 0 ? `Toàn bộ video: 00:00 - ${formatTime(totalDuration)}` : 'Đang tải thời lượng video'}
+              title={totalDuration > 0 ? `Full video: 00:00 - ${formatTime(totalDuration)}` : 'Loading video duration'}
             >
               <span className="timeline-scene-label">Video</span>
             </div>
@@ -211,7 +211,7 @@ export default function Timeline({
 
         {/* Subtitles Track */}
         {timelineSubtitles.length > 0 && (
-          <div className="timeline-subtitles-bar dev-locator-host" role="button" tabIndex={0} onClick={handleSubtitleClick} onKeyDown={handleSubtitleKeyDown} title="Subtitle track • click de chinh font size va diem neo">
+          <div className="timeline-subtitles-bar dev-locator-host" role="button" tabIndex={0} onClick={handleSubtitleClick} onKeyDown={handleSubtitleKeyDown} title="Subtitle track • click to adjust font settings and anchor">
             <DeveloperLocator code="panel.timeline.subtitles" title="Timeline Subtitle Track" />
             {timelineSubtitles.map((subtitle) => (
               <div
@@ -236,7 +236,7 @@ export default function Timeline({
                 left: `${timelineVoiceover.leftPercent}%`,
                 width: `${timelineVoiceover.widthPercent}%`,
               }}
-              title={`Thuyet minh: ${timelineVoiceover.fileName} • bat dau tu 00:00 • click de chinh am thanh`}
+              title={`Voiceover: ${timelineVoiceover.fileName} • starts at 00:00 • click to adjust audio`}
               role="button"
               tabIndex={0}
               onClick={handleVoiceoverClick}

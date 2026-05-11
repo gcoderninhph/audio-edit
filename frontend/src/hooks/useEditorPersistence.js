@@ -149,7 +149,7 @@ export function useEditorPersistence({
       return result;
     } catch (error) {
       console.error('Upload failed:', error);
-      alert('Upload video thất bại: ' + error.message);
+      alert('Video upload failed: ' + error.message);
       return null;
     } finally {
       setIsUploading(false);

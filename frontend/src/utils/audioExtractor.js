@@ -12,7 +12,7 @@ function mapTranscriptionSegments(segments = []) {
 
 export async function transcribeVideo(ffmpeg, videoFile, duration, onProgress, onJobCreated) {
   try {
-    onProgress({ phase: 'Đang tách audio...', percent: 0 });
+    onProgress({ phase: 'Extracting audio...', percent: 0 });
 
     const inputName = 'input_audio_extract.mp4';
     const outputName = 'extracted_audio.mp3';
@@ -37,7 +37,7 @@ export async function transcribeVideo(ffmpeg, videoFile, duration, onProgress, o
     await ffmpeg.deleteFile(inputName);
     await ffmpeg.deleteFile(outputName);
 
-    onProgress({ phase: 'Đang gửi yêu cầu tạo phụ đề...', percent: 20 });
+    onProgress({ phase: 'Sending subtitle request...', percent: 20 });
 
     // Gửi file lấy Job ID
     const formData = new FormData();
@@ -48,24 +48,24 @@ export async function transcribeVideo(ffmpeg, videoFile, duration, onProgress, o
       body: formData
     });
 
-    if (!startRes.ok) throw new Error('Không thể khởi tạo Whisper Job');
+    if (!startRes.ok) throw new Error('Unable to start the Whisper job');
     const startData = await startRes.json();
     const jobId = startData.id;
 
-    if (!jobId) throw new Error('Whisper không trả về Job ID');
+    if (!jobId) throw new Error('Whisper did not return a job ID');
 
     if (onJobCreated) onJobCreated(jobId);
 
     return await pollTranscriptionJob(jobId, onProgress);
 
   } catch (error) {
-    console.error('Lỗi khi transcribe:', error);
+    console.error('Transcription failed:', error);
     throw error;
   }
 }
 
 export async function resumeTranscription(jobId, onProgress, options = {}) {
-  onProgress({ phase: 'Đang tiếp tục tiến trình tạo phụ đề...', percent: 30 });
+  onProgress({ phase: 'Resuming subtitle generation...', percent: 30 });
   return await pollTranscriptionJob(jobId, onProgress, {
     initialDelayMs: options.initialDelayMs ?? 3000,
   });
@@ -77,7 +77,7 @@ export async function getTranscriptionJobSnapshot(jobId) {
     return { state: 'missing' };
   }
   if (!statusRes.ok) {
-    throw new Error('Không thể kiểm tra trạng thái tiến trình tạo phụ đề');
+    throw new Error('Unable to check subtitle job status');
   }
 
   const statusData = await statusRes.json();
@@ -90,7 +90,7 @@ export async function getTranscriptionJobSnapshot(jobId) {
   if (statusData.status === -1) {
     return {
       state: 'failed',
-      message: 'Whisper job thất bại',
+      message: 'Whisper job failed',
     };
   }
 
@@ -110,19 +110,19 @@ async function pollTranscriptionJob(jobId, onProgress, { initialDelayMs = 3000 }
 
     const statusRes = await apiFetch(`/api/transcription/status/${jobId}`);
     if (statusRes.status === 404) {
-      throw new Error('Tiến trình không tồn tại (Job Not Found)');
+      throw new Error('The job does not exist (Job Not Found)');
     }
     if (!statusRes.ok) continue;
 
     const statusData = await statusRes.json();
 
     if (statusData.status === 2) {
-      onProgress({ phase: 'Hoàn tất phụ đề!', percent: 100 });
+      onProgress({ phase: 'Subtitles completed!', percent: 100 });
       return mapTranscriptionSegments(statusData.result?.segments || []);
     } else if (statusData.status === -1) {
-      throw new Error('Whisper job thất bại');
+      throw new Error('Whisper job failed');
     } else {
-      onProgress({ phase: 'AI đang xử lý audio...', percent: 50 });
+      onProgress({ phase: 'AI is processing audio...', percent: 50 });
     }
   }
 }

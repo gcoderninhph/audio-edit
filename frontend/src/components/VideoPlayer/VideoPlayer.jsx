@@ -78,22 +78,22 @@ export default function VideoPlayer({
   const frameBackgroundLabel = useMemo(() => getFrameBackgroundLabel(frameBackground), [frameBackground]);
   const sidebarTitle = useMemo(() => {
     if (activeSidebarSection === FRAME_SIDEBAR_SECTIONS.FRAME) {
-      return 'Chỉnh khung video';
+      return 'Adjust video frame';
     }
 
     if (activeSidebarSection === FRAME_SIDEBAR_SECTIONS.BACKGROUND) {
-      return 'Chỉnh nền video';
+      return 'Adjust video background';
     }
 
     if (activeSidebarSection === FRAME_SIDEBAR_SECTIONS.AUDIO) {
-      return 'Chỉnh âm thanh preview va export';
+      return 'Adjust preview and export audio';
     }
 
     if (activeSidebarSection === FRAME_SIDEBAR_SECTIONS.SUBTITLE) {
-      return 'Chỉnh subtitle preview va export';
+      return 'Adjust preview and export subtitles';
     }
 
-    return 'Chỉnh video';
+    return 'Adjust video';
   }, [activeSidebarSection]);
   const subtitleAnchorLabel = useMemo(() => getSubtitleAnchorOption(subtitleSettings?.anchor).label, [subtitleSettings]);
   const {
@@ -216,7 +216,7 @@ export default function VideoPlayer({
       onFrameBackgroundChange?.(nextBackground);
     } catch (error) {
       console.error('Background image selection failed:', error);
-      alert(`Không thể dùng ảnh nền bìa: ${error.message}`);
+      alert(`Unable to use the selected cover image: ${error.message}`);
     } finally {
       event.target.value = '';
     }
@@ -397,7 +397,7 @@ export default function VideoPlayer({
 
       {currentScene && (
         <div className="scene-indicator">
-          Cảnh <span className="current-scene-label">#{keptScenes.findIndex((scene) => scene.id === currentScene.id) + 1}</span>
+          Scene <span className="current-scene-label">#{keptScenes.findIndex((scene) => scene.id === currentScene.id) + 1}</span>
           {' '}({formatTime(currentScene.start)} - {formatTime(currentScene.end)})
         </div>
       )}

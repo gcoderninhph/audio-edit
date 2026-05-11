@@ -98,7 +98,7 @@ async function mountInputSource(ffmpeg, sourceVideoFile, onProgress) {
     phase: 'preparing',
     percent: 7,
     stagePercent: 40,
-    detail: `Đang mount video nguồn • ${formatMegabytes(sourceVideoFile.size)}`,
+    detail: `Mounting source video • ${formatMegabytes(sourceVideoFile.size)}`,
   });
 
   await cleanupMountPoint(ffmpeg, mountPoint);
@@ -109,7 +109,7 @@ async function mountInputSource(ffmpeg, sourceVideoFile, onProgress) {
     phase: 'preparing',
     percent: 9,
     stagePercent: 60,
-    detail: `Đã mount video nguồn • ${sourceVideoFile.name || 'input.mp4'}`,
+    detail: `Mounted source video • ${sourceVideoFile.name || 'input.mp4'}`,
   });
   emitExportLog(onProgress, 'preparing', `Mounted source file at ${inputPath}`);
 
@@ -260,6 +260,7 @@ export async function exportVideo(inputFile, keptScenes, subtitles, exportOption
         ...frameSettings,
         backgroundColor: normalizedFrameBackground,
       },
+      subtitleSettings: exportOptions?.subtitleSettings || null,
       voiceoverFile,
       voiceoverTrack: exportOptions?.voiceoverTrack || null,
     }, onProgress);
@@ -280,24 +281,24 @@ export async function exportVideo(inputFile, keptScenes, subtitles, exportOption
 
   const ffmpeg = await getFFmpeg((p) => onProgress({ phase: 'loading', percent: p }));
 
-  onProgress({ phase: 'preparing', percent: 0, stagePercent: 0, detail: 'Khởi tạo export...' });
+  onProgress({ phase: 'preparing', percent: 0, stagePercent: 0, detail: 'Starting export...' });
 
   let inputMountPoint = null;
   const transientFiles = [];
 
   try {
-    onProgress({ phase: 'preparing', percent: 2, stagePercent: 10, detail: 'Đang lấy video nguồn...' });
+    onProgress({ phase: 'preparing', percent: 2, stagePercent: 10, detail: 'Loading source video...' });
     emitExportLog(onProgress, 'preparing', 'Resolve source video object');
     const sourceVideoFile = await materializeVideoFile(inputFile);
     if (!sourceVideoFile) {
-      throw new Error('Không thể truy cập video nguồn để export.');
+      throw new Error('Unable to access the source video for export.');
     }
 
     onProgress({
       phase: 'preparing',
       percent: 4,
       stagePercent: 20,
-      detail: `Đã lấy video nguồn • ${formatMegabytes(sourceVideoFile.size)}`,
+      detail: `Loaded source video • ${formatMegabytes(sourceVideoFile.size)}`,
     });
     emitExportLog(onProgress, 'preparing', `Resolved source file (${formatMegabytes(sourceVideoFile.size)})`);
 
@@ -309,7 +310,7 @@ export async function exportVideo(inputFile, keptScenes, subtitles, exportOption
       phase: 'preparing',
       percent: 10,
       stagePercent: 80,
-      detail: `Chuẩn bị ${keptScenes.length} cảnh • ${subtitles?.length || 0} subtitle`,
+      detail: `Preparing ${keptScenes.length} scenes • ${subtitles?.length || 0} subtitles`,
       sceneCount: keptScenes.length,
       subtitleCount: subtitles?.length || 0,
     });

@@ -56,7 +56,7 @@ export async function renderFrameCompositionVideo({
   const backgroundImage = await loadFrameBackgroundImage(frameBackground)
 
   if (!canvasContext) {
-    throw new Error('Không thể khởi tạo canvas renderer cho export.')
+    throw new Error('Unable to initialize the canvas renderer for export.')
   }
 
   canvasElement.width = framePreset.width
@@ -121,7 +121,7 @@ export async function renderFrameCompositionVideo({
       phase: 'framing',
       percent: Math.round(72 + (boundedProgress * 10)),
       stagePercent: Math.round(boundedProgress * 100),
-      detail: `Đang record frame preview • ${Math.round(boundedProgress * 100)}%`,
+      detail: `Recording preview frames • ${Math.round(boundedProgress * 100)}%`,
     })
   }
 

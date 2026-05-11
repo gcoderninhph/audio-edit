@@ -67,7 +67,7 @@ async function downloadVoiceoverAudio(downloadUrl, requestId) {
   });
 
   if (!response.ok) {
-    throw new Error(await readApiErrorMessage(response, 'Khong the tai audio thuyet minh tu Vbee'));
+    throw new Error(await readApiErrorMessage(response, 'Unable to download voiceover audio from Vbee'));
   }
 
   const fileName = extractFileName(
@@ -91,36 +91,36 @@ async function pollVoiceoverJob(requestId, onProgress) {
 
     const statusResponse = await apiFetch(`/api/voiceover/status/${requestId}`);
     if (statusResponse.status === 404) {
-      throw new Error('Tien trinh thuyet minh khong ton tai');
+      throw new Error('The voiceover job does not exist');
     }
     if (!statusResponse.ok) {
-      throw new Error(await readApiErrorMessage(statusResponse, 'Khong the kiem tra trang thai thuyet minh'));
+      throw new Error(await readApiErrorMessage(statusResponse, 'Unable to check voiceover job status'));
     }
 
     const statusData = await statusResponse.json();
     const status = statusData.status;
 
     if (status === 'queued') {
-      onProgress?.({ phase: 'Dang cho node Vbee xu ly...', percent: 30 });
+      onProgress?.({ phase: 'Waiting for a Vbee worker...', percent: 30 });
       continue;
     }
 
     if (status === 'processing') {
-      onProgress?.({ phase: 'Vbee dang tao audio...', percent: 65 });
+      onProgress?.({ phase: 'Vbee is generating audio...', percent: 65 });
       continue;
     }
 
     if (status === 'failed') {
-      throw new Error(statusData.error_message || 'Tao thuyet minh that bai');
+      throw new Error(statusData.error_message || 'Voiceover generation failed');
     }
 
     if (status === 'success') {
       const downloadUrl = statusData.download_url;
       if (!downloadUrl) {
-        throw new Error('Vbee khong tra ve download_url');
+        throw new Error('Vbee did not return a download_url');
       }
 
-      onProgress?.({ phase: 'Dang lay audio tu Vbee...', percent: 90 });
+      onProgress?.({ phase: 'Downloading audio from Vbee...', percent: 90 });
       const downloadResult = await downloadVoiceoverAudio(downloadUrl, requestId);
 
       return {
@@ -137,10 +137,10 @@ async function pollVoiceoverJob(requestId, onProgress) {
 
 export async function createVoiceoverFromSubtitles(subtitles, onProgress) {
   if (!Array.isArray(subtitles) || subtitles.length === 0) {
-    throw new Error('Khong co phu de de tao thuyet minh');
+    throw new Error('No subtitles available to generate voiceover');
   }
 
-  onProgress?.({ phase: 'Dang tong hop file SRT...', percent: 0 });
+  onProgress?.({ phase: 'Building SRT file...', percent: 0 });
   const srtContent = jsonToSrt(subtitles);
   const srtFile = new File(
     [new Blob([srtContent], { type: 'application/x-subrip' })],
@@ -151,27 +151,27 @@ export async function createVoiceoverFromSubtitles(subtitles, onProgress) {
   const formData = new FormData();
   formData.append('file', srtFile);
 
-  onProgress?.({ phase: 'Dang gui yeu cau toi Vbee...', percent: 10 });
+  onProgress?.({ phase: 'Sending request to Vbee...', percent: 10 });
   const startResponse = await apiFetch('/api/voiceover/start', {
     method: 'POST',
     body: formData,
   });
 
   if (!startResponse.ok) {
-    throw new Error(await readApiErrorMessage(startResponse, 'Khong the khoi tao job thuyet minh'));
+    throw new Error(await readApiErrorMessage(startResponse, 'Unable to start the voiceover job'));
   }
 
   const startData = await startResponse.json();
   const requestId = startData.request_id || startData.requestId;
 
   if (!requestId) {
-    throw new Error('Vbee Router khong tra ve request_id');
+    throw new Error('The Vbee router did not return a request_id');
   }
 
   if (startData.status === 'queued') {
-    onProgress?.({ phase: 'Job dang xep hang tai Vbee...', percent: 20 });
+    onProgress?.({ phase: 'The job is queued at Vbee...', percent: 20 });
   } else {
-    onProgress?.({ phase: 'Vbee da nhan job, dang xu ly...', percent: 35 });
+    onProgress?.({ phase: 'Vbee accepted the job and is processing...', percent: 35 });
   }
 
   return pollVoiceoverJob(requestId, onProgress);

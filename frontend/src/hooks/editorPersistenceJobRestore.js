@@ -49,7 +49,7 @@ export async function restoreSavedTranscriptionJob(data, dependencies) {
 
     setTranscriptionJobId(data.transcription_job_id);
     setIsTranscribing(true);
-    updateTranscribeProgress({ phase: 'Đang tiếp tục tiến trình tạo phụ đề...', percent: 30 });
+    updateTranscribeProgress({ phase: 'Resuming subtitle generation...', percent: 30 });
 
     const nextSubtitles = await resumeTranscription(data.transcription_job_id, updateTranscribeProgress, { initialDelayMs: 0 });
     if (sessionIdRef.current !== data.id) return;
@@ -62,7 +62,7 @@ export async function restoreSavedTranscriptionJob(data, dependencies) {
   } catch (error) {
     if (sessionIdRef.current !== data.id) return;
 
-    console.error('Lỗi resume tạo phụ đề:', error);
+    console.error('Failed to resume subtitle generation:', error);
     setTranscriptionJobId(null);
     setIsTranscribing(false);
     setTranscribeProgress(null);
@@ -106,7 +106,7 @@ export async function restoreSavedTranslationJob(data, dependencies) {
     }
 
     if (snapshot.state === 'finished') {
-      updateTranslateProgress({ phase: 'Đang tải kết quả...', percent: 90 });
+      updateTranslateProgress({ phase: 'Downloading results...', percent: 90 });
       const nextSubtitles = await downloadTranslatedSubtitles(requestId, outputFileName);
       if (sessionIdRef.current !== data.id) return;
 
@@ -120,7 +120,7 @@ export async function restoreSavedTranslationJob(data, dependencies) {
 
     setTranslationJobId(data.translation_job_id);
     setIsTranslating(true);
-    updateTranslateProgress({ phase: 'Đang tiếp tục tiến trình dịch...', percent: 30 });
+    updateTranslateProgress({ phase: 'Resuming translation...', percent: 30 });
 
     const nextSubtitles = await resumeTranslation(requestId, outputFileName, updateTranslateProgress, { initialDelayMs: 0 });
     if (sessionIdRef.current !== data.id) return;
@@ -133,7 +133,7 @@ export async function restoreSavedTranslationJob(data, dependencies) {
   } catch (error) {
     if (sessionIdRef.current !== data.id) return;
 
-    console.error('Lỗi resume dịch phụ đề:', error);
+    console.error('Failed to resume subtitle translation:', error);
     setTranslationJobId(null);
     setIsTranslating(false);
     setTranslateProgress(null);

@@ -33,7 +33,7 @@ export default function SceneList({
         <DeveloperLocator code="panel.scene-list.detecting" title="Scene List Detecting State" />
         <div className="detecting-container">
           <div className="detecting-spinner" />
-          <div className="detecting-text">Đang phân tích video...</div>
+          <div className="detecting-text">Analyzing video...</div>
           <div className="progress-bar">
             <div className="progress-bar-fill" style={{ width: `${detectProgress}%` }} />
           </div>
@@ -49,7 +49,7 @@ export default function SceneList({
       <div className="scene-list-container dev-locator-host">
         <DeveloperLocator code="panel.scene-list.empty-video" title="Scene List Empty State" />
         <div className="scene-list-empty">
-          📹 Hãy upload video để bắt đầu
+          📹 Upload a video to get started
         </div>
       </div>
     );
@@ -63,7 +63,7 @@ export default function SceneList({
         <div className="detecting-container">
           <div style={{ marginBottom: '16px' }}>
             <label style={{ fontSize: '0.75rem', color: 'var(--text-secondary)', display: 'block', marginBottom: '6px' }}>
-              Độ nhạy phát hiện cảnh: {sensitivity.toFixed(1)}
+              Scene detection sensitivity: {sensitivity.toFixed(1)}
             </label>
             <input
               type="range"
@@ -75,15 +75,15 @@ export default function SceneList({
               style={{ width: '100%', accentColor: 'var(--accent-purple)' }}
             />
             <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.65rem', color: 'var(--text-muted)' }}>
-              <span>Nhiều cảnh</span>
-              <span>Ít cảnh</span>
+              <span>More cuts</span>
+              <span>Fewer cuts</span>
             </div>
           </div>
           <button className="btn btn-primary" onClick={onStartDetection} id="detect-scenes-btn">
             <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
               <circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/>
             </svg>
-            Phát hiện cảnh tự động
+            Detect scenes automatically
           </button>
         </div>
       </div>
@@ -96,18 +96,18 @@ export default function SceneList({
       <DeveloperLocator code="panel.scene-list" title="Scene List Panel" />
       <div className="scene-list-header">
         <div>
-          <div className="scene-list-title">Danh sách cảnh</div>
+          <div className="scene-list-title">Scene list</div>
           <div className="scene-list-stats">
-            Giữ lại <strong>{keptScenes.length}/{scenes.length}</strong> cảnh 
-            {' '}• Thời lượng: <strong>{formatTime(keptDuration)}</strong>
+            Keeping <strong>{keptScenes.length}/{scenes.length}</strong> scenes
+            {' '}• Duration: <strong>{formatTime(keptDuration)}</strong>
           </div>
         </div>
         <div className="scene-list-actions">
-          <button className="btn btn-ghost btn-sm" onClick={onRestoreAll} title="Khôi phục tất cả">
-            ↩ Khôi phục
+          <button className="btn btn-ghost btn-sm" onClick={onRestoreAll} title="Restore all scenes">
+            ↩ Restore all
           </button>
-          <button className="btn btn-danger btn-sm" onClick={onDeleteAll} title="Xóa tất cả">
-            🗑️ Xóa tất cả
+          <button className="btn btn-danger btn-sm" onClick={onDeleteAll} title="Delete all scenes">
+            🗑️ Delete all
           </button>
         </div>
       </div>
@@ -115,7 +115,7 @@ export default function SceneList({
       {/* Sensitivity slider */}
       <div style={{ marginBottom: '12px', padding: '8px 12px', background: 'var(--bg-secondary)', borderRadius: 'var(--radius-sm)' }}>
         <label style={{ fontSize: '0.7rem', color: 'var(--text-secondary)', display: 'flex', alignItems: 'center', gap: '8px' }}>
-          Độ nhạy: {sensitivity.toFixed(1)}
+          Sensitivity: {sensitivity.toFixed(1)}
           <input
             type="range"
             min="0.5"
@@ -166,14 +166,14 @@ export default function SceneList({
                 <button
                   className="scene-btn scene-btn-play"
                   onClick={(e) => { e.stopPropagation(); onSeekToScene(scene); }}
-                  title="Phát cảnh này"
+                  title="Play this scene"
                 >
                   ▶
                 </button>
                 <button
                   className="scene-btn scene-btn-delete"
                   onClick={(e) => { e.stopPropagation(); onToggleDelete(scene.id); }}
-                  title="Xóa cảnh"
+                  title="Delete scene"
                 >
                   🗑️
                 </button>

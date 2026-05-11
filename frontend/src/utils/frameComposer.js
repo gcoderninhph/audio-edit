@@ -22,7 +22,7 @@ const VIDEO_FADE_BACKGROUND_KIND = 'video-fade'
 export const VIDEO_FADE_PRESET_OPTIONS = [
   {
     id: 'soft',
-    label: 'Mềm',
+    label: 'Soft',
     nativeBlur: '20:2',
     nativeBrightness: -0.04,
     nativeOverlayOpacity: 0.18,
@@ -37,7 +37,7 @@ export const VIDEO_FADE_PRESET_OPTIONS = [
   },
   {
     id: 'cinematic',
-    label: 'Điện ảnh',
+    label: 'Cinematic',
     nativeBlur: '32:4',
     nativeBrightness: -0.08,
     nativeOverlayOpacity: 0.24,
@@ -52,7 +52,7 @@ export const VIDEO_FADE_PRESET_OPTIONS = [
   },
   {
     id: 'bold',
-    label: 'Đậm',
+    label: 'Bold',
     nativeBlur: '44:5',
     nativeBrightness: -0.12,
     nativeOverlayOpacity: 0.3,
@@ -75,7 +75,7 @@ function loadImageFromDataUrl(dataUrl) {
     const image = new Image()
     image.decoding = 'async'
     image.onload = () => resolve(image)
-    image.onerror = () => reject(new Error('Không thể đọc ảnh nền đã chọn.'))
+    image.onerror = () => reject(new Error('Unable to read the selected background image.'))
     image.src = dataUrl
   })
 }
@@ -84,7 +84,7 @@ function readFileAsDataUrl(file) {
   return new Promise((resolve, reject) => {
     const reader = new FileReader()
     reader.onload = () => resolve(String(reader.result || ''))
-    reader.onerror = () => reject(reader.error || new Error('Không thể đọc file ảnh đã chọn.'))
+    reader.onerror = () => reject(reader.error || new Error('Unable to read the selected image file.'))
     reader.readAsDataURL(file)
   })
 }
@@ -124,7 +124,7 @@ export function createVideoFadeFrameBackground(presetId = DEFAULT_VIDEO_FADE_PRE
 
 export async function createImageFrameBackgroundFromFile(file, { maxDimension = 1600 } = {}) {
   if (!(file instanceof Blob)) {
-    throw new Error('File ảnh không hợp lệ.')
+    throw new Error('Invalid image file.')
   }
 
   const originalDataUrl = await readFileAsDataUrl(file)
@@ -140,7 +140,7 @@ export async function createImageFrameBackgroundFromFile(file, { maxDimension = 
     const context = canvas.getContext('2d')
 
     if (!context) {
-      throw new Error('Không thể tối ưu ảnh nền đã chọn.')
+      throw new Error('Unable to optimize the selected background image.')
     }
 
     context.drawImage(image, 0, 0, canvas.width, canvas.height)
@@ -157,7 +157,7 @@ export async function createImageFrameBackgroundFromFile(file, { maxDimension = 
 
 export function getFrameBackgroundLabel(frameBackground) {
   if (isImageFrameBackground(frameBackground)) {
-    return 'Ảnh nền'
+    return 'Background image'
   }
 
   if (isVideoFadeFrameBackground(frameBackground)) {

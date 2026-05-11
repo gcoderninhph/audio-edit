@@ -42,19 +42,15 @@ export default function VideoPlayerSubtitleControls({
       <div className="video-frame-section-head">
         <div>
           <span className="video-frame-section-label">Subtitle</span>
-          <strong className="video-frame-section-value">Co chu {subtitleFontScalePercent}% • {activeSubtitleFont.label} • Neo {activeSubtitleAnchor.label}</strong>
+          <strong className="video-frame-section-value">{activeSubtitleFont.label} • {subtitleFontScalePercent}% • {activeSubtitleAnchor.label}</strong>
         </div>
-        <span className="video-frame-section-caption">Muc nay dong bo cho preview canvas, overlay export native va renderer-record export.</span>
       </div>
 
       <div className="video-frame-detail-panel dev-locator-host">
-        <DeveloperLocator code="panel.video-player.subtitle-controls.font-size" title="Subtitle Font Size Control" />
-        <div>
-          <div className="video-frame-detail-title">Kich thuoc font subtitle</div>
-          <p className="video-frame-detail-copy">Tang hoac giam co chu subtitle de uu tien do doc ma van giu subtitle gon trong khung.</p>
-        </div>
+        <DeveloperLocator code="panel.video-player.subtitle-controls.font" title="Subtitle Font Controls" />
+        <div className="video-frame-detail-title">Font</div>
         <div className="video-frame-field-row">
-          <label className="video-frame-field-label" htmlFor="subtitle-font-scale-range">Kich thuoc font</label>
+          <label className="video-frame-field-label" htmlFor="subtitle-font-scale-range">Size</label>
           <div className="video-audio-slider-row">
             <input
               id="subtitle-font-scale-range"
@@ -71,16 +67,8 @@ export default function VideoPlayerSubtitleControls({
             <span className="video-audio-slider-value">{subtitleFontScalePercent}%</span>
           </div>
         </div>
-      </div>
-
-      <div className="video-frame-detail-panel dev-locator-host">
-        <DeveloperLocator code="panel.video-player.subtitle-controls.font-family" title="Subtitle Font Family Control" />
-        <div>
-          <div className="video-frame-detail-title">Kieu font</div>
-          <p className="video-frame-detail-copy">Chon font subtitle phu hop voi chat giong va bo cuc video, dong bo cho preview va export.</p>
-        </div>
         <div className="video-frame-field-row">
-          <label className="video-frame-field-label" htmlFor="subtitle-font-family-select">Font subtitle</label>
+          <label className="video-frame-field-label" htmlFor="subtitle-font-family-select">Font</label>
           <select
             id="subtitle-font-family-select"
             className="video-frame-field-select"
@@ -92,48 +80,39 @@ export default function VideoPlayerSubtitleControls({
             ))}
           </select>
         </div>
+        <div className="video-frame-field-row">
+          <label className="video-frame-field-label" htmlFor="subtitle-font-color-input">Color</label>
+          <label className="subtitle-color-control" htmlFor="subtitle-font-color-input">
+            <input
+              id="subtitle-font-color-input"
+              className="subtitle-color-control-input"
+              type="color"
+              value={normalizedSubtitleSettings.fontColor}
+              onChange={(event) => applySubtitleSettings({ fontColor: event.target.value })}
+            />
+            <span className="subtitle-color-control-value">{formatColorValue(normalizedSubtitleSettings.fontColor)}</span>
+          </label>
+        </div>
       </div>
 
       <div className="video-frame-detail-panel dev-locator-host">
-        <DeveloperLocator code="panel.video-player.subtitle-controls.appearance" title="Subtitle Appearance Controls" />
-        <div>
-          <div className="video-frame-detail-title">Mau subtitle</div>
-          <p className="video-frame-detail-copy">Doi mau chu, mau nen va do dam nen subtitle de phu hop voi khung hinh dang dung.</p>
+        <DeveloperLocator code="panel.video-player.subtitle-controls.background" title="Subtitle Background Controls" />
+        <div className="video-frame-detail-title">Text background</div>
+        <div className="video-frame-field-row">
+          <label className="video-frame-field-label" htmlFor="subtitle-background-color-input">Color</label>
+          <label className="subtitle-color-control" htmlFor="subtitle-background-color-input">
+            <input
+              id="subtitle-background-color-input"
+              className="subtitle-color-control-input"
+              type="color"
+              value={normalizedSubtitleSettings.backgroundColor}
+              onChange={(event) => applySubtitleSettings({ backgroundColor: event.target.value })}
+            />
+            <span className="subtitle-color-control-value">{formatColorValue(normalizedSubtitleSettings.backgroundColor)}</span>
+          </label>
         </div>
-        <div className="subtitle-style-grid">
-          <div className="subtitle-style-field dev-locator-host">
-            <DeveloperLocator code="panel.video-player.subtitle-controls.font-color" title="Subtitle Font Color Control" />
-            <span className="video-frame-field-label">Mau chu</span>
-            <label className="subtitle-color-control" htmlFor="subtitle-font-color-input">
-              <input
-                id="subtitle-font-color-input"
-                className="subtitle-color-control-input"
-                type="color"
-                value={normalizedSubtitleSettings.fontColor}
-                onChange={(event) => applySubtitleSettings({ fontColor: event.target.value })}
-              />
-              <span className="subtitle-color-control-value">{formatColorValue(normalizedSubtitleSettings.fontColor)}</span>
-            </label>
-          </div>
-
-          <div className="subtitle-style-field dev-locator-host">
-            <DeveloperLocator code="panel.video-player.subtitle-controls.background-color" title="Subtitle Background Color Control" />
-            <span className="video-frame-field-label">Mau nen</span>
-            <label className="subtitle-color-control" htmlFor="subtitle-background-color-input">
-              <input
-                id="subtitle-background-color-input"
-                className="subtitle-color-control-input"
-                type="color"
-                value={normalizedSubtitleSettings.backgroundColor}
-                onChange={(event) => applySubtitleSettings({ backgroundColor: event.target.value })}
-              />
-              <span className="subtitle-color-control-value">{formatColorValue(normalizedSubtitleSettings.backgroundColor)}</span>
-            </label>
-          </div>
-        </div>
-        <div className="subtitle-style-field dev-locator-host">
-          <DeveloperLocator code="panel.video-player.subtitle-controls.background-opacity" title="Subtitle Background Opacity Control" />
-          <label className="video-frame-field-label" htmlFor="subtitle-background-opacity-range">Do dam nen</label>
+        <div className="video-frame-field-row">
+          <label className="video-frame-field-label" htmlFor="subtitle-background-opacity-range">Opacity</label>
           <div className="video-audio-slider-row">
             <input
               id="subtitle-background-opacity-range"
@@ -150,17 +129,9 @@ export default function VideoPlayerSubtitleControls({
             <span className="video-audio-slider-value">{subtitleBackgroundOpacityPercent}%</span>
           </div>
         </div>
-      </div>
-
-      <div className="video-frame-detail-panel dev-locator-host">
-        <DeveloperLocator code="panel.video-player.subtitle-controls.anchor" title="Subtitle Anchor Control" />
-        <div>
-          <div className="video-frame-detail-title">Diem neo subtitle</div>
-          <p className="video-frame-detail-copy">Chon vi tri ma box subtitle bam vao trong khung, phu hop voi bo cuc va nhan vat trong video.</p>
-        </div>
         <div className="video-frame-field-row">
-          <span className="video-frame-field-label">Diem neo</span>
-          <div className="subtitle-anchor-grid" role="grid" aria-label="Chon diem neo subtitle">
+          <span className="video-frame-field-label">Anchor</span>
+          <div className="subtitle-anchor-grid" role="grid" aria-label="Choose subtitle anchor point">
             {SUBTITLE_ANCHOR_GRID_ROWS.map((anchorRow, rowIndex) => (
               <div key={`subtitle-anchor-row-${rowIndex}`} className="subtitle-anchor-grid-row" role="row">
                 {anchorRow.map((anchorId) => {
@@ -187,9 +158,6 @@ export default function VideoPlayerSubtitleControls({
               </div>
             ))}
           </div>
-        </div>
-        <div className="video-frame-image-note">
-          Subtitle hien dang neo tai <strong>{activeSubtitleAnchor.label}</strong> va se duoc luu trong project hien tai.
         </div>
       </div>
     </section>

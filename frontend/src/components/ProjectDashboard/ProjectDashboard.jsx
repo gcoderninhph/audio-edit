@@ -5,7 +5,7 @@ import './ProjectDashboard.css';
 
 function formatDate(isoString) {
   if (!isoString) return '';
-  return new Date(isoString).toLocaleString('vi-VN', {
+  return new Date(isoString).toLocaleString('en-US', {
     day: '2-digit', month: '2-digit', year: 'numeric',
     hour: '2-digit', minute: '2-digit'
   });
@@ -91,7 +91,7 @@ export default function ProjectDashboard({ onOpenProject, onNewProject }) {
 
   const handleDelete = async (e, id) => {
     e.stopPropagation();
-    if (!confirm('Xóa project này?')) return;
+    if (!confirm('Delete this project?')) return;
     try {
       await deleteLocalProject(id);
       setProjects(prev => prev.filter(p => p.id !== id));
@@ -126,26 +126,26 @@ export default function ProjectDashboard({ onOpenProject, onNewProject }) {
       <div className="dashboard-header dev-locator-host">
         <DeveloperLocator code="dashboard.header" title="Dashboard Header Section" />
         <div>
-          <h1 className="dashboard-title gradient-text">Dự án của tôi</h1>
-          <p className="dashboard-subtitle">Chọn một project để tiếp tục hoặc tạo mới</p>
+          <h1 className="dashboard-title gradient-text">My Projects</h1>
+          <p className="dashboard-subtitle">Open an existing project or create a new one</p>
         </div>
         <div className="dashboard-actions">
           <div className="dashboard-sort dev-locator-host">
             <DeveloperLocator code="dashboard.sort" title="Dashboard Sort Control" />
-            <label className="dashboard-sort-label" htmlFor="dashboard-sort-select">Sắp xếp</label>
+            <label className="dashboard-sort-label" htmlFor="dashboard-sort-select">Sort</label>
             <select
               id="dashboard-sort-select"
               className="dashboard-sort-select"
               value={sortOrder}
               onChange={(event) => setSortOrder(event.target.value)}
             >
-              <option value="newest">Ngày tạo mới nhất</option>
-              <option value="oldest">Ngày tạo cũ nhất</option>
+              <option value="newest">Newest first</option>
+              <option value="oldest">Oldest first</option>
             </select>
           </div>
           <button className="btn btn-primary new-project-btn" onClick={handleNewProject}>
             <span className="new-project-icon">+</span>
-            Tạo project mới
+            New project
           </button>
         </div>
       </div>
@@ -153,15 +153,15 @@ export default function ProjectDashboard({ onOpenProject, onNewProject }) {
       {isLoading ? (
         <div className="dashboard-loading">
           <div className="detecting-spinner" />
-          <div style={{ marginTop: '12px', color: 'var(--text-secondary)' }}>Đang tải danh sách...</div>
+          <div style={{ marginTop: '12px', color: 'var(--text-secondary)' }}>Loading projects...</div>
         </div>
       ) : projects.length === 0 ? (
         <div className="dashboard-empty">
           <div className="empty-icon-large">🎬</div>
-          <h2>Chưa có project nào</h2>
-          <p>Bắt đầu bằng cách tải lên một video</p>
+          <h2>No projects yet</h2>
+          <p>Start by uploading a video</p>
           <button className="btn btn-primary" onClick={handleNewProject} style={{ marginTop: '16px' }}>
-            + Tạo project đầu tiên
+            + Create your first project
           </button>
         </div>
       ) : (
@@ -170,7 +170,7 @@ export default function ProjectDashboard({ onOpenProject, onNewProject }) {
           <div className="project-card project-card-new dev-locator-host" onClick={handleNewProject}>
             <DeveloperLocator code="dashboard.project.new" title="New Project Card" />
             <div className="project-card-new-icon">+</div>
-            <div className="project-card-new-label">Tạo mới</div>
+            <div className="project-card-new-label">New</div>
           </div>
 
           {/* Existing projects */}
@@ -197,13 +197,13 @@ export default function ProjectDashboard({ onOpenProject, onNewProject }) {
                   {project.video_original_name || 'Untitled'}
                 </div>
                 <div className="project-card-date">
-                  Tạo lúc {formatDate(project.created_at || project.updated_at)}
+                  Created {formatDate(project.created_at || project.updated_at)}
                 </div>
               </div>
               <button
                 className="project-card-delete"
                 onClick={(e) => handleDelete(e, project.id)}
-                title="Xóa project"
+                title="Delete project"
               >
                 🗑️
               </button>

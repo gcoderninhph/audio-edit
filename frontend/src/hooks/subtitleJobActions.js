@@ -35,11 +35,11 @@ export async function runTranscriptionJob({
 
   pushState(getCurrentSnapshot());
   setIsTranscribing(true);
-  setTranscribeProgress({ phase: 'Dang tai bo cong cu...', percent: 0 });
+  setTranscribeProgress({ phase: 'Loading tools...', percent: 0 });
 
   try {
     const ffmpeg = await getFFmpeg((progress) => {
-      updateTranscribeProgress({ phase: 'Dang tai bo cong cu...', percent: progress });
+      updateTranscribeProgress({ phase: 'Loading tools...', percent: progress });
     });
     const nextSubtitles = await transcribeVideo(
       ffmpeg,
@@ -81,7 +81,7 @@ export async function runTranscriptionJob({
     }
 
     console.error(error);
-    alert(`Loi tao phu de: ${error.message}`);
+    alert(`Subtitle generation failed: ${error.message}`);
     setTranscriptionJobId(null);
   } finally {
     if (sessionIdRef.current === currentSessionId) {
@@ -121,7 +121,7 @@ export async function runTranslationJob({
 
   pushState(getCurrentSnapshot());
   setIsTranslating(true);
-  setTranslateProgress({ phase: 'Khoi tao dich...', percent: 0 });
+  setTranslateProgress({ phase: 'Starting translation...', percent: 0 });
 
   try {
     const nextSubtitles = await translateSubtitles(
@@ -164,7 +164,7 @@ export async function runTranslationJob({
     }
 
     console.error(error);
-    alert(`Loi dich phu de: ${error.message}`);
+    alert(`Subtitle translation failed: ${error.message}`);
     setTranslationJobId(null);
   } finally {
     if (sessionIdRef.current === currentSessionId) {
@@ -188,7 +188,7 @@ export async function runVoiceoverJob({
 
   const currentSessionId = sessionIdRef.current;
   if (!currentSessionId) {
-    throw new Error('Khong tim thay project hien tai de luu audio thuyet minh.')
+    throw new Error('No active project found to save voiceover audio.')
   }
 
   const updateVoiceoverProgress = (progress) => {
@@ -200,7 +200,7 @@ export async function runVoiceoverJob({
   };
 
   setIsGeneratingVoiceover(true);
-  setVoiceoverProgress({ phase: 'Khoi tao thuyet minh...', percent: 0 });
+  setVoiceoverProgress({ phase: 'Starting voiceover...', percent: 0 });
   setLastVoiceoverAudioName('');
 
   try {
@@ -209,7 +209,7 @@ export async function runVoiceoverJob({
       return;
     }
 
-    updateVoiceoverProgress({ phase: 'Dang luu audio vao project...', percent: 95 });
+  updateVoiceoverProgress({ phase: 'Saving audio to project...', percent: 95 });
     const savedVoiceover = await saveLocalProjectVoiceoverAudio(currentSessionId, {
       bytes: result.audioBlob,
       duration: result.duration,
@@ -231,14 +231,14 @@ export async function runVoiceoverJob({
       previewUrl,
       startTime: 0,
     } : null);
-    updateVoiceoverProgress({ phase: 'Da luu audio vao project', percent: 100 });
+    updateVoiceoverProgress({ phase: 'Audio saved to project', percent: 100 });
   } catch (error) {
     if (sessionIdRef.current !== currentSessionId) {
       return;
     }
 
     console.error(error);
-    alert(`Loi tao thuyet minh: ${error.message}`);
+    alert(`Voiceover generation failed: ${error.message}`);
   } finally {
     if (sessionIdRef.current === currentSessionId) {
       setIsGeneratingVoiceover(false);

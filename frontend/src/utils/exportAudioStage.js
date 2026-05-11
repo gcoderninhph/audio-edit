@@ -13,7 +13,7 @@ export async function materializeVoiceoverFile(voiceoverTrack) {
 
   const response = await fetch(voiceoverTrack.previewUrl);
   if (!response.ok) {
-    throw new Error('Khong the doc audio thuyet minh de export.');
+    throw new Error('Unable to read the voiceover audio for export.');
   }
 
   const voiceoverBlob = await response.blob();

@@ -7,7 +7,7 @@ function normalizeTranslationErrorMessage(message, fallbackMessage) {
   }
 
   if (/No available managed worker/i.test(normalizedMessage)) {
-    return 'Chưa có worker dịch khả dụng. Hãy tạo hoặc khởi động managed worker trong web admin panel của LLM-Subtrans trước khi gửi job dịch.';
+    return 'No translation worker is available. Create or start a managed worker in the LLM-Subtrans web admin panel before submitting a translation job.';
   }
 
   return normalizedMessage;
@@ -88,18 +88,18 @@ export function srtToJson(srtText) {
 // Quản lý tiến trình dịch với LLM-Subtrans
 export async function translateSubtitles(subtitles, targetLanguage, onProgress, onJobCreated) {
   if (!subtitles || subtitles.length === 0) {
-    throw new Error('Không có phụ đề để dịch');
+    throw new Error('No subtitles available to translate');
   }
 
   try {
     // 1. Convert JSON to SRT Blob
-    onProgress({ phase: 'Đang chuẩn bị file...', percent: 0 });
+    onProgress({ phase: 'Preparing file...', percent: 0 });
     const srtText = jsonToSrt(subtitles);
     const srtBlob = new Blob([srtText], { type: 'text/plain' });
     const srtFile = new File([srtBlob], 'subtitles_vi.srt', { type: 'text/plain' });
 
     // 2. Upload file to start translation
-    onProgress({ phase: 'Đang gửi yêu cầu dịch...', percent: 10 });
+    onProgress({ phase: 'Sending translation request...', percent: 10 });
     const formData = new FormData();
     formData.append('subtitle_file', srtFile);
     formData.append('target_language', targetLanguage);
@@ -110,7 +110,7 @@ export async function translateSubtitles(subtitles, targetLanguage, onProgress, 
     });
 
     if (!startRes.ok) {
-      throw new Error(await readApiErrorMessage(startRes, 'Lỗi khi khởi tạo quá trình dịch'));
+      throw new Error(await readApiErrorMessage(startRes, 'Failed to start translation'));
     }
 
     const startData = await startRes.json();
@@ -118,7 +118,7 @@ export async function translateSubtitles(subtitles, targetLanguage, onProgress, 
     const outputFileName = startData.outputFileName;
 
     if (!requestId) {
-      throw new Error('LLM-Subtrans không trả về Request ID');
+      throw new Error('LLM-Subtrans did not return a request ID');
     }
 
     if (onJobCreated) {
@@ -134,7 +134,7 @@ export async function translateSubtitles(subtitles, targetLanguage, onProgress, 
 }
 
 export async function resumeTranslation(requestId, outputFileName, onProgress, options = {}) {
-  onProgress({ phase: 'Đang tiếp tục tiến trình dịch...', percent: 30 });
+  onProgress({ phase: 'Resuming translation...', percent: 30 });
   return await pollTranslationJob(requestId, outputFileName, onProgress, {
     initialDelayMs: options.initialDelayMs ?? 3000,
   });
@@ -146,7 +146,7 @@ export async function getTranslationJobSnapshot(requestId) {
     return { state: 'missing' };
   }
   if (!statusRes.ok) {
-    throw new Error(await readApiErrorMessage(statusRes, 'Không thể kiểm tra trạng thái tiến trình dịch'));
+    throw new Error(await readApiErrorMessage(statusRes, 'Unable to check translation job status'));
   }
 
   const statusData = await statusRes.json();
@@ -156,7 +156,7 @@ export async function getTranslationJobSnapshot(requestId) {
   if (statusData.status === 'failed') {
     return {
       state: 'failed',
-      message: statusData.message || 'Quá trình dịch thất bại (LLM-Subtrans Error)',
+      message: statusData.message || 'Translation failed (LLM-Subtrans error)',
     };
   }
 
@@ -170,7 +170,7 @@ export async function downloadTranslatedSubtitles(requestId, outputFileName) {
   const downloadRes = await apiFetch(`/api/translation/download/${requestId}/${outputFileName}`);
 
   if (!downloadRes.ok) {
-    throw new Error(await readApiErrorMessage(downloadRes, 'Không thể tải file phụ đề sau khi dịch xong'));
+    throw new Error(await readApiErrorMessage(downloadRes, 'Unable to download the translated subtitle file'));
   }
 
   const translatedSrtText = await downloadRes.text();
@@ -178,7 +178,7 @@ export async function downloadTranslatedSubtitles(requestId, outputFileName) {
 }
 
 async function pollTranslationJob(requestId, outputFileName, onProgress, { initialDelayMs = 3000 } = {}) {
-  onProgress({ phase: 'Đang dịch (Việc này có thể mất vài phút)...', percent: 30 });
+  onProgress({ phase: 'Translating (this may take a few minutes)...', percent: 30 });
   let isFinished = false;
   let waitMilliseconds = initialDelayMs;
 
@@ -190,10 +190,10 @@ async function pollTranslationJob(requestId, outputFileName, onProgress, { initi
 
     const statusRes = await apiFetch(`/api/translation/status/${requestId}`);
     if (statusRes.status === 404) {
-      throw new Error('Tiến trình không tồn tại (Job Not Found)');
+      throw new Error('The job does not exist (Job Not Found)');
     }
     if (!statusRes.ok) {
-      throw new Error(await readApiErrorMessage(statusRes, 'Không thể kiểm tra trạng thái tiến trình dịch'));
+      throw new Error(await readApiErrorMessage(statusRes, 'Unable to check translation job status'));
     }
 
     const statusData = await statusRes.json();
@@ -201,16 +201,16 @@ async function pollTranslationJob(requestId, outputFileName, onProgress, { initi
     if (statusData.status === 'finished') {
       isFinished = true;
     } else if (statusData.status === 'failed') {
-      throw new Error('Quá trình dịch thất bại (LLM-Subtrans Error)');
+      throw new Error('Translation failed (LLM-Subtrans error)');
     } else if (statusData.status === 'running') {
-      onProgress({ phase: 'AI đang xử lý dịch thuật...', percent: 60 });
+      onProgress({ phase: 'AI is processing the translation...', percent: 60 });
     }
   }
 
   // Download file
-  onProgress({ phase: 'Đang tải kết quả...', percent: 90 });
+  onProgress({ phase: 'Downloading results...', percent: 90 });
   const translatedSubtitles = await downloadTranslatedSubtitles(requestId, outputFileName);
   
-  onProgress({ phase: 'Hoàn tất!', percent: 100 });
+  onProgress({ phase: 'Complete!', percent: 100 });
   return translatedSubtitles;
 }

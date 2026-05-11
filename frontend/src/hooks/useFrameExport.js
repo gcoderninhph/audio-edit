@@ -224,7 +224,7 @@ export function useFrameExport({ videoFile, keptScenes, filteredSubtitles, video
       ...createInitialExportProgress(),
       phase: 'preparing',
       percent: 0,
-      detail: `Khởi tạo export • ${effectiveKeptScenes.length} cảnh • ${exportSubtitles.length} subtitle`,
+      detail: `Starting export • ${effectiveKeptScenes.length} scenes • ${exportSubtitles.length} subtitles`,
       sceneCount: effectiveKeptScenes.length,
       subtitleCount: exportSubtitles.length,
       startedAt,

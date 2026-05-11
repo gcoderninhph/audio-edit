@@ -12,10 +12,10 @@
   "subtitle_settings": {
     "fontSizeScale": 1.8,
     "anchor": "middle-center",
-    "fontFamily": "Times New Roman",
+    "fontFamily": "Verdana",
     "fontColor": "#FFFFFF",
     "backgroundColor": "#000000",
-    "backgroundOpacity": 0.25
+    "backgroundOpacity": 0.6
   },
   "scenes": [],
   "deleted_ids": [],
@@ -522,5 +522,5 @@
   "voiceover_size": 2030906,
   "voiceover_duration": 126.902857,
   "created_at": "2026-05-11T07:46:48.993Z",
-  "updated_at": "2026-05-11T09:54:26.276Z"
+  "updated_at": "2026-05-11T10:16:02.563Z"
 }

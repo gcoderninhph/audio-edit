@@ -196,7 +196,7 @@ export function useVideoEditor() {
 
   const closeProject = useCallback(() => {
     if (isDetecting) {
-      if (!window.confirm("Quá trình cắt cảnh đang diễn ra sẽ bị hủy. Bạn có chắc chắn muốn thoát?")) {
+      if (!window.confirm('Scene detection in progress will be canceled. Are you sure you want to leave?')) {
         return;
       }
       if (detectAbortControllerRef.current) {

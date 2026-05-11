@@ -20,10 +20,10 @@ import VideoPlayerSubtitleControls from './VideoPlayerSubtitleControls'
 import './VideoPlayerFrameControls.css'
 
 const FRAME_PRESET_COPY = {
-  'landscape-16-9': 'Video ngang cho desktop và YouTube',
-  'portrait-9-16': 'Khung dọc cho Reel, Story, Shorts',
-  'square-1-1': 'Dáng vuông gọn cho bài đăng mạng xã hội',
-  'portrait-4-5': 'Tỉ lệ feed ưu tiên nội dung trung tâm',
+  'landscape-16-9': 'Landscape frame for desktop and YouTube',
+  'portrait-9-16': 'Vertical frame for Reels, Stories, and Shorts',
+  'square-1-1': 'Compact square layout for social posts',
+  'portrait-4-5': 'Feed-friendly ratio focused on the center subject',
 }
 
 export default function VideoPlayerFrameControls({
@@ -58,26 +58,26 @@ export default function VideoPlayerFrameControls({
   const videoVolumePercent = Math.round((videoVolume || 0) * 100)
   const voiceoverVolumePercent = Math.round((voiceoverVolume || 0) * 100)
   const controlsKicker = visibleSection === 'background'
-    ? 'Chỉnh nền'
+    ? 'Background'
     : visibleSection === 'subtitle'
-      ? 'Chỉnh subtitle'
+      ? 'Subtitles'
     : visibleSection === 'audio'
-      ? 'Chỉnh âm thanh'
-      : 'Chỉnh khung'
+      ? 'Audio'
+      : 'Frame'
   const controlsTitle = visibleSection === 'background'
-    ? 'Thiết lập nền video'
+    ? 'Video background settings'
     : visibleSection === 'subtitle'
-      ? 'Thiết lập subtitle preview va export'
+      ? 'Preview and export subtitle settings'
     : visibleSection === 'audio'
-      ? 'Cân chỉnh âm thanh preview va export'
-      : 'Thiết lập khung video'
+      ? 'Preview and export audio settings'
+      : 'Video frame settings'
   const controlsSubtitle = visibleSection === 'background'
-    ? 'Mở đúng phần nền cần dùng, phần còn lại được ẩn để nav trái gọn hơn.'
+    ? 'Only the active background controls stay visible so the sidebar remains focused.'
     : visibleSection === 'subtitle'
-      ? 'Mở nhanh từ track subtitle trên timeline để đổi cỡ chữ và điểm neo cho ca preview lan export.'
+      ? 'Open this from the timeline subtitle track to adjust subtitle styling for both preview and export.'
     : visibleSection === 'audio'
-      ? 'Tinh chỉnh riêng âm lượng video gốc và thuyết minh. Muc nay duoc dung cho ca preview lan file export.'
-      : 'Chỉ giữ lại tùy chọn tỉ lệ khung để bạn chỉnh nhanh mà không làm rối vùng xem trước.'
+      ? 'Adjust source video and voiceover levels separately. These values are used for both preview and export.'
+      : 'Keep the frame ratio controls close at hand without cluttering the preview area.'
 
   const handleChooseBackgroundImage = useCallback(() => {
     backgroundInputRef.current?.click()
@@ -113,7 +113,7 @@ export default function VideoPlayerFrameControls({
           <DeveloperLocator code="panel.video-player.frame-controls.preset" title="Frame Preset Control" />
           <div className="video-frame-section-head">
             <div>
-              <span className="video-frame-section-label">Tỉ lệ xuất</span>
+              <span className="video-frame-section-label">Export ratio</span>
               <strong className="video-frame-section-value">{activeFramePreset.label}</strong>
             </div>
             <span className="video-frame-section-caption">{FRAME_PRESET_COPY[activeFramePreset.id]}</span>
@@ -129,7 +129,7 @@ export default function VideoPlayerFrameControls({
                 title={FRAME_PRESET_COPY[preset.id] || preset.label}
               >
                 <span className="frame-option-btn-label">{preset.label}</span>
-                <span className="frame-option-btn-meta">{FRAME_PRESET_COPY[preset.id] || 'Tỉ lệ khung xuất'}</span>
+                <span className="frame-option-btn-meta">{FRAME_PRESET_COPY[preset.id] || 'Export frame ratio'}</span>
               </button>
             ))}
           </div>
@@ -141,20 +141,20 @@ export default function VideoPlayerFrameControls({
           <DeveloperLocator code="panel.video-player.frame-controls.background" title="Frame Background Control" />
           <div className="video-frame-section-head">
             <div>
-              <span className="video-frame-section-label">Nền bìa</span>
+              <span className="video-frame-section-label">Cover background</span>
               <strong className="video-frame-section-value">{activeBackgroundLabel}</strong>
             </div>
-            <span className="video-frame-section-caption">Chỉ hiện chi tiết của kiểu nền đang dùng</span>
+            <span className="video-frame-section-caption">Only the active background mode shows detailed controls</span>
           </div>
 
-          <div className="video-frame-mode-switcher" role="tablist" aria-label="Chọn kiểu nền">
+          <div className="video-frame-mode-switcher" role="tablist" aria-label="Choose background mode">
             <button
               type="button"
               className={`frame-mode-btn ${activeBackgroundMode === 'color' ? 'active' : ''}`}
               onClick={handleActivateColorMode}
               aria-pressed={activeBackgroundMode === 'color'}
             >
-              Màu
+              Color
             </button>
             <button
               type="button"
@@ -170,7 +170,7 @@ export default function VideoPlayerFrameControls({
               onClick={handleActivateImageMode}
               aria-pressed={activeBackgroundMode === 'image'}
             >
-              Ảnh
+              Image
             </button>
           </div>
 
@@ -178,8 +178,8 @@ export default function VideoPlayerFrameControls({
             <div className="video-frame-detail-panel dev-locator-host">
               <DeveloperLocator code="panel.video-player.frame-controls.background-color" title="Color Background Detail" />
               <div>
-                <div className="video-frame-detail-title">Chọn màu nền</div>
-                <p className="video-frame-detail-copy">Dùng khi cần nền gọn, dễ đọc subtitle, ít gây nhiễu thị giác.</p>
+                <div className="video-frame-detail-title">Background color</div>
+                <p className="video-frame-detail-copy">Use a clean solid background when subtitle readability matters most.</p>
               </div>
               <div className="video-frame-color-grid">
                 {FRAME_BACKGROUND_OPTIONS.map((option) => (
@@ -204,11 +204,11 @@ export default function VideoPlayerFrameControls({
             <div className="video-frame-detail-panel dev-locator-host">
               <DeveloperLocator code="panel.video-player.frame-controls.fade-config" title="Fade Config" />
               <div>
-                <div className="video-frame-detail-title">Mức fade video</div>
-                <p className="video-frame-detail-copy">Tăng hoặc giảm độ mờ để giữ chiều sâu mà vẫn làm chủ thể nổi hơn.</p>
+                <div className="video-frame-detail-title">Video fade strength</div>
+                <p className="video-frame-detail-copy">Increase or reduce the fade treatment to balance atmosphere and subject focus.</p>
               </div>
               <div className="video-frame-field-row">
-                <label className="video-frame-field-label" htmlFor="video-fade-preset-select">Preset fade</label>
+                <label className="video-frame-field-label" htmlFor="video-fade-preset-select">Fade preset</label>
                 <select
                   id="video-fade-preset-select"
                   className="video-frame-field-select"
@@ -227,20 +227,20 @@ export default function VideoPlayerFrameControls({
             <div className="video-frame-detail-panel dev-locator-host">
               <DeveloperLocator code="panel.video-player.frame-controls.background-image" title="Image Background Detail" />
               <div>
-                <div className="video-frame-detail-title">Ảnh nền riêng</div>
-                <p className="video-frame-detail-copy">Phù hợp khi bạn đã có artwork hoặc ảnh bìa riêng cho video.</p>
+                <div className="video-frame-detail-title">Custom background image</div>
+                <p className="video-frame-detail-copy">Use this when you already have artwork or a dedicated cover image.</p>
               </div>
               <button
                 type="button"
                 className="video-frame-upload-btn"
                 onClick={handleChooseBackgroundImage}
               >
-                {isImageActive ? 'Thay ảnh nền' : 'Tải ảnh nền'}
+                {isImageActive ? 'Replace background image' : 'Upload background image'}
               </button>
               <div className="video-frame-image-note">
                 {isImageActive
-                  ? <>Đang dùng: <strong>{frameBackground.name || 'Ảnh nền đã chọn'}</strong></>
-                  : 'Chưa có ảnh nền nào được chọn.'}
+                  ? <>Using: <strong>{frameBackground.name || 'Selected background image'}</strong></>
+                  : 'No background image selected yet.'}
               </div>
             </div>
           )}
@@ -253,18 +253,18 @@ export default function VideoPlayerFrameControls({
           <div className="video-frame-section-head">
             <div>
               <span className="video-frame-section-label">Mix xem trước</span>
-              <strong className="video-frame-section-value">Video {videoVolumePercent}% • Thuyết minh {voiceoverVolumePercent}%</strong>
+              <strong className="video-frame-section-value">Video {videoVolumePercent}% • Voiceover {voiceoverVolumePercent}%</strong>
             </div>
-            <span className="video-frame-section-caption">Mục này mở nhanh khi bạn click trực tiếp vào track voiceover trên timeline.</span>
+            <span className="video-frame-section-caption">Open this directly from the voiceover track on the timeline.</span>
           </div>
 
           <div className="video-frame-detail-panel">
             <div>
-              <div className="video-frame-detail-title">Âm lượng video gốc</div>
-              <p className="video-frame-detail-copy">Giảm nền video khi lời thuyết minh cần nổi hơn, hoặc tăng lại nếu muốn giữ nhiều âm thanh gốc hơn trong preview va luc export.</p>
+              <div className="video-frame-detail-title">Source video volume</div>
+              <p className="video-frame-detail-copy">Lower the video bed when the voiceover needs to stand out, or raise it to keep more of the original sound.</p>
             </div>
             <div className="video-frame-field-row">
-              <label className="video-frame-field-label" htmlFor="video-preview-volume-range">Âm lượng video</label>
+              <label className="video-frame-field-label" htmlFor="video-preview-volume-range">Video volume</label>
               <div className="video-audio-slider-row">
                 <input
                   id="video-preview-volume-range"
@@ -283,11 +283,11 @@ export default function VideoPlayerFrameControls({
 
           <div className="video-frame-detail-panel">
             <div>
-              <div className="video-frame-detail-title">Âm lượng thuyết minh</div>
-              <p className="video-frame-detail-copy">Tinh chỉnh mức đọc của voiceover để lời nói không bị nền video lấn át hoặc quá gắt trong preview va file xuat.</p>
+              <div className="video-frame-detail-title">Voiceover volume</div>
+              <p className="video-frame-detail-copy">Adjust narration level so speech stays clear without overpowering the rest of the track.</p>
             </div>
             <div className="video-frame-field-row">
-              <label className="video-frame-field-label" htmlFor="voiceover-preview-volume-range">Âm lượng thuyết minh</label>
+              <label className="video-frame-field-label" htmlFor="voiceover-preview-volume-range">Voiceover volume</label>
               <div className="video-audio-slider-row">
                 <input
                   id="voiceover-preview-volume-range"
@@ -305,8 +305,8 @@ export default function VideoPlayerFrameControls({
             </div>
             <div className="video-frame-image-note">
               {hasVoiceoverTrack
-                ? 'Track thuyết minh dang hoat dong tren timeline va se dung muc am luong nay cho ca preview va export.'
-                : 'Chưa có track thuyết minh để chỉnh. Hãy tạo thuyết minh trước rồi quay lại mục này.'}
+                ? 'The voiceover track is active on the timeline and uses this level for both preview and export.'
+                : 'No voiceover track is attached yet. Generate one first, then return here.'}
             </div>
           </div>
         </section>

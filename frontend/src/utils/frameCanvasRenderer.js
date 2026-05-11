@@ -88,7 +88,7 @@ export function loadFrameBackgroundImage(frameBackground) {
     image.onload = () => resolve(image)
     image.onerror = () => {
       backgroundImageCache.delete(normalizedBackground.dataUrl)
-      reject(new Error('Không thể tải ảnh nền bìa.'))
+      reject(new Error('Unable to load the cover background image.'))
     }
     image.src = normalizedBackground.dataUrl
   })

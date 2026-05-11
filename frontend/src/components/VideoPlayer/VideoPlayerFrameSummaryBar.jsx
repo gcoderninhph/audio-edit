@@ -22,7 +22,7 @@ export default function VideoPlayerFrameSummaryBar({
           aria-controls="video-player-frame-sidebar"
           aria-expanded={activeSection === FRAME_SIDEBAR_SECTIONS.FRAME}
         >
-          <span className="video-player-summary-toggle-label">Khung</span>
+          <span className="video-player-summary-toggle-label">Frame</span>
           <span className="video-player-summary-toggle-value">{framePresetLabel}</span>
         </button>
         <button
@@ -32,7 +32,7 @@ export default function VideoPlayerFrameSummaryBar({
           aria-controls="video-player-frame-sidebar"
           aria-expanded={activeSection === FRAME_SIDEBAR_SECTIONS.BACKGROUND}
         >
-          <span className="video-player-summary-toggle-label">Nền</span>
+          <span className="video-player-summary-toggle-label">Background</span>
           <span className="video-player-summary-toggle-value">{frameBackgroundLabel}</span>
         </button>
       </div>

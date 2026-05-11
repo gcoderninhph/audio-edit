@@ -22,14 +22,14 @@ function formatElapsedTime(milliseconds) {
 }
 
 const PHASE_LABELS = {
-  loading: '⏳ Đang tải engine xử lý video...',
-  preparing: '📦 Đang chuẩn bị file...',
-  cutting: '✂️ Đang cắt cảnh...',
-  merging: '🔗 Đang ghép video...',
-  framing: '🖼️ Đang dựng frame và phụ đề...',
-  reading: '📖 Đang đọc kết quả...',
-  done: '✅ Hoàn thành!',
-  error: '❌ Export lỗi',
+  loading: '⏳ Loading video processing engine...',
+  preparing: '📦 Preparing files...',
+  cutting: '✂️ Cutting scenes...',
+  merging: '🔗 Merging video...',
+  framing: '🖼️ Rendering frame and subtitles...',
+  reading: '📖 Reading result...',
+  done: '✅ Complete!',
+  error: '❌ Export failed',
 };
 
 export default function ExportPanel({
@@ -86,25 +86,25 @@ export default function ExportPanel({
           <div className="export-panel-title">Export Video</div>
           {hasScenes ? (
             <div className="export-panel-info">
-              {keptScenes.length}/{scenes.length} cảnh • {formatTime(keptDuration)}
-              {hasDeletedScenes && ` • ${deletedSceneIds.size} cảnh bị xóa`}
+              {keptScenes.length}/{scenes.length} scenes • {formatTime(keptDuration)}
+              {hasDeletedScenes && ` • ${deletedSceneIds.size} deleted`}
             </div>
           ) : (
             <div className="export-panel-info">
-              {duration > 0 ? `Toàn bộ video • ${formatTime(duration)} • chưa cắt cảnh` : 'Đang tải thời lượng video...'}
+              {duration > 0 ? `Full video • ${formatTime(duration)} • no scene cuts yet` : 'Loading video duration...'}
             </div>
           )}
           <div className="export-frame-info">
-            Khung xuất: <strong>{frameSummary}</strong> • Nền bìa: <strong>{frameBackgroundLabel}</strong>
+            Export frame: <strong>{frameSummary}</strong> • Cover background: <strong>{frameBackgroundLabel}</strong>
           </div>
         </div>
         <div className="export-actions">
           <button
             className="btn btn-ghost btn-sm"
             onClick={handleToggleHistory}
-            title="Xem lịch sử phiên làm việc"
+            title="View saved sessions"
           >
-            📋 Lịch sử
+            📋 History
           </button>
           <button
             className="btn btn-primary export-btn"
@@ -112,7 +112,7 @@ export default function ExportPanel({
             disabled={!canExport || isExporting}
             id="export-btn"
           >
-            {isExporting ? '⏳ Đang xử lý...' : '🎬 Export Video'}
+            {isExporting ? '⏳ Processing...' : '🎬 Export Video'}
           </button>
         </div>
       </div>
@@ -143,8 +143,8 @@ export default function ExportPanel({
       {exportProgress.logs?.length > 0 && (
         <div className="export-log-panel">
           <div className="export-log-header">
-            <span>Log export</span>
-            <span>{exportProgress.sceneCount || 0} cảnh • {exportProgress.subtitleCount || 0} subtitle</span>
+              <span>Export log</span>
+              <span>{exportProgress.sceneCount || 0} scenes • {exportProgress.subtitleCount || 0} subtitles</span>
           </div>
           <div className="export-log-list">
             {exportProgress.logs.map((log, index) => (
@@ -163,12 +163,12 @@ export default function ExportPanel({
           <div className="export-result-info">
             <div className="export-result-icon">✅</div>
             <div>
-              <div className="export-result-text">Video đã sẵn sàng!</div>
+              <div className="export-result-text">Your video is ready!</div>
               <div className="export-result-size">{formatFileSize(exportSize)}</div>
             </div>
           </div>
           <button className="download-btn" onClick={handleDownload} id="download-btn">
-            📥 Tải xuống
+            📥 Download
           </button>
         </div>
       )}
@@ -177,7 +177,7 @@ export default function ExportPanel({
       {showHistory && (
         <div className="history-section">
           <div className="history-title">
-            <span>📋 Các phiên làm việc</span>
+            <span>📋 Saved sessions</span>
             <button className="btn btn-ghost btn-sm" onClick={onLoadHistoryList}>🔄</button>
           </div>
           {historyList && historyList.length > 0 ? (
@@ -188,21 +188,21 @@ export default function ExportPanel({
                   <div onClick={() => onLoadSession(item.id)} style={{ flex: 1, cursor: 'pointer' }}>
                     <div className="history-item-name">{item.video_original_name || 'Untitled'}</div>
                     <div className="history-item-date">
-                      {item.updated_at ? new Date(item.updated_at).toLocaleString('vi-VN') : ''}
+                      {item.updated_at ? new Date(item.updated_at).toLocaleString('en-US') : ''}
                     </div>
                   </div>
                   <div className="history-item-actions">
                     <button
                       className="btn btn-ghost btn-sm"
                       onClick={() => onLoadSession(item.id)}
-                      title="Tải session"
+                      title="Load session"
                     >
                       📂
                     </button>
                     <button
                       className="btn btn-danger btn-sm"
                       onClick={() => onDeleteSession(item.id)}
-                      title="Xóa"
+                      title="Delete"
                     >
                       🗑️
                     </button>
@@ -212,7 +212,7 @@ export default function ExportPanel({
             </div>
           ) : (
             <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)', textAlign: 'center', padding: '16px' }}>
-              Chưa có phiên nào được lưu
+              No saved sessions yet
             </div>
           )}
         </div>

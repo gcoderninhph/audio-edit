@@ -70,7 +70,7 @@ function App() {
     setActivePlayerSidebarSection(null);
 
     if (hasActiveBackgroundTask && editor.sessionId && editor.sessionId !== sessionId) {
-      alert('Project hien tai dang co tien trinh nen. Hay quay lai dung project do hoac doi tien trinh hoan tat truoc khi mo project khac.');
+      alert('The current project still has a background task running. Return to that project or wait for it to finish before opening another one.');
       return;
     }
 
@@ -85,7 +85,7 @@ function App() {
 
   const handleNewProject = useCallback((file) => {
     if (hasActiveBackgroundTask && hasVideo) {
-      alert('Project hien tai dang co tien trinh nen. Hay doi tien trinh hoan tat truoc khi tao project moi.');
+      alert('The current project still has a background task running. Wait for it to finish before creating a new project.');
       return;
     }
 
@@ -115,7 +115,7 @@ function App() {
           <div className="restore-loading">
             <div className="detecting-spinner" />
             <div style={{ marginTop: '16px', color: 'var(--text-secondary)' }}>
-              Đang tải project...
+              Loading project...
             </div>
           </div>
         </main>
@@ -156,17 +156,17 @@ function App() {
             </span>
           )}
           {editor.autoSaveStatus === 'saving' && (
-            <span className="status-badge saving">💾 Đang lưu...</span>
+            <span className="status-badge saving">💾 Saving...</span>
           )}
           {editor.autoSaveStatus === 'saved' && (
-            <span className="status-badge saved">✅ Đã lưu</span>
+            <span className="status-badge saved">✅ Saved</span>
           )}
           <div className="undo-redo-btns">
             <button
               className="btn btn-ghost btn-sm"
               onClick={editor.undo}
               disabled={!editor.canUndo}
-              title="Hoàn tác (Ctrl+Z)"
+              title="Undo (Ctrl+Z)"
             >
               ↩
             </button>
@@ -174,7 +174,7 @@ function App() {
               className="btn btn-ghost btn-sm"
               onClick={editor.redo}
               disabled={!editor.canRedo}
-              title="Làm lại (Ctrl+Y)"
+              title="Redo (Ctrl+Y)"
             >
               ↪
             </button>
@@ -182,9 +182,9 @@ function App() {
           <button
             className="btn btn-ghost btn-sm"
             onClick={handleCloseProject}
-            title="Quay về Dashboard"
+            title="Back to Projects"
           >
-            ← Dự án
+            ← Projects
           </button>
         </div>
       </header>
@@ -241,13 +241,13 @@ function App() {
                 className={`editor-tab ${activeRightTab === 'scenes' ? 'active' : ''}`}
                 onClick={() => setActiveRightTab('scenes')}
               >
-                🎬 Cảnh Video
+                🎬 Scenes
               </button>
               <button
                 className={`editor-tab ${activeRightTab === 'subtitles' ? 'active' : ''}`}
                 onClick={() => setActiveRightTab('subtitles')}
               >
-                📝 Phụ Đề
+                📝 Subtitles
               </button>
             </div>
 
