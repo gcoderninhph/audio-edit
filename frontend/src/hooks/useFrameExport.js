@@ -13,18 +13,23 @@ import {
   serializeFrameBackground,
 } from '../utils/frameComposer'
 import {
+  DEFAULT_EXPORT_QUALITY_PROFILE_ID,
+  normalizeExportQualityProfileId,
+  serializeExportQualityProfileId,
+} from '../utils/exportQualityProfile'
+import {
   DEFAULT_SUBTITLE_SETTINGS,
   normalizeSubtitleSettings,
   serializeSubtitleSettings,
 } from '../utils/subtitleRenderModel'
 
-function buildExportSignature(keptScenes, exportSubtitles, framePresetId, frameBackground, subtitleSettings) {
+function buildExportSignature(keptScenes, exportSubtitles, framePresetId, frameBackground, subtitleSettings, exportQualityProfileId) {
   const sceneSignature = keptScenes.map((scene) => `${scene.id}:${scene.start}-${scene.end}`).join('|')
   const subtitleSignature = exportSubtitles
     .map((subtitle) => `${subtitle.id}:${subtitle.start}-${subtitle.end}:${subtitle.text}`)
     .join('|')
 
-  return `${framePresetId}::${serializeFrameBackground(frameBackground)}::${serializeSubtitleSettings(subtitleSettings)}::${sceneSignature}::${subtitleSignature}`
+  return `${framePresetId}::${serializeFrameBackground(frameBackground)}::${serializeSubtitleSettings(subtitleSettings)}::${serializeExportQualityProfileId(exportQualityProfileId)}::${sceneSignature}::${subtitleSignature}`
 }
 
 function clampVolume(value, fallback = 1) {
@@ -77,6 +82,7 @@ export function useFrameExport({ videoFile, keptScenes, filteredSubtitles, video
   const [framePresetId, setFramePresetIdState] = useState(DEFAULT_FRAME_PRESET_ID)
   const [frameBackground, setFrameBackgroundState] = useState(DEFAULT_FRAME_BACKGROUND)
   const [subtitleSettings, setSubtitleSettingsState] = useState(DEFAULT_SUBTITLE_SETTINGS)
+  const [exportQualityProfileId, setExportQualityProfileIdState] = useState(DEFAULT_EXPORT_QUALITY_PROFILE_ID)
   const [videoVolume, setVideoVolumeState] = useState(1)
   const [voiceoverVolume, setVoiceoverVolumeState] = useState(1)
   const [customizedAudioTrackKey, setCustomizedAudioTrackKey] = useState('')
@@ -114,8 +120,8 @@ export function useFrameExport({ videoFile, keptScenes, filteredSubtitles, video
     ? (hasCustomizedCurrentAudioMix ? voiceoverVolume : 1)
     : 1
   const exportSignature = useMemo(
-    () => `${buildExportSignature(effectiveKeptScenes, exportSubtitles, framePresetId, frameBackground, subtitleSettings)}::${currentAudioTrackKey}:${effectiveVideoVolume}:${effectiveVoiceoverVolume}`,
-    [currentAudioTrackKey, effectiveKeptScenes, effectiveVideoVolume, effectiveVoiceoverVolume, exportSubtitles, frameBackground, framePresetId, subtitleSettings],
+    () => `${buildExportSignature(effectiveKeptScenes, exportSubtitles, framePresetId, frameBackground, subtitleSettings, exportQualityProfileId)}::${currentAudioTrackKey}:${effectiveVideoVolume}:${effectiveVoiceoverVolume}`,
+    [currentAudioTrackKey, effectiveKeptScenes, effectiveVideoVolume, effectiveVoiceoverVolume, exportQualityProfileId, exportSubtitles, frameBackground, framePresetId, subtitleSettings],
   )
   const hasFreshExport = exportUrl && lastExportSignature === exportSignature
 
@@ -182,6 +188,10 @@ export function useFrameExport({ videoFile, keptScenes, filteredSubtitles, video
     ))
   }, [])
 
+  const setExportQualityProfileId = useCallback((nextExportQualityProfileId) => {
+    setExportQualityProfileIdState(normalizeExportQualityProfileId(nextExportQualityProfileId))
+  }, [])
+
   const handleVideoVolumeChange = useCallback((nextVolume) => {
     setCustomizedAudioTrackKey(currentAudioTrackKey)
     setVideoVolumeState(clampVolume(nextVolume))
@@ -209,6 +219,7 @@ export function useFrameExport({ videoFile, keptScenes, filteredSubtitles, video
 
     const startedAt = Date.now()
     void logExportDebug('Export requested from UI', {
+      exportQualityProfileId,
       frameBackground: describeFrameBackground(frameBackground),
       framePresetId,
       hasVoiceoverTrack,
@@ -246,6 +257,7 @@ export function useFrameExport({ videoFile, keptScenes, filteredSubtitles, video
         effectiveKeptScenes,
         exportSubtitles,
         {
+          exportQualityProfileId,
           frameSettings: {
             presetId: framePresetId,
             backgroundColor: frameBackground,
@@ -291,6 +303,7 @@ export function useFrameExport({ videoFile, keptScenes, filteredSubtitles, video
     effectiveKeptScenes,
     effectiveVideoVolume,
     effectiveVoiceoverVolume,
+    exportQualityProfileId,
     exportSignature,
     exportSubtitles,
     frameBackground,
@@ -309,6 +322,8 @@ export function useFrameExport({ videoFile, keptScenes, filteredSubtitles, video
     setFrameBackground,
     subtitleSettings,
     setSubtitleSettings,
+    exportQualityProfileId,
+    setExportQualityProfileId,
     videoVolume: effectiveVideoVolume,
     voiceoverVolume: effectiveVoiceoverVolume,
     handleVideoVolumeChange,

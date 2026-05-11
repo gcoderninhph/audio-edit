@@ -279,12 +279,13 @@ export async function frameMergedVideo({
   jobId,
   jobDirectory,
   mergedPath,
+  exportQualityProfileId,
   keptScenes,
   framePreset,
   frameBackground,
   overlayAssets,
 }) {
-  const encoderPlan = await getNativeEncodePlan()
+  const encoderPlan = await getNativeEncodePlan(exportQualityProfileId)
   const totalDurationSeconds = getTimelineDurationSeconds(keptScenes)
   const chunkPlan = getFrameChunkPlan({
     encoderPlan,

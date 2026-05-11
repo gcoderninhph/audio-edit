@@ -12,6 +12,10 @@ import {
   isVideoFadeFrameBackground,
 } from '../../utils/frameComposer'
 import {
+  EXPORT_QUALITY_PROFILE_OPTIONS,
+  getExportQualityProfileById,
+} from '../../utils/exportQualityProfile'
+import {
   DEFAULT_SUBTITLE_SETTINGS,
   normalizeSubtitleSettings,
 } from '../../utils/subtitleRenderModel'
@@ -30,6 +34,8 @@ export default function VideoPlayerFrameControls({
   visibleSection,
   framePresetId,
   onFramePresetChange,
+  exportQualityProfileId,
+  onExportQualityProfileChange,
   frameBackground,
   onFrameBackgroundChange,
   subtitleSettings,
@@ -43,6 +49,7 @@ export default function VideoPlayerFrameControls({
 }) {
   const backgroundInputRef = useRef(null)
   const activeFramePreset = getFramePresetById(framePresetId)
+  const activeExportQualityProfile = getExportQualityProfileById(exportQualityProfileId)
   const fadePreset = getVideoFadePresetById(frameBackground?.presetId)
   const isVideoFadeActive = isVideoFadeFrameBackground(frameBackground)
   const isImageActive = isImageFrameBackground(frameBackground)
@@ -70,14 +77,14 @@ export default function VideoPlayerFrameControls({
       ? 'Preview and export subtitle settings'
     : visibleSection === 'audio'
       ? 'Preview and export audio settings'
-      : 'Video frame settings'
+      : 'Video frame and export settings'
   const controlsSubtitle = visibleSection === 'background'
     ? 'Only the active background controls stay visible so the sidebar remains focused.'
     : visibleSection === 'subtitle'
       ? 'Open this from the timeline subtitle track to adjust subtitle styling for both preview and export.'
     : visibleSection === 'audio'
       ? 'Adjust source video and voiceover levels separately. These values are used for both preview and export.'
-      : 'Keep the frame ratio controls close at hand without cluttering the preview area.'
+      : 'Choose the export ratio and how aggressively the final video should be compressed.'
 
   const handleChooseBackgroundImage = useCallback(() => {
     backgroundInputRef.current?.click()
@@ -114,7 +121,7 @@ export default function VideoPlayerFrameControls({
           <div className="video-frame-section-head">
             <div>
               <span className="video-frame-section-label">Export ratio</span>
-              <strong className="video-frame-section-value">{activeFramePreset.label}</strong>
+              <strong className="video-frame-section-value">{activeFramePreset.label} • {activeExportQualityProfile.label}</strong>
             </div>
             <span className="video-frame-section-caption">{FRAME_PRESET_COPY[activeFramePreset.id]}</span>
           </div>
@@ -132,6 +139,28 @@ export default function VideoPlayerFrameControls({
                 <span className="frame-option-btn-meta">{FRAME_PRESET_COPY[preset.id] || 'Export frame ratio'}</span>
               </button>
             ))}
+          </div>
+
+          <div className="video-frame-detail-panel dev-locator-host">
+            <DeveloperLocator code="panel.video-player.frame-controls.export-profile" title="Export Profile Control" />
+            <div>
+              <div className="video-frame-detail-title">Export quality</div>
+              <p className="video-frame-detail-copy">Reduce the final file size by using a more compressed export profile. Smaller files may soften fine detail.</p>
+            </div>
+            <div className="video-frame-field-row">
+              <label className="video-frame-field-label" htmlFor="export-quality-profile-select">Profile</label>
+              <select
+                id="export-quality-profile-select"
+                className="video-frame-field-select"
+                value={activeExportQualityProfile.id}
+                onChange={(event) => onExportQualityProfileChange?.(event.target.value)}
+              >
+                {EXPORT_QUALITY_PROFILE_OPTIONS.map((profile) => (
+                  <option key={profile.id} value={profile.id}>{profile.label}</option>
+                ))}
+              </select>
+            </div>
+            <div className="video-frame-image-note">{activeExportQualityProfile.helper}</div>
           </div>
         </section>
       )}
@@ -252,7 +281,7 @@ export default function VideoPlayerFrameControls({
           <DeveloperLocator code="panel.video-player.audio-controls" title="Audio Controls" />
           <div className="video-frame-section-head">
             <div>
-              <span className="video-frame-section-label">Mix xem trước</span>
+              <span className="video-frame-section-label">Preview mix</span>
               <strong className="video-frame-section-value">Video {videoVolumePercent}% • Voiceover {voiceoverVolumePercent}%</strong>
             </div>
             <span className="video-frame-section-caption">Open this directly from the voiceover track on the timeline.</span>

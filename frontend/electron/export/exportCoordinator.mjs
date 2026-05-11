@@ -235,6 +235,7 @@ async function runNativeExportJob(sender, payload = {}) {
   const jobDirectory = buildJobDirectory(jobId)
   const framePreset = getFramePresetById(payload.frameSettings?.presetId)
   const frameBackground = sanitizeFrameBackground(payload.frameSettings?.backgroundColor)
+  const exportQualityProfileId = payload.exportQualityProfileId || null
   const keptScenes = Array.isArray(payload.keptScenes)
     ? payload.keptScenes
       .map((scene) => ({
@@ -302,6 +303,7 @@ async function runNativeExportJob(sender, payload = {}) {
       jobId,
       jobDirectory,
       mergedPath,
+      exportQualityProfileId,
       keptScenes,
       framePreset,
       frameBackground: nativeFrameBackground,

@@ -213,6 +213,8 @@ function App() {
               onDurationChange={editor.setVideoDuration}
               framePresetId={editor.framePresetId}
               onFramePresetChange={editor.setFramePresetId}
+              exportQualityProfileId={editor.exportQualityProfileId}
+              onExportQualityProfileChange={editor.setExportQualityProfileId}
               frameBackground={editor.frameBackground}
               onFrameBackgroundChange={editor.setFrameBackground}
               subtitleSettings={editor.subtitleSettings}

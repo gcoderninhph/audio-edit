@@ -1,6 +1,13 @@
 # TASK
 
 ## Active
+- [ ] Manually confirm export-size profiles reduce output size and persist after reload
+  - Scope: frontend
+  - Owner files: `frontend/src/hooks/useFrameExport.js`, `frontend/src/hooks/useVideoEditor.js`, `frontend/src/hooks/useEditorPersistence.js`, `frontend/src/components/VideoPlayer/VideoPlayer.jsx`, `frontend/src/components/VideoPlayer/VideoPlayerFrameControls.jsx`, `frontend/src/utils/exportQualityProfile.js`, `frontend/src/utils/frameCanvasExport.js`, `frontend/src/utils/exportAudioMix.js`, `frontend/src/utils/ffmpegManager.js`, `frontend/src/utils/nativeExportClient.js`, `frontend/electron/export/exportCoordinator.mjs`, `frontend/electron/export/framePipeline.mjs`, `frontend/electron/export/nativeFfmpeg.mjs`, `frontend/electron/projectStore.mjs`
+  - Evidence: the `frame` section in the fixed left nav now exposes a shared `Export quality` selector with `Balanced`, `Smaller file`, and `Maximum compression` presets; the selected profile is autosaved with each project; the renderer fallback now lowers MediaRecorder bitrate and final mux CRF or preset from that profile; and the native fast export path now applies matching encoder args before chunk framing.
+  - Next step: in the running Electron app, export the same short clip once with `Balanced` and once with `Smaller file` or `Maximum compression`, confirm the later file is smaller, then reload the same project and verify the selected profile is restored in the left nav.
+  - Validation: pending manual desktop smoke test; automated validation confirmed VS Code diagnostics on touched files, `npm run lint`, `npm run build`, desktop restart, Flask `/api/health` `200`, and active Electron processes.
+
 - [ ] Manually confirm player playback in the running desktop build
   - Scope: frontend
   - Owner files: `frontend/src/components/VideoPlayer/VideoPlayer.jsx`, `frontend/electron/main.mjs`, `frontend/electron/projectMediaProtocol.mjs`, `frontend/electron/projectStore.mjs`
@@ -37,6 +44,12 @@
   - Validation: pending
 
 ## Completed
+- [x] Add a left-nav export quality profile to reduce output file size
+  - Scope: frontend
+  - Owner files: `frontend/src/App.jsx`, `frontend/src/hooks/useFrameExport.js`, `frontend/src/hooks/useVideoEditor.js`, `frontend/src/hooks/useEditorPersistence.js`, `frontend/src/components/VideoPlayer/VideoPlayer.jsx`, `frontend/src/components/VideoPlayer/VideoPlayerFrameControls.jsx`, `frontend/src/utils/exportQualityProfile.js`, `frontend/src/utils/frameCanvasExport.js`, `frontend/src/utils/exportAudioMix.js`, `frontend/src/utils/ffmpegManager.js`, `frontend/src/utils/nativeExportClient.js`, `frontend/electron/projectStore.mjs`, `frontend/electron/export/exportCoordinator.mjs`, `frontend/electron/export/framePipeline.mjs`, `frontend/electron/export/nativeFfmpeg.mjs`, `TASK.md`, `MAP.md`
+  - Outcome: export settings now include a shared quality profile that is visible in the player left nav under the `frame` section. The profile is stored in project metadata and threaded through both export backends, so renderer-record fallback lowers recording bitrate plus final mux CRF or preset, while native fast export applies profile-specific hardware or CPU encoder arguments to produce smaller output files when requested.
+  - Validation: VS Code diagnostics on touched files; line guardrail rechecked with `frontend/src/hooks/useVideoEditor.js` at 395 lines, `frontend/src/utils/ffmpegManager.js` at 395 lines, and `frontend/src/components/VideoPlayer/VideoPlayerFrameControls.jsx` at 341 lines; `npm run lint`; `npm run build`; restarted `npm run desktop:start`; confirmed Flask `/api/health` returned `200`; confirmed Electron processes were running on the updated desktop build.
+
 - [x] Forward configured subtitle styling into native export overlays
   - Scope: frontend
   - Owner files: `frontend/src/hooks/useFrameExport.js`, `frontend/src/utils/ffmpegManager.js`, `frontend/src/utils/nativeExportClient.js`, `frontend/src/utils/subtitleOverlayAssets.js`, `TASK.md`

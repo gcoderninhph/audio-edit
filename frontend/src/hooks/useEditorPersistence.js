@@ -1,5 +1,6 @@
 import { useState, useCallback, useEffect, useRef } from 'react';
 import { DEFAULT_FRAME_BACKGROUND, DEFAULT_FRAME_PRESET_ID, sanitizeFrameBackground } from '../utils/frameComposer';
+import { DEFAULT_EXPORT_QUALITY_PROFILE_ID, normalizeExportQualityProfileId } from '../utils/exportQualityProfile';
 import { DEFAULT_SUBTITLE_SETTINGS, normalizeSubtitleSettings } from '../utils/subtitleRenderModel';
 import {
   restoreSavedTranscriptionJob,
@@ -24,6 +25,7 @@ export function useEditorPersistence({
   framePresetId,
   frameBackground,
   subtitleSettings,
+  exportQualityProfileId,
   sensitivity,
   scenes,
   deletedSceneIds,
@@ -40,6 +42,7 @@ export function useEditorPersistence({
   setFramePresetId,
   setFrameBackground,
   setSubtitleSettings,
+  setExportQualityProfileId,
   setScenes,
   setDeletedSceneIds,
   setSubtitles,
@@ -88,6 +91,7 @@ export function useEditorPersistence({
         framePresetId,
         frameBackground,
         subtitleSettings,
+        exportQualityProfileId,
         scenes: scenesData,
         deletedIds: deletedIdsData,
         subtitles: subtitlesData,
@@ -101,7 +105,7 @@ export function useEditorPersistence({
       console.error('Auto-save failed:', error);
       setAutoSaveStatus('');
     }
-  }, [frameBackground, framePresetId, sessionIdRef, sensitivity, subtitleSettings, videoFilename, videoName]);
+  }, [exportQualityProfileId, frameBackground, framePresetId, sessionIdRef, sensitivity, subtitleSettings, videoFilename, videoName]);
 
   useEffect(() => {
     if (autoSaveTimerRef.current) {
@@ -263,6 +267,7 @@ export function useEditorPersistence({
       setFramePresetId(data.frame_preset_id || DEFAULT_FRAME_PRESET_ID);
       setFrameBackground(sanitizeFrameBackground(data.frame_background || DEFAULT_FRAME_BACKGROUND));
       setSubtitleSettings(normalizeSubtitleSettings(data.subtitle_settings || DEFAULT_SUBTITLE_SETTINGS));
+      setExportQualityProfileId(normalizeExportQualityProfileId(data.export_quality_profile_id || DEFAULT_EXPORT_QUALITY_PROFILE_ID));
       setScenes(data.scenes || []);
       setDeletedSceneIds(new Set(data.deleted_ids || []));
       setSubtitles(data.subtitles || []);
@@ -297,6 +302,7 @@ export function useEditorPersistence({
     setDeletedSceneIds,
     setFrameBackground,
     setFramePresetId,
+    setExportQualityProfileId,
     setIsGeneratingVoiceover,
     setIsTranscribing,
     setIsTranslating,
@@ -334,6 +340,7 @@ export function useEditorPersistence({
         setFramePresetId(DEFAULT_FRAME_PRESET_ID);
         setFrameBackground(DEFAULT_FRAME_BACKGROUND);
         setSubtitleSettings(DEFAULT_SUBTITLE_SETTINGS);
+        setExportQualityProfileId(DEFAULT_EXPORT_QUALITY_PROFILE_ID);
         setScenes([]);
         setDeletedSceneIds(new Set());
         setSubtitles([]);
@@ -365,6 +372,7 @@ export function useEditorPersistence({
     setDeletedSceneIds,
     setFrameBackground,
     setFramePresetId,
+    setExportQualityProfileId,
     setIsGeneratingVoiceover,
     setIsTranscribing,
     setIsTranslating,

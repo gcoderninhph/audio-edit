@@ -37,6 +37,8 @@ export default function VideoPlayer({
   onDurationChange,
   framePresetId,
   onFramePresetChange,
+  exportQualityProfileId,
+  onExportQualityProfileChange,
   frameBackground,
   onFrameBackgroundChange,
   subtitleSettings,
@@ -78,7 +80,7 @@ export default function VideoPlayer({
   const frameBackgroundLabel = useMemo(() => getFrameBackgroundLabel(frameBackground), [frameBackground]);
   const sidebarTitle = useMemo(() => {
     if (activeSidebarSection === FRAME_SIDEBAR_SECTIONS.FRAME) {
-      return 'Adjust video frame';
+      return 'Adjust frame and export size';
     }
 
     if (activeSidebarSection === FRAME_SIDEBAR_SECTIONS.BACKGROUND) {
@@ -338,6 +340,8 @@ export default function VideoPlayer({
           visibleSection={activeSidebarSection}
           framePresetId={framePresetId}
           onFramePresetChange={onFramePresetChange}
+          exportQualityProfileId={exportQualityProfileId}
+          onExportQualityProfileChange={onExportQualityProfileChange}
           frameBackground={frameBackground}
           onFrameBackgroundChange={onFrameBackgroundChange}
           subtitleSettings={subtitleSettings}

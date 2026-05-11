@@ -45,7 +45,7 @@ function createJobId() {
   return `native-export-${Date.now()}-${Math.round(Math.random() * 100000)}`
 }
 
-export async function runNativeExport({ inputFile, keptScenes, subtitles, frameSettings, subtitleSettings, voiceoverFile, voiceoverTrack, audioMix }, onProgress = () => {}) {
+export async function runNativeExport({ inputFile, keptScenes, subtitles, frameSettings, subtitleSettings, exportQualityProfileId, voiceoverFile, voiceoverTrack, audioMix }, onProgress = () => {}) {
   const nativeExportBridge = getNativeExportBridge()
   if (!nativeExportBridge) {
     throw createExportError('Native desktop export bridge is unavailable.', 'NATIVE_EXPORT_UNAVAILABLE')
@@ -68,6 +68,7 @@ export async function runNativeExport({ inputFile, keptScenes, subtitles, frameS
 
   void logExportDebug('Attempt native fast export backend', {
     audioMix: audioMix || null,
+    exportQualityProfileId: exportQualityProfileId || null,
     frameBackground: describeFrameBackground(frameBackground),
     framePresetId: framePreset.id,
     hasVoiceoverTrack: Boolean(voiceover),
@@ -99,6 +100,7 @@ export async function runNativeExport({ inputFile, keptScenes, subtitles, frameS
         presetId: framePreset.id,
         backgroundColor: frameBackground,
       },
+      exportQualityProfileId: exportQualityProfileId || null,
       audioMix: audioMix || null,
       subtitleOverlay,
       voiceover,

@@ -47,6 +47,7 @@ export async function renderFrameCompositionVideo({
   onProgress,
   onLog,
   fontFamily = DEFAULT_SUBTITLE_FONT_FAMILY,
+  recordingVideoBitsPerSecond = 10_000_000,
   subtitleSettings = DEFAULT_SUBTITLE_SETTINGS,
 }) {
   const sourceVideoUrl = URL.createObjectURL(sourceVideoBlob)
@@ -71,8 +72,9 @@ export async function renderFrameCompositionVideo({
   const stream = canvasElement.captureStream(0)
   const streamTrack = stream.getVideoTracks()[0]
   const recorderMimeType = getRecorderMimeType()
+  const resolvedVideoBitsPerSecond = Math.max(1, Number(recordingVideoBitsPerSecond) || 10_000_000)
   const recorder = recorderMimeType
-    ? new MediaRecorder(stream, { mimeType: recorderMimeType, videoBitsPerSecond: 10_000_000 })
+    ? new MediaRecorder(stream, { mimeType: recorderMimeType, videoBitsPerSecond: resolvedVideoBitsPerSecond })
     : new MediaRecorder(stream)
   const chunks = []
 

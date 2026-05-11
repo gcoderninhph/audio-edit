@@ -10,6 +10,7 @@ import {
   isAudioMixMuted,
   normalizeExportAudioMix,
 } from './exportAudioMix';
+import { getExportQualityProfileById, getFallbackVideoEncodingSettings } from './exportQualityProfile';
 import { materializeVoiceoverFile, renderExportAudioTrack } from './exportAudioStage';
 import { buildMergedSceneTrack } from './ffmpegSceneMerge';
 import { describeFrameBackground, getFramePresetById, sanitizeFrameBackground } from './frameComposer';
@@ -245,6 +246,7 @@ export async function exportVideo(inputFile, keptScenes, subtitles, exportOption
   const frameSettings = exportOptions?.frameSettings || exportOptions;
   const normalizedFrameBackground = sanitizeFrameBackground(frameSettings?.backgroundColor);
   const normalizedAudioMix = normalizeExportAudioMix(exportOptions?.audioMix, exportOptions?.voiceoverTrack);
+  const exportQualityProfile = getExportQualityProfileById(exportOptions?.exportQualityProfileId);
   const timelineDurationSeconds = getExportTimelineDurationSeconds(keptScenes);
   const shouldAttachVoiceover = normalizedAudioMix.hasVoiceoverTrack && !isAudioMixMuted(normalizedAudioMix.voiceoverVolume);
   const voiceoverFile = shouldAttachVoiceover ? await materializeVoiceoverFile(exportOptions?.voiceoverTrack) : null;
@@ -260,6 +262,7 @@ export async function exportVideo(inputFile, keptScenes, subtitles, exportOption
         ...frameSettings,
         backgroundColor: normalizedFrameBackground,
       },
+      exportQualityProfileId: exportQualityProfile.id,
       subtitleSettings: exportOptions?.subtitleSettings || null,
       voiceoverFile,
       voiceoverTrack: exportOptions?.voiceoverTrack || null,
@@ -360,6 +363,7 @@ export async function exportVideo(inputFile, keptScenes, subtitles, exportOption
       subtitles: subtitles || [],
       framePreset,
       frameBackground: normalizedFrameBackground,
+      recordingVideoBitsPerSecond: exportQualityProfile.recorderVideoBitsPerSecond,
       subtitleSettings: exportOptions?.subtitleSettings || null,
       onProgress,
       onLog: (message) => emitExportLog(onProgress, 'framing', message),
@@ -407,6 +411,7 @@ export async function exportVideo(inputFile, keptScenes, subtitles, exportOption
         timelineDurationSeconds,
         outputPath: 'output.mp4',
         optionalAudio: !needsAudioRemix,
+        videoEncoding: getFallbackVideoEncodingSettings(exportQualityProfile.id),
       }),
       {
         phase: needsAudioRemix ? 'audio' : 'framing',

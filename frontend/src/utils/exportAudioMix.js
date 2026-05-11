@@ -105,6 +105,7 @@ export function buildFinalMuxArgs({
   copyVideo = false,
   copyAudio = true,
   optionalAudio = false,
+  videoEncoding = null,
 }) {
   const args = ['-i', frameVideoPath];
 
@@ -121,11 +122,18 @@ export function buildFinalMuxArgs({
   if (copyVideo) {
     args.push('-c:v', 'copy');
   } else {
+    const resolvedVideoPreset = typeof videoEncoding?.preset === 'string' && videoEncoding.preset.trim()
+      ? videoEncoding.preset.trim()
+      : 'ultrafast';
+    const resolvedVideoCrf = Number.isFinite(videoEncoding?.crf)
+      ? String(videoEncoding.crf)
+      : '23';
+
     args.push(
       '-c:v', 'libx264',
       '-threads', '1',
-      '-preset', 'ultrafast',
-      '-crf', '23',
+      '-preset', resolvedVideoPreset,
+      '-crf', resolvedVideoCrf,
       '-pix_fmt', 'yuv420p',
     );
   }

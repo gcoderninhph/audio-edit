@@ -1,22 +1,20 @@
 import { spawn } from 'node:child_process'
 import os from 'node:os'
 import ffmpegPath from 'ffmpeg-static'
+import { buildNativeEncoderOutputArgs } from '../../src/utils/exportQualityProfile.js'
 
 const HARDWARE_ENCODERS = [
   {
     codec: 'h264_nvenc',
     label: 'nvidia-nvenc',
-    outputArgs: ['-cq', '21', '-preset', 'p3'],
   },
   {
     codec: 'h264_qsv',
     label: 'intel-qsv',
-    outputArgs: ['-global_quality', '22', '-preset', 'veryfast'],
   },
   {
     codec: 'h264_amf',
     label: 'amd-amf',
-    outputArgs: ['-quality', 'speed', '-usage', 'transcoding'],
   },
 ]
 
@@ -216,7 +214,7 @@ async function readAvailableEncoders() {
   return outputLines.join('\n')
 }
 
-export async function getNativeEncodePlan() {
+export async function getNativeEncodePlan(exportQualityProfileId) {
   if (!cachedEncoderPlanPromise) {
     cachedEncoderPlanPromise = (async () => {
       const encoderOutput = await readAvailableEncoders()
@@ -233,7 +231,6 @@ export async function getNativeEncodePlan() {
       return {
         codec: 'libx264',
         label: 'cpu-libx264',
-        outputArgs: ['-preset', 'superfast', '-crf', '20'],
         hardware: false,
       }
     })().catch((error) => {
@@ -242,5 +239,10 @@ export async function getNativeEncodePlan() {
     })
   }
 
-  return cachedEncoderPlanPromise
+  const basePlan = await cachedEncoderPlanPromise
+
+  return {
+    ...basePlan,
+    outputArgs: buildNativeEncoderOutputArgs(basePlan.codec, exportQualityProfileId),
+  }
 }
