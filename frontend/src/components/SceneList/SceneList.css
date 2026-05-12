@@ -31,6 +31,10 @@
   gap: 6px;
 }
 
+.scene-list-bulk-launcher {
+  display: flex;
+}
+
 .scene-list-scroll {
   display: flex;
   flex-direction: column;
@@ -38,6 +42,226 @@
   max-height: 400px;
   overflow-y: auto;
   padding-right: 4px;
+}
+
+.scene-bulk-config {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  margin-bottom: 12px;
+  padding: 12px;
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-md);
+  background: rgba(255, 255, 255, 0.03);
+}
+
+.scene-bulk-config-head,
+.scene-bulk-footer,
+.scene-bulk-rule-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.scene-bulk-config-title {
+  font-size: 0.82rem;
+  font-weight: 800;
+  color: var(--text-primary);
+}
+
+.scene-bulk-config-meta,
+.scene-bulk-status,
+.scene-bulk-empty {
+  font-size: 0.7rem;
+  line-height: 1.4;
+  color: var(--text-secondary);
+}
+
+.scene-bulk-rule-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.scene-bulk-rule {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 10px;
+  border-radius: var(--radius-sm);
+  border: 1px solid rgba(255, 255, 255, 0.07);
+  background: rgba(15, 23, 42, 0.52);
+}
+
+.scene-bulk-rule-head span {
+  font-size: 0.72rem;
+  font-weight: 800;
+  color: var(--text-secondary);
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+.scene-bulk-remove-btn {
+  width: 26px;
+  height: 26px;
+  border: 1px solid rgba(239, 68, 68, 0.22);
+  border-radius: 8px;
+  background: rgba(239, 68, 68, 0.1);
+  color: #f87171;
+  font-size: 1rem;
+  cursor: pointer;
+}
+
+.scene-bulk-grid,
+.scene-bulk-action {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.scene-bulk-match-group,
+.scene-bulk-case-group {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  gap: 0;
+  align-items: stretch;
+  min-height: 36px;
+  overflow: hidden;
+  border: 1px solid rgba(96, 165, 250, 0.42);
+  border-radius: 8px;
+  background: rgba(15, 23, 42, 0.45);
+}
+
+.scene-bulk-match-group {
+  padding: 0;
+}
+
+.scene-bulk-condition-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.scene-bulk-condition-row {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 8px;
+  border-radius: 10px;
+  background: rgba(255, 255, 255, 0.025);
+}
+
+.scene-bulk-add-condition-btn {
+  min-height: 34px;
+  padding: 0 10px;
+  border: 1px solid rgba(96, 165, 250, 0.22);
+  border-radius: 10px;
+  background: rgba(37, 99, 235, 0.12);
+  color: var(--text-primary);
+  font-size: 0.72rem;
+  font-weight: 800;
+  cursor: pointer;
+}
+
+.scene-bulk-field {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  min-width: 0;
+}
+
+.scene-bulk-field span {
+  font-size: 0.66rem;
+  font-weight: 800;
+  color: var(--text-secondary);
+  letter-spacing: 0.07em;
+  text-transform: uppercase;
+}
+
+.scene-bulk-group-label {
+  display: flex;
+  align-items: center;
+  min-height: 34px;
+  padding: 0 10px;
+  border-right: 1px solid rgba(96, 165, 250, 0.32);
+  background: rgba(37, 99, 235, 0.1);
+  font-size: 0.66rem;
+  font-weight: 800;
+  color: var(--text-secondary);
+  letter-spacing: 0.07em;
+  text-transform: uppercase;
+  white-space: nowrap;
+}
+
+.scene-bulk-inline-select {
+  display: flex;
+  min-width: 0;
+}
+
+.scene-bulk-field select,
+.scene-bulk-inline-select select,
+.scene-bulk-field input[type="number"] {
+  min-height: 34px;
+  width: 100%;
+  padding: 0 10px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 10px;
+  background: rgba(255, 255, 255, 0.05);
+  color: var(--text-primary);
+  font-size: 0.75rem;
+  font-weight: 700;
+  outline: none;
+}
+
+.scene-bulk-field select option,
+.scene-bulk-inline-select select option {
+  color: #0f172a;
+}
+
+.scene-bulk-match-group .scene-bulk-inline-select select,
+.scene-bulk-case-group .scene-bulk-inline-select select {
+  min-height: 34px;
+  border: 0;
+  border-radius: 0;
+  background: rgba(255, 255, 255, 0.035);
+}
+
+.scene-bulk-match-group .scene-bulk-add-condition-btn,
+.scene-bulk-case-group .scene-bulk-remove-btn {
+  width: auto;
+  min-width: 34px;
+  height: auto;
+  min-height: 34px;
+  padding: 0 10px;
+  border: 0;
+  border-left: 1px solid rgba(96, 165, 250, 0.32);
+  border-radius: 0;
+  align-self: stretch;
+  transform: none;
+}
+
+.scene-bulk-match-group .scene-bulk-add-condition-btn {
+  background: rgba(37, 99, 235, 0.12);
+}
+
+.scene-bulk-case-group .scene-bulk-remove-btn {
+  background: rgba(239, 68, 68, 0.1);
+}
+
+.scene-bulk-field input[type="range"] {
+  width: 100%;
+  accent-color: var(--accent-purple);
+}
+
+.scene-bulk-zoom-field {
+  grid-column: 1 / -1;
+}
+
+.scene-bulk-status {
+  flex: 1;
+  min-width: 0;
+  text-align: right;
 }
 
 /* Scene Card */
@@ -156,6 +380,16 @@
 
 .scene-btn-play:hover {
   background: rgba(124, 58, 237, 0.25);
+  transform: scale(1.1);
+}
+
+.scene-btn-config {
+  background: rgba(59, 130, 246, 0.1);
+  color: #93c5fd;
+}
+
+.scene-btn-config:hover {
+  background: rgba(59, 130, 246, 0.25);
   transform: scale(1.1);
 }
 

@@ -32,6 +32,7 @@ const distDir = path.join(frontendDir, 'dist')
 const isDeveloper = true
 
 process.env.ELECTRON_IS_DEVELOPER = isDeveloper ? '1' : '0'
+app.commandLine.appendSwitch('enable-experimental-web-platform-features')
 
 const serverPort = Number(process.env.ELECTRON_SERVER_PORT || 5000)
 const serverUrl = process.env.ELECTRON_SERVER_URL || `http://127.0.0.1:${serverPort}`

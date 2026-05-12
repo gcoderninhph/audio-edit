@@ -16,7 +16,9 @@ import {
   normalizeSubtitleSettings,
 } from '../../utils/subtitleRenderModel'
 import DeveloperLocator from '../DeveloperLocator/DeveloperLocator'
+import SceneBulkMotionConfig from '../SceneList/SceneBulkMotionConfig'
 import VideoPlayerExportControls from './VideoPlayerExportControls'
+import VideoPlayerSceneMotionControls from './VideoPlayerSceneMotionControls'
 import VideoPlayerSubtitleControls from './VideoPlayerSubtitleControls'
 import './VideoPlayerFrameControls.css'
 
@@ -47,6 +49,12 @@ export default function VideoPlayerFrameControls({
   onVideoVolumeChange,
   onVoiceoverVolumeChange,
   hasVoiceoverTrack,
+  selectedScene,
+  selectedSceneIndex,
+  onSceneMotionChange,
+  onDetectSceneFace,
+  bulkMotionScenes,
+  onApplyBulkMotionConfig,
 }) {
   const backgroundInputRef = useRef(null)
   const activeFramePreset = getFramePresetById(framePresetId)
@@ -62,6 +70,8 @@ export default function VideoPlayerFrameControls({
   const isBackgroundSectionVisible = !visibleSection || visibleSection === 'background'
   const isAudioSectionVisible = visibleSection === 'audio'
   const isSubtitleSectionVisible = visibleSection === 'subtitle'
+  const isSceneSectionVisible = visibleSection === 'scene'
+  const isSceneBulkSectionVisible = visibleSection === 'scene-bulk'
   const normalizedSubtitleSettings = normalizeSubtitleSettings(subtitleSettings || DEFAULT_SUBTITLE_SETTINGS)
   const videoVolumePercent = Math.round((videoVolume || 0) * 100)
   const voiceoverVolumePercent = Math.round((voiceoverVolume || 0) * 100)
@@ -69,6 +79,10 @@ export default function VideoPlayerFrameControls({
     ? 'Background'
     : visibleSection === 'export'
       ? 'Export'
+    : visibleSection === 'scene-bulk'
+      ? 'Scenes'
+    : visibleSection === 'scene'
+      ? 'Scene'
     : visibleSection === 'subtitle'
       ? 'Subtitles'
     : visibleSection === 'audio'
@@ -78,6 +92,10 @@ export default function VideoPlayerFrameControls({
     ? 'Video background settings'
     : visibleSection === 'export'
       ? 'Export output settings'
+    : visibleSection === 'scene-bulk'
+      ? 'Quick scene config'
+    : visibleSection === 'scene'
+      ? 'Scene motion settings'
     : visibleSection === 'subtitle'
       ? 'Preview and export subtitle settings'
     : visibleSection === 'audio'
@@ -87,6 +105,10 @@ export default function VideoPlayerFrameControls({
     ? 'Only the active background controls stay visible so the sidebar remains focused.'
     : visibleSection === 'export'
       ? 'Choose the file size profile, local output folder, and final export file name before rendering.'
+    : visibleSection === 'scene-bulk'
+      ? 'Add conditions and actions to configure matching scenes from the scene list.'
+    : visibleSection === 'scene'
+      ? 'Configure face-targeted zoom mode for the selected scene card.'
     : visibleSection === 'subtitle'
       ? 'Open this from the timeline subtitle track to adjust subtitle styling for both preview and export.'
     : visibleSection === 'audio'
@@ -341,6 +363,22 @@ export default function VideoPlayerFrameControls({
         <VideoPlayerSubtitleControls
           subtitleSettings={normalizedSubtitleSettings}
           onSubtitleSettingsChange={onSubtitleSettingsChange}
+        />
+      )}
+
+      {isSceneSectionVisible && (
+        <VideoPlayerSceneMotionControls
+          scene={selectedScene}
+          sceneIndex={selectedSceneIndex}
+          onSceneMotionChange={onSceneMotionChange}
+          onDetectSceneFace={onDetectSceneFace}
+        />
+      )}
+
+      {isSceneBulkSectionVisible && (
+        <SceneBulkMotionConfig
+          scenes={bulkMotionScenes}
+          onApplyBulkMotionConfig={onApplyBulkMotionConfig}
         />
       )}
 

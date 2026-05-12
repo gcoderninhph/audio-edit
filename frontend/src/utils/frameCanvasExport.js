@@ -1,4 +1,5 @@
 import { drawFrameComposition, loadFrameBackgroundImage } from './frameCanvasRenderer'
+import { getSceneMotionAtTimelineTime } from './sceneMotion'
 import { DEFAULT_SUBTITLE_FONT_FAMILY, DEFAULT_SUBTITLE_SETTINGS } from './subtitleRenderModel'
 
 function waitForEvent(target, eventName) {
@@ -48,6 +49,7 @@ export async function renderFrameCompositionVideo({
   onLog,
   fontFamily = DEFAULT_SUBTITLE_FONT_FAMILY,
   recordingVideoBitsPerSecond = 10_000_000,
+  sceneMotionSegments = [],
   subtitleSettings = DEFAULT_SUBTITLE_SETTINGS,
 }) {
   const sourceVideoUrl = URL.createObjectURL(sourceVideoBlob)
@@ -92,6 +94,7 @@ export async function renderFrameCompositionVideo({
     backgroundImage,
     videoElement,
     subtitleText: getActiveSubtitleText(subtitles, 0),
+    sceneMotion: getSceneMotionAtTimelineTime(sceneMotionSegments, 0),
     fontFamily,
     subtitleSettings,
   })
@@ -112,6 +115,7 @@ export async function renderFrameCompositionVideo({
       backgroundImage,
       videoElement,
       subtitleText: getActiveSubtitleText(subtitles, videoElement.currentTime),
+      sceneMotion: getSceneMotionAtTimelineTime(sceneMotionSegments, videoElement.currentTime),
       fontFamily,
       subtitleSettings,
     })

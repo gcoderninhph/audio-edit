@@ -29,9 +29,10 @@ import {
   normalizeSubtitleSettings,
   serializeSubtitleSettings,
 } from '../utils/subtitleRenderModel'
+import { serializeSceneMotionConfig } from '../utils/sceneMotion'
 
 function buildExportSignature(keptScenes, exportSubtitles, framePresetId, frameBackground, subtitleSettings, exportQualityProfileId, exportFileName, exportOutputDirectory) {
-  const sceneSignature = keptScenes.map((scene) => `${scene.id}:${scene.start}-${scene.end}`).join('|')
+  const sceneSignature = keptScenes.map((scene) => `${scene.id}:${scene.start}-${scene.end}:${serializeSceneMotionConfig(scene.motion)}`).join('|')
   const subtitleSignature = exportSubtitles
     .map((subtitle) => `${subtitle.id}:${subtitle.start}-${subtitle.end}:${subtitle.text}`)
     .join('|')

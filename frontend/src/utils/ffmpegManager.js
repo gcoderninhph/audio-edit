@@ -1,7 +1,6 @@
 import { FFmpeg, FFFSType } from '@ffmpeg/ffmpeg';
 import { toBlobURL } from '@ffmpeg/util';
 import { runNativeExport } from './nativeExportClient';
-import { renderFrameCompositionVideo } from './frameCanvasExport';
 import { logExportDebug, writeDesktopDebugLog } from './desktopLogger';
 import {
   buildFinalMuxArgs,
@@ -13,6 +12,7 @@ import {
 import { saveExportBytesToFile } from './exportOutputTarget';
 import { getExportQualityProfileById, getFallbackVideoEncodingSettings } from './exportQualityProfile';
 import { materializeVoiceoverFile, renderExportAudioTrack } from './exportAudioStage';
+import { recordFallbackFrameComposition } from './fallbackFrameRecorder';
 import { buildMergedSceneTrack } from './ffmpegSceneMerge';
 import { describeFrameBackground, getFramePresetById, sanitizeFrameBackground } from './frameComposer';
 import { materializeVideoFile } from './projectStorage';
@@ -176,11 +176,6 @@ async function runFfmpegStage(ffmpeg, args, { phase, startPercent, endPercent },
   }
 }
 
-/**
- * Get or create FFmpeg instance, lazy-load WASM core
- * @param {function} onProgress - Loading progress callback (0-100)
- * @returns {Promise<FFmpeg>}
- */
 export async function getFFmpeg(onProgress = () => {}) {
   if (isLoaded && ffmpegInstance) {
     return ffmpegInstance;
@@ -224,21 +219,10 @@ export async function getFFmpeg(onProgress = () => {}) {
   }
 }
 
-/**
- * Check if FFmpeg is loaded
- */
 export function isFFmpegReady() {
   return isLoaded;
 }
 
-/**
- * Export video with selected scenes (remove deleted scenes)
- * 
- * @param {File} inputFile - Original video file
- * @param {Array<{start: number, end: number}>} keptScenes - Scenes to keep (sorted by start time)
- * @param {function} onProgress - Progress callback ({ phase: string, percent: number })
- * @returns {Promise<{blob: Blob, url: string, size: number}>}
- */
 export async function exportVideo(inputFile, keptScenes, subtitles, exportOptions = {}, onProgress = () => {}) {
   if (!keptScenes || keptScenes.length === 0) {
     throw new Error('No scenes to export');
@@ -357,23 +341,18 @@ export async function exportVideo(inputFile, keptScenes, subtitles, exportOption
       });
     }
 
-    emitExportLog(onProgress, 'framing', 'Read cut.mp4 for record-frame compositor');
-    const cutVideoData = await ffmpeg.readFile('cut.mp4');
-    const cutVideoBlob = new Blob([cutVideoData], { type: 'video/mp4' });
-    const recordedFrameResult = await renderFrameCompositionVideo({
-      sourceVideoBlob: cutVideoBlob,
-      subtitles: subtitles || [],
+    const framedVideoPath = await recordFallbackFrameComposition({
+      emitExportLog,
+      exportQualityProfile,
+      ffmpeg,
       framePreset,
       frameBackground: normalizedFrameBackground,
-      recordingVideoBitsPerSecond: exportQualityProfile.recorderVideoBitsPerSecond,
-      subtitleSettings: exportOptions?.subtitleSettings || null,
+      keptScenes,
       onProgress,
-      onLog: (message) => emitExportLog(onProgress, 'framing', message),
+      subtitles,
+      subtitleSettings: exportOptions?.subtitleSettings || null,
     });
-    const framedVideoPath = 'framed-preview.webm';
     transientFiles.push(framedVideoPath);
-    await ffmpeg.writeFile(framedVideoPath, new Uint8Array(await recordedFrameResult.blob.arrayBuffer()));
-    emitExportLog(onProgress, 'framing', `Recorded preview compositor to ${framedVideoPath}`);
 
     const needsAudioRemix = shouldAttachVoiceover
       || isAudioMixMuted(normalizedAudioMix.videoVolume)

@@ -20,6 +20,8 @@ export default function SceneList({
   onRestoreAll,
   onDeleteAll,
   onSeekToScene,
+  onOpenSceneConfig,
+  onOpenBulkSceneConfig,
   onStartDetection,
   sensitivity,
   onSensitivityChange,
@@ -103,6 +105,12 @@ export default function SceneList({
           </div>
         </div>
         <div className="scene-list-actions">
+          <div className="scene-list-bulk-launcher dev-locator-host">
+            <DeveloperLocator code="panel.scene-list.bulk-config.launcher" title="Scene Bulk Config Launcher" />
+            <button className="btn btn-primary btn-sm" onClick={onOpenBulkSceneConfig} title="Open quick scene config">
+              Quick config
+            </button>
+          </div>
           <button className="btn btn-ghost btn-sm" onClick={onRestoreAll} title="Restore all scenes">
             ↩ Restore all
           </button>
@@ -169,6 +177,13 @@ export default function SceneList({
                   title="Play this scene"
                 >
                   ▶
+                </button>
+                <button
+                  className="scene-btn scene-btn-config"
+                  onClick={(e) => { e.stopPropagation(); onOpenSceneConfig?.(scene); }}
+                  title="Configure scene motion"
+                >
+                  ⚙
                 </button>
                 <button
                   className="scene-btn scene-btn-delete"

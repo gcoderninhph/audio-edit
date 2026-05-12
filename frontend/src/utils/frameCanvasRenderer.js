@@ -47,6 +47,32 @@ export function getContainedVideoLayout(framePreset, sourceWidth, sourceHeight) 
   }
 }
 
+function clamp(value, min, max) {
+  return Math.min(max, Math.max(min, value))
+}
+
+export function getSceneMotionVideoLayout(framePreset, sourceWidth, sourceHeight, sceneMotion = null) {
+  const baseLayout = getContainedVideoLayout(framePreset, sourceWidth, sourceHeight)
+  const zoom = Math.max(1, Number(sceneMotion?.zoom) || 1)
+  if (!sceneMotion?.enabled || zoom <= 1.001) {
+    return baseLayout
+  }
+
+  const width = baseLayout.width * zoom
+  const height = baseLayout.height * zoom
+  const focusX = clamp(Number(sceneMotion.focusX) || 0.5, 0, 1)
+  const focusY = clamp(Number(sceneMotion.focusY) || 0.5, 0, 1)
+  const targetX = baseLayout.x + (baseLayout.width / 2) - (focusX * width)
+  const targetY = baseLayout.y + (baseLayout.height / 2) - (focusY * height)
+
+  return {
+    x: width > framePreset.width ? clamp(targetX, framePreset.width - width, 0) : (framePreset.width - width) / 2,
+    y: height > framePreset.height ? clamp(targetY, framePreset.height - height, 0) : (framePreset.height - height) / 2,
+    width,
+    height,
+  }
+}
+
 function getCoverImageLayout(framePreset, sourceWidth, sourceHeight) {
   const safeSourceWidth = Math.max(1, sourceWidth || framePreset.width)
   const safeSourceHeight = Math.max(1, sourceHeight || framePreset.height)
@@ -252,6 +278,7 @@ export function drawFrameComposition(context, {
   backgroundImage = null,
   videoElement,
   subtitleText,
+  sceneMotion = null,
   fontFamily = DEFAULT_SUBTITLE_FONT_FAMILY,
   subtitleSettings = DEFAULT_SUBTITLE_SETTINGS,
 }) {
@@ -260,7 +287,7 @@ export function drawFrameComposition(context, {
   drawFrameBackground(context, framePreset, frameBackground, backgroundImage, videoElement)
 
   if (canDrawVideoFrame(videoElement)) {
-    const layout = getContainedVideoLayout(framePreset, videoElement.videoWidth, videoElement.videoHeight)
+    const layout = getSceneMotionVideoLayout(framePreset, videoElement.videoWidth, videoElement.videoHeight, sceneMotion)
     context.drawImage(videoElement, layout.x, layout.y, layout.width, layout.height)
   }
 

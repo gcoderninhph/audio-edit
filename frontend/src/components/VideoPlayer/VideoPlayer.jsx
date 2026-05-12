@@ -7,6 +7,7 @@ import {
 } from '../../utils/frameComposer';
 import { getSubtitleAnchorOption } from '../../utils/subtitleRenderModel';
 import { drawFrameComposition, loadFrameBackgroundImage } from '../../utils/frameCanvasRenderer';
+import { getSceneMotionRenderState } from '../../utils/sceneMotion';
 import { getKeptScenes, getKeptDuration, mapRealToKeptTime, mapKeptToRealTime } from '../../utils/timeMapping';
 import VideoPlayerFrameControls from './VideoPlayerFrameControls';
 import VideoPlayerFrameSummaryBar from './VideoPlayerFrameSummaryBar';
@@ -22,6 +23,18 @@ const FRAME_SIDEBAR_SECTIONS = Object.freeze({
   BACKGROUND: 'background',
   AUDIO: 'audio',
   SUBTITLE: 'subtitle',
+  SCENE: 'scene',
+  SCENE_BULK: 'scene-bulk',
+});
+
+const SIDEBAR_TITLES = Object.freeze({
+  [FRAME_SIDEBAR_SECTIONS.FRAME]: 'Adjust video frame',
+  [FRAME_SIDEBAR_SECTIONS.EXPORT]: 'Adjust export output',
+  [FRAME_SIDEBAR_SECTIONS.BACKGROUND]: 'Adjust video background',
+  [FRAME_SIDEBAR_SECTIONS.AUDIO]: 'Adjust preview and export audio',
+  [FRAME_SIDEBAR_SECTIONS.SUBTITLE]: 'Adjust preview and export subtitles',
+  [FRAME_SIDEBAR_SECTIONS.SCENE]: 'Adjust scene motion',
+  [FRAME_SIDEBAR_SECTIONS.SCENE_BULK]: 'Apply scene motion rules',
 });
 
 function formatTime(seconds) {
@@ -58,6 +71,11 @@ export default function VideoPlayer({
   onVideoVolumeChange,
   onVoiceoverVolumeChange,
   onToggleVideoMute,
+  selectedScene,
+  selectedSceneIndex,
+  onSceneMotionChange,
+  onDetectSceneFace,
+  onApplyBulkMotionConfig,
   activeSidebarSection,
   onToggleSidebarSection,
   onCloseSidebarSection,
@@ -83,29 +101,7 @@ export default function VideoPlayer({
     return keptDuration;
   }, [duration, hasSceneCuts, keptDuration]);
   const frameBackgroundLabel = useMemo(() => getFrameBackgroundLabel(frameBackground), [frameBackground]);
-  const sidebarTitle = useMemo(() => {
-    if (activeSidebarSection === FRAME_SIDEBAR_SECTIONS.FRAME) {
-      return 'Adjust video frame';
-    }
-
-    if (activeSidebarSection === FRAME_SIDEBAR_SECTIONS.EXPORT) {
-      return 'Adjust export output';
-    }
-
-    if (activeSidebarSection === FRAME_SIDEBAR_SECTIONS.BACKGROUND) {
-      return 'Adjust video background';
-    }
-
-    if (activeSidebarSection === FRAME_SIDEBAR_SECTIONS.AUDIO) {
-      return 'Adjust preview and export audio';
-    }
-
-    if (activeSidebarSection === FRAME_SIDEBAR_SECTIONS.SUBTITLE) {
-      return 'Adjust preview and export subtitles';
-    }
-
-    return 'Adjust video';
-  }, [activeSidebarSection]);
+  const sidebarTitle = SIDEBAR_TITLES[activeSidebarSection] || 'Adjust video';
   const subtitleAnchorLabel = useMemo(() => getSubtitleAnchorOption(subtitleSettings?.anchor).label, [subtitleSettings]);
   const {
     voiceoverRef,
@@ -311,12 +307,20 @@ export default function VideoPlayer({
     if (!context) return undefined;
 
     const renderFrame = () => {
+      const renderTime = videoElement.currentTime || 0;
+      const renderScene = scenes?.find((scene) => (
+        renderTime >= scene.start
+        && renderTime <= scene.end
+        && !deletedSceneIds?.has(scene.id)
+      ));
+
       drawFrameComposition(context, {
         framePreset,
         frameBackground,
         backgroundImage: frameBackgroundImage,
         videoElement,
         subtitleText: activeSubtitle?.text || '',
+        sceneMotion: renderScene ? getSceneMotionRenderState(renderScene, renderTime) : null,
         subtitleSettings,
       });
       animationFrameRef.current = window.requestAnimationFrame(renderFrame);
@@ -329,7 +333,7 @@ export default function VideoPlayer({
         window.cancelAnimationFrame(animationFrameRef.current);
       }
     };
-  }, [activeSubtitle?.text, frameBackground, frameBackgroundImage, framePreset, subtitleSettings, videoRef]);
+  }, [activeSubtitle?.text, deletedSceneIds, frameBackground, frameBackgroundImage, framePreset, scenes, subtitleSettings, videoRef]);
 
   const frameStageStyle = useMemo(() => ({
     aspectRatio: `${framePreset.width} / ${framePreset.height}`,
@@ -365,6 +369,12 @@ export default function VideoPlayer({
           onVideoVolumeChange={onVideoVolumeChange}
           onVoiceoverVolumeChange={onVoiceoverVolumeChange}
           hasVoiceoverTrack={hasVoiceoverTrack}
+          selectedScene={selectedScene}
+          selectedSceneIndex={selectedSceneIndex}
+          onSceneMotionChange={onSceneMotionChange}
+          onDetectSceneFace={onDetectSceneFace}
+          bulkMotionScenes={keptScenes}
+          onApplyBulkMotionConfig={onApplyBulkMotionConfig}
         />
       </VideoPlayerSidebar>
 

@@ -1,4 +1,4 @@
-import { useCallback, useState, useEffect } from 'react';
+import { useCallback, useState, useEffect, useMemo } from 'react';
 import './App.css';
 import { useVideoEditor } from './hooks/useVideoEditor';
 import ProjectDashboard from './components/ProjectDashboard/ProjectDashboard';
@@ -13,6 +13,7 @@ function App() {
   const editor = useVideoEditor();
   const [activeRightTab, setActiveRightTab] = useState('scenes');
   const [activePlayerSidebarSection, setActivePlayerSidebarSection] = useState(null);
+  const [selectedSceneConfigId, setSelectedSceneConfigId] = useState(null);
   const [isProjectBrowserOpen, setIsProjectBrowserOpen] = useState(false);
   const { redo, setCurrentTime, undo, videoRef } = editor;
   const hasVideo = !!editor.videoUrl;
@@ -69,6 +70,30 @@ function App() {
   const handleOpenExportConfig = useCallback(() => {
     setActivePlayerSidebarSection('export');
   }, []);
+
+  const handleOpenSceneConfig = useCallback((scene) => {
+    if (!scene) return;
+    editor.seekToScene(scene);
+    setSelectedSceneConfigId(scene.id);
+    setActivePlayerSidebarSection('scene');
+  }, [editor]);
+
+  const handleOpenSceneBulkConfig = useCallback(() => {
+    setActivePlayerSidebarSection('scene-bulk');
+  }, []);
+
+  const selectedSceneConfig = useMemo(() => {
+    if (selectedSceneConfigId === null || selectedSceneConfigId === undefined) {
+      return editor.currentScene || null;
+    }
+
+    return editor.scenes.find((scene) => scene.id === selectedSceneConfigId) || editor.currentScene || null;
+  }, [editor.currentScene, editor.scenes, selectedSceneConfigId]);
+
+  const selectedSceneConfigIndex = useMemo(
+    () => editor.keptScenes.findIndex((scene) => scene.id === selectedSceneConfig?.id),
+    [editor.keptScenes, selectedSceneConfig?.id],
+  );
 
   const handleOpenProject = useCallback((sessionId) => {
     setActivePlayerSidebarSection(null);
@@ -237,6 +262,11 @@ function App() {
               onVideoVolumeChange={editor.handleVideoVolumeChange}
               onVoiceoverVolumeChange={editor.handleVoiceoverVolumeChange}
               onToggleVideoMute={editor.handleToggleVideoMute}
+              selectedScene={selectedSceneConfig}
+              selectedSceneIndex={selectedSceneConfigIndex}
+              onSceneMotionChange={editor.setSceneMotionConfig}
+              onDetectSceneFace={editor.detectSceneFace}
+              onApplyBulkMotionConfig={editor.applySceneMotionBulkConfig}
               activeSidebarSection={activePlayerSidebarSection}
               onToggleSidebarSection={handleTogglePlayerSidebarSection}
               onCloseSidebarSection={handleClosePlayerSidebar}
@@ -275,6 +305,8 @@ function App() {
                 onRestoreAll={editor.restoreAllScenes}
                 onDeleteAll={editor.deleteAllScenes}
                 onSeekToScene={editor.seekToScene}
+                onOpenSceneConfig={handleOpenSceneConfig}
+                onOpenBulkSceneConfig={handleOpenSceneBulkConfig}
                 onStartDetection={editor.startDetection}
                 sensitivity={editor.sensitivity}
                 onSensitivityChange={editor.setSensitivity}

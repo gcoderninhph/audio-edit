@@ -102,6 +102,7 @@ export async function runNativeExport({ inputFile, keptScenes, subtitles, frameS
         start: scene.start,
         end: scene.end,
         duration: scene.duration,
+        motion: scene.motion || null,
       })),
       frameSettings: {
         presetId: framePreset.id,
