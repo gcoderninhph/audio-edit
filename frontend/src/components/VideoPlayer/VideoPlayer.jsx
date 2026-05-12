@@ -75,6 +75,8 @@ export default function VideoPlayer({
   selectedSceneIndex,
   onSceneMotionChange,
   onDetectSceneFace,
+  bulkMotionRules,
+  onBulkMotionRulesChange,
   onApplyBulkMotionConfig,
   activeSidebarSection,
   onToggleSidebarSection,
@@ -374,6 +376,8 @@ export default function VideoPlayer({
           onSceneMotionChange={onSceneMotionChange}
           onDetectSceneFace={onDetectSceneFace}
           bulkMotionScenes={keptScenes}
+          bulkMotionRules={bulkMotionRules}
+          onBulkMotionRulesChange={onBulkMotionRulesChange}
           onApplyBulkMotionConfig={onApplyBulkMotionConfig}
         />
       </VideoPlayerSidebar>

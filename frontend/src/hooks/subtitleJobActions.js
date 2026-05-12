@@ -269,6 +269,7 @@ export async function runVoiceoverJob({
       languageKey: savedVoiceover.languageKey || voiceoverLanguageKey,
       previewUrl,
       startTime: 0,
+      storedFileName: savedVoiceover.storedFileName || '',
     } : null);
     updateVoiceoverProgress({ phase: 'Audio saved to project', percent: 100 });
   } catch (error) {

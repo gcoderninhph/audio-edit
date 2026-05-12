@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { exportVideo, isFFmpegReady } from '../utils/ffmpegManager'
 import { logExportDebug } from '../utils/desktopLogger'
 import {
@@ -45,8 +45,16 @@ function clampVolume(value, fallback = 1) {
   return Math.max(0, Math.min(1, normalizedValue))
 }
 
+function normalizeStoredAudioMix(audioMix = {}) {
+  return {
+    videoVolume: clampVolume(Number(audioMix?.videoVolume), 1),
+    voiceoverVolume: clampVolume(Number(audioMix?.voiceoverVolume), 1),
+    customizedAudioTrackKey: String(audioMix?.customizedAudioTrackKey || ''),
+  }
+}
+
 function getAudioTrackKey(voiceoverTrack) {
-  return voiceoverTrack?.previewUrl || voiceoverTrack?.storedFileName || voiceoverTrack?.fileName || ''
+  return voiceoverTrack?.storedFileName || voiceoverTrack?.fileName || voiceoverTrack?.previewUrl || ''
 }
 
 function getSourceVideoName(videoSource) {
@@ -107,6 +115,7 @@ export function useFrameExport({ videoFile, keptScenes, filteredSubtitles, video
   const [exportSavedFilePath, setExportSavedFilePath] = useState('')
   const [exportSize, setExportSize] = useState(0)
   const [lastExportSignature, setLastExportSignature] = useState('')
+  const pendingRestoredAudioMixRef = useRef(null)
 
   const framePreset = useMemo(() => getFramePresetById(framePresetId), [framePresetId])
   const frameSummary = useMemo(() => getFrameSummary(framePresetId), [framePresetId])
@@ -127,6 +136,7 @@ export function useFrameExport({ videoFile, keptScenes, filteredSubtitles, video
     [effectiveKeptScenes, filteredSubtitles],
   )
   const currentAudioTrackKey = useMemo(() => getAudioTrackKey(voiceoverTrack), [voiceoverTrack])
+  const exportAudioMix = useMemo(() => ({ videoVolume, voiceoverVolume, customizedAudioTrackKey }), [customizedAudioTrackKey, videoVolume, voiceoverVolume])
   const hasVoiceoverTrack = Boolean(voiceoverTrack?.previewUrl)
   const hasCustomizedCurrentAudioMix = Boolean(currentAudioTrackKey) && customizedAudioTrackKey === currentAudioTrackKey
   const effectiveVideoVolume = hasVoiceoverTrack
@@ -161,10 +171,20 @@ export function useFrameExport({ videoFile, keptScenes, filteredSubtitles, video
 
   useEffect(() => {
     setExportFileNameState(buildDefaultExportFileName(getSourceVideoName(videoFile)))
-    setVideoVolumeState(1)
-    setVoiceoverVolumeState(1)
-    setCustomizedAudioTrackKey('')
+    const restoredAudioMix = pendingRestoredAudioMixRef.current
+    pendingRestoredAudioMixRef.current = null
+    setVideoVolumeState(restoredAudioMix?.videoVolume ?? 1)
+    setVoiceoverVolumeState(restoredAudioMix?.voiceoverVolume ?? 1)
+    setCustomizedAudioTrackKey(restoredAudioMix?.customizedAudioTrackKey ?? '')
   }, [videoFile])
+
+  const restoreExportAudioMix = useCallback((audioMix) => {
+    const restoredAudioMix = normalizeStoredAudioMix(audioMix)
+    pendingRestoredAudioMixRef.current = restoredAudioMix
+    setVideoVolumeState(restoredAudioMix.videoVolume)
+    setVoiceoverVolumeState(restoredAudioMix.voiceoverVolume)
+    setCustomizedAudioTrackKey(restoredAudioMix.customizedAudioTrackKey)
+  }, [])
 
   const clearExportResult = useCallback(() => {
     setExportUrl((currentUrl) => {
@@ -400,6 +420,8 @@ export function useFrameExport({ videoFile, keptScenes, filteredSubtitles, video
     handleVideoVolumeChange,
     handleVoiceoverVolumeChange,
     handleToggleVideoMute,
+    exportAudioMix,
+    restoreExportAudioMix,
     framePreset,
     frameSummary,
     frameBackgroundLabel,

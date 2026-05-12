@@ -51,6 +51,8 @@ function buildProjectRecord(projectId, payload, existingRecord = null) {
     frame_background: payload.frameBackground ?? existingRecord?.frame_background ?? DEFAULT_FRAME_BACKGROUND,
     subtitle_settings: normalizeSubtitleSettings(payload.subtitleSettings ?? existingRecord?.subtitle_settings ?? DEFAULT_SUBTITLE_SETTINGS),
     export_quality_profile_id: normalizeExportQualityProfileId(payload.exportQualityProfileId ?? existingRecord?.export_quality_profile_id ?? DEFAULT_EXPORT_QUALITY_PROFILE_ID),
+    export_audio_mix: payload.exportAudioMix ?? existingRecord?.export_audio_mix ?? null,
+    scene_bulk_motion_rules: Array.isArray(payload.sceneBulkMotionRules) ? payload.sceneBulkMotionRules : existingRecord?.scene_bulk_motion_rules ?? [],
     scenes: Array.isArray(payload.scenes) ? payload.scenes : existingRecord?.scenes ?? [],
     deleted_ids: Array.isArray(payload.deletedIds) ? payload.deletedIds : existingRecord?.deleted_ids ?? [],
     subtitles: Array.isArray(payload.subtitles) ? payload.subtitles : existingRecord?.subtitles ?? [],

@@ -55,7 +55,7 @@ export function getSceneMotionVideoLayout(framePreset, sourceWidth, sourceHeight
   const baseLayout = getContainedVideoLayout(framePreset, sourceWidth, sourceHeight)
   const zoom = Math.max(1, Number(sceneMotion?.zoom) || 1)
   if (!sceneMotion?.enabled || zoom <= 1.001) {
-    return baseLayout
+    return { ...baseLayout, shouldCrop: false }
   }
 
   const width = baseLayout.width * zoom
@@ -66,11 +66,30 @@ export function getSceneMotionVideoLayout(framePreset, sourceWidth, sourceHeight
   const targetY = baseLayout.y + (baseLayout.height / 2) - (focusY * height)
 
   return {
-    x: width > framePreset.width ? clamp(targetX, framePreset.width - width, 0) : (framePreset.width - width) / 2,
-    y: height > framePreset.height ? clamp(targetY, framePreset.height - height, 0) : (framePreset.height - height) / 2,
+    x: width > baseLayout.width ? clamp(targetX, baseLayout.x + baseLayout.width - width, baseLayout.x) : baseLayout.x + ((baseLayout.width - width) / 2),
+    y: height > baseLayout.height ? clamp(targetY, baseLayout.y + baseLayout.height - height, baseLayout.y) : baseLayout.y + ((baseLayout.height - height) / 2),
     width,
     height,
+    cropX: baseLayout.x,
+    cropY: baseLayout.y,
+    cropWidth: baseLayout.width,
+    cropHeight: baseLayout.height,
+    shouldCrop: true,
   }
+}
+
+function drawSceneMotionVideo(context, videoElement, layout) {
+  if (!layout.shouldCrop) {
+    context.drawImage(videoElement, layout.x, layout.y, layout.width, layout.height)
+    return
+  }
+
+  context.save()
+  context.beginPath()
+  context.rect(layout.cropX, layout.cropY, layout.cropWidth, layout.cropHeight)
+  context.clip()
+  context.drawImage(videoElement, layout.x, layout.y, layout.width, layout.height)
+  context.restore()
 }
 
 function getCoverImageLayout(framePreset, sourceWidth, sourceHeight) {
@@ -288,7 +307,7 @@ export function drawFrameComposition(context, {
 
   if (canDrawVideoFrame(videoElement)) {
     const layout = getSceneMotionVideoLayout(framePreset, videoElement.videoWidth, videoElement.videoHeight, sceneMotion)
-    context.drawImage(videoElement, layout.x, layout.y, layout.width, layout.height)
+    drawSceneMotionVideo(context, videoElement, layout)
   }
 
   drawSubtitleCard(context, subtitleText, framePreset, fontFamily, subtitleSettings)

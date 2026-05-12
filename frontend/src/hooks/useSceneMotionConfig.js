@@ -1,5 +1,5 @@
-import { useCallback } from 'react'
-import { detectLargestFaceFromImageUrl } from '../utils/faceDetection'
+import { useCallback, useState } from 'react'
+import { detectLargestFaceFromImageUrls } from '../utils/faceDetection'
 import { generateThumbnail } from '../utils/sceneDetection'
 import { normalizeSceneMotionConfig } from '../utils/sceneMotion'
 import {
@@ -29,6 +29,27 @@ function countFaceTarget(summary, face) {
   }
 }
 
+const FACE_DETECTION_SAMPLE_POINTS = Object.freeze([0.5, 0.35, 0.65, 0.2, 0.8])
+
+function buildFaceDetectionSampleTimes(scene) {
+  const start = Math.max(0, Number(scene?.start) || 0)
+  const explicitDuration = Number(scene?.duration)
+  const end = Number(scene?.end)
+  const fallbackDuration = Number.isFinite(end) ? end - start : 0
+  const duration = Math.max(0, Number.isFinite(explicitDuration) ? explicitDuration : fallbackDuration)
+  if (duration <= 0) return [start]
+
+  const sampleCount = duration < 1 ? 2 : duration < 3 ? 3 : FACE_DETECTION_SAMPLE_POINTS.length
+  const margin = Math.min(0.25, duration * 0.1)
+  const minTime = start + margin
+  const maxTime = start + Math.max(margin, duration - margin)
+
+  return [...new Set(FACE_DETECTION_SAMPLE_POINTS.slice(0, sampleCount).map((point) => {
+    const sampleTime = start + (duration * point)
+    return Number(Math.max(minTime, Math.min(maxTime, sampleTime)).toFixed(3))
+  }))]
+}
+
 export function useSceneMotionConfig({
   clearExportResult,
   getCurrentSnapshot,
@@ -37,19 +58,31 @@ export function useSceneMotionConfig({
   setScenes,
   videoUrl,
 }) {
+  const [sceneBulkMotionRules, setSceneBulkMotionRulesState] = useState([])
+
+  const setSceneBulkMotionRules = useCallback((nextRules) => {
+    setSceneBulkMotionRulesState((currentRules) => normalizeSceneMotionBulkRules(
+      typeof nextRules === 'function' ? nextRules(currentRules) : nextRules,
+    ))
+  }, [])
+
   const detectFaceTarget = useCallback(async (scene) => {
     try {
       if (!videoUrl) {
         throw new Error('Video preview is not ready for face detection.')
       }
 
-      const midpoint = scene.start + (scene.duration / 2)
-      const frameUrl = await generateThumbnail(videoUrl, midpoint, 384, 216)
-      if (!frameUrl) {
+      const frameUrls = []
+      for (const sampleTime of buildFaceDetectionSampleTimes(scene)) {
+        const frameUrl = await generateThumbnail(videoUrl, sampleTime, 768, 432)
+        if (frameUrl) frameUrls.push(frameUrl)
+      }
+
+      if (frameUrls.length === 0) {
         throw new Error('Unable to capture a scene frame for face detection.')
       }
 
-      return await detectLargestFaceFromImageUrl(frameUrl)
+      return await detectLargestFaceFromImageUrls(frameUrls)
     } catch (error) {
       return createCenterFaceFallback(error?.message || 'Face detection failed. Center target will be used.')
     }
@@ -176,6 +209,8 @@ export function useSceneMotionConfig({
   return {
     applySceneMotionBulkConfig,
     detectSceneFace,
+    sceneBulkMotionRules,
+    setSceneBulkMotionRules,
     setSceneMotionConfig,
   }
 }

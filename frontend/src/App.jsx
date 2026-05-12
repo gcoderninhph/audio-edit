@@ -266,6 +266,8 @@ function App() {
               selectedSceneIndex={selectedSceneConfigIndex}
               onSceneMotionChange={editor.setSceneMotionConfig}
               onDetectSceneFace={editor.detectSceneFace}
+              bulkMotionRules={editor.sceneBulkMotionRules}
+              onBulkMotionRulesChange={editor.setSceneBulkMotionRules}
               onApplyBulkMotionConfig={editor.applySceneMotionBulkConfig}
               activeSidebarSection={activePlayerSidebarSection}
               onToggleSidebarSection={handleTogglePlayerSidebarSection}

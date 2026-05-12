@@ -1,8 +1,8 @@
 import { writeFile } from 'node:fs/promises'
 import path from 'node:path'
-import { DEFAULT_FRAME_BACKGROUND, getFrameBackgroundFillColor, getVideoFadePresetById, isImageFrameBackground, isVideoFadeFrameBackground } from '../../src/utils/frameComposer.js'
-import { buildChunkSceneMotionSegments, buildFrameSceneMotionSegments, buildNativeForegroundOverlay, buildNativeForegroundScale, hasSceneMotionSegments } from './frameMotionFilter.mjs'
-import { getFrameChunkPlan, getFrameWorkerPlan, getNativeEncodePlan, runNativeFfmpeg } from './nativeFfmpeg.mjs'
+import { buildFrameFilter, getNativeBackgroundImagePath } from './frameFilterGraph.mjs'
+import { buildChunkSceneMotionSegments, buildFrameSceneMotionSegments } from './frameMotionFilter.mjs'
+import { getFrameChunkPlan, getFrameWorkerPlan, getNativeEncodePlan, readNativeVideoFrameRate, runNativeFfmpeg } from './nativeFfmpeg.mjs'
 
 function formatSeconds(seconds) {
   return Number(seconds || 0).toFixed(3)
@@ -10,71 +10,6 @@ function formatSeconds(seconds) {
 
 function escapeConcatPath(filePath) {
   return filePath.replace(/\\/g, '/').replace(/'/g, String.raw`'\\''`)
-}
-
-function toFfmpegColor(hexColor) {
-  return `0x${String(getFrameBackgroundFillColor(hexColor)).replace('#', '')}`
-}
-
-function getNativeBackgroundImagePath(frameBackground) {
-  return isImageFrameBackground(frameBackground) && typeof frameBackground.nativeImagePath === 'string'
-    ? frameBackground.nativeImagePath
-    : ''
-}
-
-function isNativeVideoFadeBackground(frameBackground) {
-  return isVideoFadeFrameBackground(frameBackground)
-}
-
-function formatFilterNumber(value, digits = 2) {
-  return Number(value || 0).toFixed(digits).replace(/\.0+$/, '').replace(/(\.\d*?)0+$/, '$1')
-}
-
-function buildEnableExpression(events) {
-  return events
-    .map((event) => `between(t,${formatSeconds(event.start)},${formatSeconds(event.end)})`)
-    .join('+')
-}
-
-function buildFrameFilter(framePreset, frameBackground, overlayAssets, motionSegments) {
-  const backgroundImagePath = getNativeBackgroundImagePath(frameBackground)
-  const fadePreset = getVideoFadePresetById(frameBackground?.presetId)
-  const filterChain = backgroundImagePath
-    ? [
-      `[1:v]scale=w=${framePreset.width}:h=${framePreset.height}:force_original_aspect_ratio=increase,crop=${framePreset.width}:${framePreset.height},setsar=1[bg]`,
-      buildNativeForegroundScale({ inputLabel: '0:v', outputLabel: 'fg', framePreset, motionSegments }),
-      buildNativeForegroundOverlay({ backgroundLabel: 'bg', foregroundLabel: 'fg', outputLabel: 'v0', framePreset, motionSegments }),
-    ]
-    : isNativeVideoFadeBackground(frameBackground)
-      ? [
-        `[0:v]split=2[bgsrc][fgsrc]`,
-        `[bgsrc]scale=w=${framePreset.width}:h=${framePreset.height}:force_original_aspect_ratio=increase,crop=${framePreset.width}:${framePreset.height},boxblur=${fadePreset.nativeBlur},eq=brightness=${formatFilterNumber(fadePreset.nativeBrightness, 3)}:saturation=${formatFilterNumber(fadePreset.nativeSaturation, 3)},setsar=1[bg]`,
-        `[bg]drawbox=x=0:y=0:w=iw:h=ih:color=${toFfmpegColor(DEFAULT_FRAME_BACKGROUND)}@${formatFilterNumber(fadePreset.nativeOverlayOpacity, 3)}:t=fill[bgdim]`,
-        buildNativeForegroundScale({ inputLabel: 'fgsrc', outputLabel: 'fg', framePreset, motionSegments }),
-        buildNativeForegroundOverlay({ backgroundLabel: 'bgdim', foregroundLabel: 'fg', outputLabel: 'v0', framePreset, motionSegments }),
-      ]
-    : hasSceneMotionSegments(motionSegments) ? [
-      `color=c=${toFfmpegColor(frameBackground)}:s=${framePreset.width}x${framePreset.height}:r=30[bg]`,
-      buildNativeForegroundScale({ inputLabel: '0:v', outputLabel: 'fg', framePreset, motionSegments }),
-      buildNativeForegroundOverlay({ backgroundLabel: 'bg', foregroundLabel: 'fg', outputLabel: 'v0', framePreset, motionSegments }),
-    ] : [
-      `[0:v]scale=w=${framePreset.width}:h=${framePreset.height}:force_original_aspect_ratio=decrease,pad=${framePreset.width}:${framePreset.height}:(ow-iw)/2:(oh-ih)/2:${toFfmpegColor(frameBackground)}[v0]`,
-    ]
-  const subtitleInputOffset = backgroundImagePath ? 2 : 1
-
-  let currentLabel = 'v0'
-  overlayAssets.forEach((asset, index) => {
-    const nextLabel = `v${index + 1}`
-    filterChain.push(
-      `[${currentLabel}][${index + subtitleInputOffset}:v]overlay=${asset.x}:${asset.y}:shortest=1:eof_action=pass:repeatlast=0:enable='${buildEnableExpression(asset.events)}'[${nextLabel}]`,
-    )
-    currentLabel = nextLabel
-  })
-
-  return {
-    filterComplex: filterChain.join(';'),
-    outputLabel: `[${currentLabel}]`,
-  }
 }
 
 async function runWithConcurrency(items, concurrency, worker) {
@@ -196,11 +131,11 @@ function buildChunkOutputPath(jobDirectory, index) {
   return path.join(jobDirectory, `frame-chunk-${String(index).padStart(3, '0')}.mp4`)
 }
 
-function buildChunkArgs({ mergedPath, chunk, chunkOverlayAssets, workerPlan, framePreset, frameBackground, encoderPlan, outputPath, motionSegments }) {
+function buildChunkArgs({ mergedPath, chunk, chunkOverlayAssets, workerPlan, framePreset, frameBackground, encoderPlan, outputPath, motionSegments, nativeFrameRate }) {
   const backgroundImagePath = getNativeBackgroundImagePath(frameBackground)
   const backgroundInputArgs = backgroundImagePath ? ['-loop', '1', '-i', backgroundImagePath] : []
   const overlayInputArgs = chunkOverlayAssets.flatMap((asset) => ['-loop', '1', '-i', asset.path])
-  const filterPlan = buildFrameFilter(framePreset, frameBackground, chunkOverlayAssets, motionSegments)
+  const filterPlan = buildFrameFilter(framePreset, frameBackground, chunkOverlayAssets, motionSegments, { frameRate: nativeFrameRate })
 
   return [
     '-hide_banner',
@@ -233,6 +168,10 @@ function buildChunkArgs({ mergedPath, chunk, chunkOverlayAssets, workerPlan, fra
     ...encoderPlan.outputArgs,
     '-pix_fmt',
     'yuv420p',
+    '-r',
+    String(nativeFrameRate),
+    '-fps_mode',
+    'cfr',
     '-c:a',
     'aac',
     '-b:a',
@@ -299,6 +238,7 @@ export async function frameMergedVideo({
   })
   const chunks = buildFrameChunks(totalDurationSeconds, chunkPlan.targetChunkDurationSeconds)
   const sceneMotionSegments = buildFrameSceneMotionSegments(keptScenes)
+  const nativeFrameRate = await readNativeVideoFrameRate(mergedPath)
   if (chunks.length === 0) {
     throw new Error('No frame chunks were generated for native export.')
   }
@@ -331,6 +271,7 @@ export async function frameMergedVideo({
       effectiveWorkerCount,
     },
     frameWorkerPlan: workerPlan,
+    frameRate: nativeFrameRate,
     overlayCount: overlayAssets.length,
     chunkCount: chunks.length,
   })
@@ -359,6 +300,7 @@ export async function frameMergedVideo({
       encoderPlan,
       outputPath,
       motionSegments: chunkSceneMotionSegments,
+      nativeFrameRate,
     }), {
       cwd: jobDirectory,
       onStdoutLine: (line) => {

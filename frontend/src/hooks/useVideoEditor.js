@@ -1,6 +1,6 @@
 import { useState, useCallback, useMemo, useRef, useEffect } from 'react';
 import { detectScenes, generateThumbnail } from '../utils/sceneDetection';
-import { buildExportSubtitles, DEFAULT_FRAME_BACKGROUND, DEFAULT_FRAME_PRESET_ID } from '../utils/frameComposer';
+import { DEFAULT_FRAME_BACKGROUND, DEFAULT_FRAME_PRESET_ID } from '../utils/frameComposer';
 import { getKeptScenes, getKeptDuration } from '../utils/timeMapping';
 import { filterVisibleSubtitles, getCurrentSceneAtTime } from '../utils/editorSelectors';
 import { useUndoHistory } from './useUndoHistory';
@@ -9,9 +9,9 @@ import { useVideoEditorSubtitleActions } from './useVideoEditorSubtitleActions';
 import { useFrameExport } from './useFrameExport';
 import { useSceneMotionConfig } from './useSceneMotionConfig';
 import { useSubtitleTracks } from './useSubtitleTracks';
+import { useVideoEditorVoiceoverState } from './useVideoEditorVoiceoverState';
 import { DEFAULT_EXPORT_QUALITY_PROFILE_ID } from '../utils/exportQualityProfile';
 import { DEFAULT_SUBTITLE_SETTINGS } from '../utils/subtitleRenderModel';
-import { getVoiceoverTrackForLanguage } from '../utils/subtitleTracks';
 
 export function useVideoEditor() {
   const [videoFile, setVideoFileState] = useState(null);
@@ -69,19 +69,7 @@ export function useVideoEditor() {
   const currentScene = useMemo(() => getCurrentSceneAtTime(scenes, currentTime), [scenes, currentTime]);
 
   const filteredSubtitles = useMemo(() => filterVisibleSubtitles(subtitles, scenes, deletedSceneIds), [subtitles, scenes, deletedSceneIds]);
-  const localizedVoiceoverTrack = useMemo(() => getVoiceoverTrackForLanguage(voiceoverTrack, activeSubtitleLanguage), [activeSubtitleLanguage, voiceoverTrack]);
-  const localizedVoiceoverAudioName = localizedVoiceoverTrack ? lastVoiceoverAudioName : '';
-  const voiceoverSubtitles = useMemo(() => {
-    if (!filteredSubtitles.length) {
-      return [];
-    }
-
-    if (!keptScenes.length) {
-      return filteredSubtitles;
-    }
-
-    return buildExportSubtitles(filteredSubtitles, keptScenes);
-  }, [filteredSubtitles, keptScenes]);
+  const { localizedVoiceoverAudioName, localizedVoiceoverTrack, voiceoverSubtitles } = useVideoEditorVoiceoverState({ activeSubtitleLanguage, filteredSubtitles, keptScenes, lastVoiceoverAudioName, voiceoverTrack });
 
   const {
     framePresetId,
@@ -101,6 +89,8 @@ export function useVideoEditor() {
     handleVideoVolumeChange,
     handleVoiceoverVolumeChange,
     handleToggleVideoMute,
+    exportAudioMix,
+    restoreExportAudioMix,
     framePreset,
     frameSummary,
     frameBackgroundLabel,
@@ -127,6 +117,15 @@ export function useVideoEditor() {
     subtitleTracks,
   }), [deletedSceneIds, scenes, subtitleTracks]);
 
+  const { applySceneMotionBulkConfig, detectSceneFace, sceneBulkMotionRules, setSceneBulkMotionRules, setSceneMotionConfig } = useSceneMotionConfig({
+    clearExportResult,
+    getCurrentSnapshot,
+    pushState,
+    scenes,
+    setScenes,
+    videoUrl,
+  });
+
   const {
     isUploading,
     uploadProgress,
@@ -148,6 +147,8 @@ export function useVideoEditor() {
     frameBackground,
     subtitleSettings,
     exportQualityProfileId,
+    exportAudioMix,
+    sceneBulkMotionRules,
     sensitivity,
     scenes,
     deletedSceneIds,
@@ -166,6 +167,8 @@ export function useVideoEditor() {
     setFrameBackground,
     setSubtitleSettings,
     setExportQualityProfileId,
+    restoreExportAudioMix,
+    setSceneBulkMotionRules,
     setScenes,
     setDeletedSceneIds,
     setActiveSubtitleLanguage,
@@ -200,6 +203,8 @@ export function useVideoEditor() {
     setFrameBackground(DEFAULT_FRAME_BACKGROUND);
     setSubtitleSettings(DEFAULT_SUBTITLE_SETTINGS);
     setExportQualityProfileId(DEFAULT_EXPORT_QUALITY_PROFILE_ID);
+    restoreExportAudioMix(null);
+    setSceneBulkMotionRules([]);
     setScenes([]);
     setDeletedSceneIds(new Set());
     setThumbnails({});
@@ -212,7 +217,7 @@ export function useVideoEditor() {
     setVoiceoverTrack(null);
     resetHistory();
     uploadVideo(newSessionId, file);
-  }, [clearExportResult, resetHistory, resetSubtitleState, setExportQualityProfileId, setFrameBackground, setFramePresetId, setSubtitleSettings, uploadVideo, videoUrl]);
+  }, [clearExportResult, resetHistory, resetSubtitleState, restoreExportAudioMix, setExportQualityProfileId, setFrameBackground, setFramePresetId, setSceneBulkMotionRules, setSubtitleSettings, uploadVideo, videoUrl]);
 
   const closeProject = useCallback(() => {
     if (isDetecting) {
@@ -235,6 +240,8 @@ export function useVideoEditor() {
     setFrameBackground(DEFAULT_FRAME_BACKGROUND);
     setSubtitleSettings(DEFAULT_SUBTITLE_SETTINGS);
     setExportQualityProfileId(DEFAULT_EXPORT_QUALITY_PROFILE_ID);
+    restoreExportAudioMix(null);
+    setSceneBulkMotionRules([]);
     setScenes([]);
     setDeletedSceneIds(new Set());
     setThumbnails({});
@@ -254,7 +261,7 @@ export function useVideoEditor() {
     setVoiceoverTrack(null);
     setIsDetecting(false);
     resetHistory();
-  }, [clearExportResult, isDetecting, resetHistory, resetSubtitleState, setAutoSaveStatus, setExportQualityProfileId, setFrameBackground, setFramePresetId, setSubtitleSettings, videoUrl]);
+  }, [clearExportResult, isDetecting, resetHistory, resetSubtitleState, restoreExportAudioMix, setAutoSaveStatus, setExportQualityProfileId, setFrameBackground, setFramePresetId, setSceneBulkMotionRules, setSubtitleSettings, videoUrl]);
 
   const startDetection = useCallback(async () => {
     if (!videoFile) return;
@@ -348,15 +355,6 @@ export function useVideoEditor() {
     setCurrentTime(scene.start);
   }, []);
 
-  const { applySceneMotionBulkConfig, detectSceneFace, setSceneMotionConfig } = useSceneMotionConfig({
-    clearExportResult,
-    getCurrentSnapshot,
-    pushState,
-    scenes,
-    setScenes,
-    videoUrl,
-  });
-
   const { startTranscription, startTranslation, startVoiceover, updateSubtitle } = useVideoEditorSubtitleActions({
     activeSubtitleLanguage,
     deletedSceneIds,
@@ -415,7 +413,7 @@ export function useVideoEditor() {
     thumbnails, isExporting, exportProgress, exportResult, isFFmpegLoaded, startExport,
     framePresetId, setFramePresetId, frameBackground, setFrameBackground, subtitleSettings, setSubtitleSettings, exportConfig,
     videoVolume, voiceoverVolume, handleVideoVolumeChange, handleVoiceoverVolumeChange, handleToggleVideoMute,
-    framePreset, frameSummary, frameBackgroundLabel, currentTime, setCurrentTime, seekToScene, setSceneMotionConfig, detectSceneFace, applySceneMotionBulkConfig,
+    framePreset, frameSummary, frameBackgroundLabel, currentTime, setCurrentTime, seekToScene, setSceneMotionConfig, detectSceneFace, applySceneMotionBulkConfig, sceneBulkMotionRules, setSceneBulkMotionRules,
     activeSubtitleLanguage, setActiveSubtitleLanguage, subtitleLanguageOptions,
     subtitles, filteredSubtitles, isTranscribing, transcribeProgress, startTranscription,
     isTranslating, translateProgress, startTranslation,

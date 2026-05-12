@@ -22,6 +22,8 @@ export function useEditorPersistence({
   frameBackground,
   subtitleSettings,
   exportQualityProfileId,
+  exportAudioMix,
+  sceneBulkMotionRules,
   sensitivity,
   scenes,
   deletedSceneIds,
@@ -40,6 +42,8 @@ export function useEditorPersistence({
   setFrameBackground,
   setSubtitleSettings,
   setExportQualityProfileId,
+  restoreExportAudioMix,
+  setSceneBulkMotionRules,
   setScenes,
   setDeletedSceneIds,
   setActiveSubtitleLanguage,
@@ -102,6 +106,8 @@ export function useEditorPersistence({
         frameBackground,
         subtitleSettings,
         exportQualityProfileId,
+        exportAudioMix,
+        sceneBulkMotionRules,
         scenes: scenesData,
         deletedIds: deletedIdsData,
         activeSubtitleLanguage: nextActiveSubtitleLanguage,
@@ -117,7 +123,7 @@ export function useEditorPersistence({
       console.error('Auto-save failed:', error);
       setAutoSaveStatus('');
     }
-  }, [activeSubtitleLanguage, exportQualityProfileId, frameBackground, framePresetId, sessionIdRef, sensitivity, subtitleSettings, subtitleTracks, videoFilename, videoName]);
+  }, [activeSubtitleLanguage, exportAudioMix, exportQualityProfileId, frameBackground, framePresetId, sceneBulkMotionRules, sessionIdRef, sensitivity, subtitleSettings, subtitleTracks, videoFilename, videoName]);
 
   const {
     restoreVideoState,
@@ -240,6 +246,8 @@ export function useEditorPersistence({
       setFrameBackground(sanitizeFrameBackground(data.frame_background || DEFAULT_FRAME_BACKGROUND));
       setSubtitleSettings(normalizeSubtitleSettings(data.subtitle_settings || DEFAULT_SUBTITLE_SETTINGS));
       setExportQualityProfileId(normalizeExportQualityProfileId(data.export_quality_profile_id || DEFAULT_EXPORT_QUALITY_PROFILE_ID));
+      restoreExportAudioMix?.(data.export_audio_mix || null);
+      setSceneBulkMotionRules?.(data.scene_bulk_motion_rules || []);
       setScenes(data.scenes || []);
       setDeletedSceneIds(new Set(data.deleted_ids || []));
       restoreSubtitleState(data.subtitle_tracks || data.subtitles || [], data.active_subtitle_language || DEFAULT_SUBTITLE_LANGUAGE_KEY);
@@ -271,10 +279,12 @@ export function useEditorPersistence({
     restoreVoiceoverState,
     resumeSavedTranscription,
     resumeSavedTranslation,
+    restoreExportAudioMix,
     setDeletedSceneIds,
     setFrameBackground,
     setFramePresetId,
     setExportQualityProfileId,
+    setSceneBulkMotionRules,
     setIsGeneratingVoiceover,
     setIsTranscribing,
     setIsTranslating,
@@ -313,6 +323,8 @@ export function useEditorPersistence({
         setFrameBackground(DEFAULT_FRAME_BACKGROUND);
         setSubtitleSettings(DEFAULT_SUBTITLE_SETTINGS);
         setExportQualityProfileId(DEFAULT_EXPORT_QUALITY_PROFILE_ID);
+        restoreExportAudioMix?.(null);
+        setSceneBulkMotionRules?.([]);
         setScenes([]);
         setDeletedSceneIds(new Set());
         resetSubtitleState();
@@ -340,11 +352,13 @@ export function useEditorPersistence({
   }, [
     loadHistoryList,
     resetHistory,
+    restoreExportAudioMix,
     sessionId,
     setDeletedSceneIds,
     setFrameBackground,
     setFramePresetId,
     setExportQualityProfileId,
+    setSceneBulkMotionRules,
     setIsGeneratingVoiceover,
     setIsTranscribing,
     setIsTranslating,

@@ -54,6 +54,8 @@ export default function VideoPlayerFrameControls({
   onSceneMotionChange,
   onDetectSceneFace,
   bulkMotionScenes,
+  bulkMotionRules,
+  onBulkMotionRulesChange,
   onApplyBulkMotionConfig,
 }) {
   const backgroundInputRef = useRef(null)
@@ -378,6 +380,8 @@ export default function VideoPlayerFrameControls({
       {isSceneBulkSectionVisible && (
         <SceneBulkMotionConfig
           scenes={bulkMotionScenes}
+          rules={bulkMotionRules}
+          onRulesChange={onBulkMotionRulesChange}
           onApplyBulkMotionConfig={onApplyBulkMotionConfig}
         />
       )}

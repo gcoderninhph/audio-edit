@@ -64,6 +64,7 @@ export function useEditorPersistenceRestore({
       languageKey: restoredVoiceover.languageKey || data.voiceover_language_key || normalizeVoiceoverLanguageKey(),
       previewUrl: restoredVoiceover.previewUrl,
       startTime: 0,
+      storedFileName: restoredVoiceover.storedFileName || data.voiceover_filename || '',
     })
   }, [setLastVoiceoverAudioName, setVoiceoverTrack])
 

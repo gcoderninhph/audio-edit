@@ -18,6 +18,8 @@ const HARDWARE_ENCODERS = [
   },
 ]
 
+export const DEFAULT_NATIVE_FRAME_RATE = 30
+
 let cachedEncoderPlanPromise = null
 
 function getLogicalCpuCount() {
@@ -34,6 +36,42 @@ function normalizeCount(value) {
 
 function normalizeSeconds(value) {
   return Math.max(0, Number(value) || 0)
+}
+
+function parseFrameRateValue(value) {
+  const normalizedValue = String(value || '').trim().toLowerCase()
+  if (!normalizedValue) {
+    return 0
+  }
+
+  const multiplier = normalizedValue.endsWith('k') ? 1000 : 1
+  const numericValue = normalizedValue.replace(/k$/, '')
+  if (numericValue.includes('/')) {
+    const [rawNumerator, rawDenominator] = numericValue.split('/', 2)
+    const numerator = Number(rawNumerator)
+    const denominator = Number(rawDenominator)
+    return denominator > 0 ? (numerator / denominator) * multiplier : 0
+  }
+
+  return Number(numericValue) * multiplier
+}
+
+function parseVideoFrameRate(output) {
+  const lines = String(output || '').split(/\r?\n/)
+  const videoLine = lines.find((line) => /video:/i.test(line)) || lines.join(' ')
+  const fpsMatch = videoLine.match(/,\s*([0-9.]+(?:\/[0-9.]+)?k?)\s*fps\b/i)
+  const tbrMatch = videoLine.match(/,\s*([0-9.]+(?:\/[0-9.]+)?k?)\s*tbr\b/i)
+
+  return parseFrameRateValue(fpsMatch?.[1]) || parseFrameRateValue(tbrMatch?.[1])
+}
+
+export function normalizeNativeFrameRate(frameRate) {
+  const normalizedFrameRate = Number(frameRate) || 0
+  if (normalizedFrameRate < 1 || normalizedFrameRate > 120) {
+    return DEFAULT_NATIVE_FRAME_RATE
+  }
+
+  return Number(normalizedFrameRate.toFixed(3))
 }
 
 function createExportError(message, code = 'NATIVE_EXPORT_FAILED') {
@@ -212,6 +250,33 @@ async function readAvailableEncoders() {
     onStderrLine: (line) => outputLines.push(line),
   })
   return outputLines.join('\n')
+}
+
+export async function readNativeVideoFrameRate(inputPath) {
+  const outputLines = []
+
+  try {
+    await runNativeFfmpeg([
+      '-hide_banner',
+      '-nostats',
+      '-i',
+      inputPath,
+      '-map',
+      '0:v:0',
+      '-frames:v',
+      '1',
+      '-f',
+      'null',
+      '-',
+    ], {
+      onStdoutLine: (line) => outputLines.push(line),
+      onStderrLine: (line) => outputLines.push(line),
+    })
+  } catch {
+    return DEFAULT_NATIVE_FRAME_RATE
+  }
+
+  return normalizeNativeFrameRate(parseVideoFrameRate(outputLines.join('\n')))
 }
 
 export async function getNativeEncodePlan(exportQualityProfileId) {

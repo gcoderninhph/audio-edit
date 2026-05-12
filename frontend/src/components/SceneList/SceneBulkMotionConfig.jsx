@@ -53,13 +53,16 @@ function formatZoomScale(value) {
   return (Number.isFinite(Number(value)) ? Number(value) : 1.18).toFixed(2);
 }
 
-export default function SceneBulkMotionConfig({ scenes = [], onApplyBulkMotionConfig }) {
-  const [rules, setRules] = useState([]);
+export default function SceneBulkMotionConfig({ scenes = [], rules = [], onRulesChange, onApplyBulkMotionConfig }) {
   const [isApplying, setIsApplying] = useState(false);
   const [statusText, setStatusText] = useState('');
   const sceneIds = useMemo(() => scenes.map((scene) => scene.id), [scenes]);
   const conditionCount = useMemo(() => rules.reduce((sum, rule) => sum + Math.max(1, rule.conditions?.length || 0), 0), [rules]);
   const canApply = rules.length > 0 && scenes.length > 0 && !isApplying && typeof onApplyBulkMotionConfig === 'function';
+
+  const setRules = (updater) => {
+    onRulesChange?.(updater);
+  };
 
   const addRule = () => {
     setRules((currentRules) => [
