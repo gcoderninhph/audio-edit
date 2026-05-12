@@ -1,6 +1,6 @@
 import { SCENE_MOTION_MODES, buildSceneMotionSegments } from '../../src/utils/sceneMotion.js'
 
-function formatFilterNumber(value, digits = 4) {
+function formatFilterNumber(value, digits = 6) {
   return Number(value || 0).toFixed(digits).replace(/\.0+$/, '').replace(/(\.\d*?)0+$/, '$1')
 }
 
@@ -110,14 +110,13 @@ export function buildNativeForegroundScale({ inputLabel, outputLabel, framePrese
   const focusXExpression = buildFocusExpression(motionSegments, 'focusX')
   const focusYExpression = buildFocusExpression(motionSegments, 'focusY')
   const zoomWidthExpression = buildNearestEvenExpression(`iw*${baseScaleExpression}*(${zoomExpression})`)
-  const zoomHeightExpression = buildNearestEvenExpression(`ih*${baseScaleExpression}*(${zoomExpression})`)
   const xExpression = buildPixelExpression(`if(gte(w,W),min(max(W/2-(${focusXExpression})*w,W-w),0),(W-w)/2)`)
   const yExpression = buildPixelExpression(`if(gte(h,H),min(max(H/2-(${focusYExpression})*h,H-h),0),(H-h)/2)`)
 
   return [
     `[${inputLabel}]split=2[${baseSourceLabel}][${zoomSourceLabel}]`,
-    `[${baseSourceLabel}]scale=w=${framePreset.width}:h=${framePreset.height}:force_original_aspect_ratio=decrease:flags=bicubic+accurate_rnd+full_chroma_int,setsar=1[${boxLabel}]`,
-    `[${zoomSourceLabel}]scale=w='${zoomWidthExpression}':h='${zoomHeightExpression}':eval=frame:flags=bicubic+accurate_rnd+full_chroma_int,setsar=1[${zoomLabel}]`,
+    `[${baseSourceLabel}]scale=w=${framePreset.width}:h=${framePreset.height}:force_original_aspect_ratio=decrease:flags=bicubic+accurate_rnd+full_chroma_int,setsar=1,format=yuv444p[${boxLabel}]`,
+    `[${zoomSourceLabel}]scale=w='${zoomWidthExpression}':h=-2:eval=frame:flags=bicubic+accurate_rnd+full_chroma_int,setsar=1,format=yuv444p[${zoomLabel}]`,
     `[${boxLabel}][${zoomLabel}]overlay=x='${xExpression}':y='${yExpression}':shortest=1:eof_action=pass:eval=frame[${outputLabel}]`,
   ].join(';')
 }

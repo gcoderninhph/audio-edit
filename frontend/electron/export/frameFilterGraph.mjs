@@ -47,28 +47,30 @@ function formatFrameRate(frameRate) {
 export function buildFrameFilter(framePreset, frameBackground, overlayAssets, motionSegments, { frameRate = DEFAULT_NATIVE_FRAME_RATE } = {}) {
   const safeOverlayAssets = Array.isArray(overlayAssets) ? overlayAssets : []
   const safeMotionSegments = Array.isArray(motionSegments) ? motionSegments : []
+  const usesMotionSegments = hasSceneMotionSegments(safeMotionSegments)
+  const stableMotionFormat = usesMotionSegments ? ',format=yuv444p' : ''
   const nativeFrameRate = formatFrameRate(frameRate)
   const backgroundImagePath = getNativeBackgroundImagePath(frameBackground)
   const fadePreset = getVideoFadePresetById(frameBackground?.presetId)
   const sourceLabel = 'src'
-  const filterChain = [`[0:v]fps=${nativeFrameRate},setpts=N/(${nativeFrameRate}*TB)[${sourceLabel}]`]
+  const filterChain = [`[0:v]fps=${nativeFrameRate},setpts=N/(${nativeFrameRate}*TB)${stableMotionFormat}[${sourceLabel}]`]
 
   filterChain.push(...(backgroundImagePath
     ? [
-      `[1:v]scale=w=${framePreset.width}:h=${framePreset.height}:force_original_aspect_ratio=increase,crop=${framePreset.width}:${framePreset.height},setsar=1[bg]`,
+      `[1:v]scale=w=${framePreset.width}:h=${framePreset.height}:force_original_aspect_ratio=increase,crop=${framePreset.width}:${framePreset.height},setsar=1${stableMotionFormat}[bg]`,
       buildNativeForegroundScale({ inputLabel: sourceLabel, outputLabel: 'fg', framePreset, motionSegments: safeMotionSegments }),
       buildNativeForegroundOverlay({ backgroundLabel: 'bg', foregroundLabel: 'fg', outputLabel: 'v0', framePreset, motionSegments: safeMotionSegments }),
     ]
     : isNativeVideoFadeBackground(frameBackground)
       ? [
         `[${sourceLabel}]split=2[bgsrc][fgsrc]`,
-        `[bgsrc]scale=w=${framePreset.width}:h=${framePreset.height}:force_original_aspect_ratio=increase,crop=${framePreset.width}:${framePreset.height},boxblur=${fadePreset.nativeBlur},eq=brightness=${formatFilterNumber(fadePreset.nativeBrightness, 3)}:saturation=${formatFilterNumber(fadePreset.nativeSaturation, 3)},setsar=1[bg]`,
-        `[bg]drawbox=x=0:y=0:w=iw:h=ih:color=${toFfmpegColor(DEFAULT_FRAME_BACKGROUND)}@${formatFilterNumber(fadePreset.nativeOverlayOpacity, 3)}:t=fill[bgdim]`,
+        `[bgsrc]scale=w=${framePreset.width}:h=${framePreset.height}:force_original_aspect_ratio=increase,crop=${framePreset.width}:${framePreset.height},boxblur=${fadePreset.nativeBlur},eq=brightness=${formatFilterNumber(fadePreset.nativeBrightness, 3)}:saturation=${formatFilterNumber(fadePreset.nativeSaturation, 3)},setsar=1${stableMotionFormat}[bg]`,
+        `[bg]drawbox=x=0:y=0:w=iw:h=ih:color=${toFfmpegColor(DEFAULT_FRAME_BACKGROUND)}@${formatFilterNumber(fadePreset.nativeOverlayOpacity, 3)}:t=fill${stableMotionFormat}[bgdim]`,
         buildNativeForegroundScale({ inputLabel: 'fgsrc', outputLabel: 'fg', framePreset, motionSegments: safeMotionSegments }),
         buildNativeForegroundOverlay({ backgroundLabel: 'bgdim', foregroundLabel: 'fg', outputLabel: 'v0', framePreset, motionSegments: safeMotionSegments }),
       ]
-      : hasSceneMotionSegments(safeMotionSegments) ? [
-        `color=c=${toFfmpegColor(frameBackground)}:s=${framePreset.width}x${framePreset.height}:r=${nativeFrameRate}[bg]`,
+      : usesMotionSegments ? [
+        `color=c=${toFfmpegColor(frameBackground)}:s=${framePreset.width}x${framePreset.height}:r=${nativeFrameRate},format=yuv444p[bg]`,
         buildNativeForegroundScale({ inputLabel: sourceLabel, outputLabel: 'fg', framePreset, motionSegments: safeMotionSegments }),
         buildNativeForegroundOverlay({ backgroundLabel: 'bg', foregroundLabel: 'fg', outputLabel: 'v0', framePreset, motionSegments: safeMotionSegments }),
       ] : [
@@ -85,7 +87,7 @@ export function buildFrameFilter(framePreset, frameBackground, overlayAssets, mo
     currentLabel = nextLabel
   })
 
-  filterChain.push(`[${currentLabel}]fps=${nativeFrameRate},setpts=N/(${nativeFrameRate}*TB)[vout]`)
+  filterChain.push(`[${currentLabel}]fps=${nativeFrameRate},setpts=N/(${nativeFrameRate}*TB),format=yuv420p[vout]`)
 
   return {
     filterComplex: filterChain.join(';'),

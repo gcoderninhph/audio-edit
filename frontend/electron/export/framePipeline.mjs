@@ -5,7 +5,7 @@ import { buildChunkSceneMotionSegments, buildFrameSceneMotionSegments } from './
 import { getFrameChunkPlan, getFrameWorkerPlan, getNativeEncodePlan, readNativeVideoFrameRate, runNativeFfmpeg } from './nativeFfmpeg.mjs'
 
 function formatSeconds(seconds) {
-  return Number(seconds || 0).toFixed(3)
+  return Number(seconds || 0).toFixed(6)
 }
 
 function escapeConcatPath(filePath) {
@@ -35,26 +35,35 @@ function getTimelineDurationSeconds(keptScenes) {
   return keptScenes.reduce((sum, scene) => sum + Math.max(0, Number(scene.duration) || 0), 0)
 }
 
-function buildFrameChunks(totalDurationSeconds, targetChunkDurationSeconds) {
+function buildFrameChunks(totalDurationSeconds, targetChunkDurationSeconds, frameRate) {
   const chunks = []
   const safeTotalDurationSeconds = Math.max(0, Number(totalDurationSeconds) || 0)
   const safeTargetChunkDurationSeconds = Math.max(0.5, Number(targetChunkDurationSeconds) || safeTotalDurationSeconds || 1)
-  const chunkCount = Math.max(1, Math.ceil(safeTotalDurationSeconds / safeTargetChunkDurationSeconds))
+  const safeFrameRate = Math.max(1, Number(frameRate) || 0)
 
-  for (let index = 0; index < chunkCount; index += 1) {
-    const start = Math.min(safeTotalDurationSeconds, index * safeTargetChunkDurationSeconds)
-    const end = index === chunkCount - 1
-      ? safeTotalDurationSeconds
-      : Math.min(safeTotalDurationSeconds, start + safeTargetChunkDurationSeconds)
-    const duration = Math.max(0, end - start)
+  if (safeTotalDurationSeconds <= 0) {
+    return chunks
+  }
+
+  const totalFrameCount = Math.max(1, Math.round(safeTotalDurationSeconds * safeFrameRate))
+  const targetFrameCount = Math.max(1, Math.round(safeTargetChunkDurationSeconds * safeFrameRate))
+
+  for (let startFrame = 0; startFrame < totalFrameCount;) {
+    const frameCount = Math.min(targetFrameCount, totalFrameCount - startFrame)
+    const start = startFrame / safeFrameRate
+    const duration = frameCount / safeFrameRate
 
     if (duration > 0) {
       chunks.push({
         index: chunks.length,
         start,
         duration,
+        startFrame,
+        frameCount,
       })
     }
+
+    startFrame += frameCount
   }
 
   return chunks
@@ -236,9 +245,9 @@ export async function frameMergedVideo({
     sceneCount: keptScenes.length,
     totalDurationSeconds,
   })
-  const chunks = buildFrameChunks(totalDurationSeconds, chunkPlan.targetChunkDurationSeconds)
   const sceneMotionSegments = buildFrameSceneMotionSegments(keptScenes)
   const nativeFrameRate = await readNativeVideoFrameRate(mergedPath)
+  const chunks = buildFrameChunks(totalDurationSeconds, chunkPlan.targetChunkDurationSeconds, nativeFrameRate)
   if (chunks.length === 0) {
     throw new Error('No frame chunks were generated for native export.')
   }
@@ -272,6 +281,7 @@ export async function frameMergedVideo({
     },
     frameWorkerPlan: workerPlan,
     frameRate: nativeFrameRate,
+    frameAlignedChunks: true,
     overlayCount: overlayAssets.length,
     chunkCount: chunks.length,
   })
@@ -286,6 +296,8 @@ export async function frameMergedVideo({
       chunkIndex: chunk.index,
       chunkStart: chunk.start,
       chunkDuration: chunk.duration,
+      startFrame: chunk.startFrame,
+      frameCount: chunk.frameCount,
       overlayCount: chunkOverlayAssets.length,
       motionCount: chunkSceneMotionSegments.length,
     })
