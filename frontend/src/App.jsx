@@ -1,6 +1,9 @@
 import { useCallback, useState, useEffect, useMemo } from 'react';
 import './App.css';
 import { useVideoEditor } from './hooks/useVideoEditor';
+import { useAuthSession } from './hooks/useAuthSession';
+import AuthDialog from './components/Auth/AuthDialog';
+import AuthHeaderActions from './components/Auth/AuthHeaderActions';
 import ProjectDashboard from './components/ProjectDashboard/ProjectDashboard';
 import VideoPlayer from './components/VideoPlayer/VideoPlayer';
 import Timeline from './components/Timeline/Timeline';
@@ -11,10 +14,12 @@ import DeveloperLocator from './components/DeveloperLocator/DeveloperLocator';
 
 function App() {
   const editor = useVideoEditor();
+  const auth = useAuthSession();
   const [activeRightTab, setActiveRightTab] = useState('scenes');
   const [activePlayerSidebarSection, setActivePlayerSidebarSection] = useState(null);
   const [selectedSceneConfigId, setSelectedSceneConfigId] = useState(null);
   const [isProjectBrowserOpen, setIsProjectBrowserOpen] = useState(false);
+  const [isAuthDialogOpen, setIsAuthDialogOpen] = useState(false);
   const { redo, setCurrentTime, undo, videoRef } = editor;
   const hasVideo = !!editor.videoUrl;
   const hasActiveBackgroundTask = Boolean(
@@ -135,11 +140,29 @@ function App() {
     editor.closeProject();
   }, [editor, hasActiveBackgroundTask, hasVideo]);
 
+  const handleOpenAuthDialog = useCallback(() => {
+    auth.clearError?.();
+    setIsAuthDialogOpen(true);
+  }, [auth]);
+
+  const handleCloseAuthDialog = useCallback(() => {
+    setIsAuthDialogOpen(false);
+  }, []);
+
+  const authDialog = (
+    <AuthDialog
+      key={isAuthDialogOpen ? 'auth-dialog-open' : 'auth-dialog-closed'}
+      auth={auth}
+      open={isAuthDialogOpen}
+      onClose={handleCloseAuthDialog}
+    />
+  );
+
   // ── Loading Screen ──
   if (editor.isRestoring) {
     return (
       <div className="app">
-        <Header />
+        <Header auth={auth} onOpenAuthDialog={handleOpenAuthDialog} />
         <main className="app-main">
           <div className="restore-loading">
             <div className="detecting-spinner" />
@@ -148,6 +171,7 @@ function App() {
             </div>
           </div>
         </main>
+        {authDialog}
       </div>
     );
   }
@@ -156,13 +180,14 @@ function App() {
   if (!hasVideo || isProjectBrowserOpen) {
     return (
       <div className="app">
-        <Header />
+        <Header auth={auth} onOpenAuthDialog={handleOpenAuthDialog} />
         <main className="app-main">
           <ProjectDashboard
             onOpenProject={handleOpenProject}
             onNewProject={handleNewProject}
           />
         </main>
+        {authDialog}
       </div>
     );
   }
@@ -190,6 +215,7 @@ function App() {
           {editor.autoSaveStatus === 'saved' && (
             <span className="status-badge saved">✅ Saved</span>
           )}
+          <AuthHeaderActions auth={auth} onOpenLogin={handleOpenAuthDialog} />
           <div className="undo-redo-btns">
             <button
               className="btn btn-ghost btn-sm"
@@ -335,6 +361,8 @@ function App() {
                 isGeneratingVoiceover={editor.isGeneratingVoiceover}
                 voiceoverProgress={editor.voiceoverProgress}
                 lastVoiceoverAudioName={editor.lastVoiceoverAudioName}
+                isAuthenticated={auth.isAuthenticated}
+                onRequireAuth={handleOpenAuthDialog}
               />
             </div>
           </div>
@@ -378,12 +406,13 @@ function App() {
           </div>
         </div>
       </main>
+      {authDialog}
     </div>
   );
 }
 
 // ── Shared Header Component ──
-function Header() {
+function Header({ auth, onOpenAuthDialog }) {
   return (
     <header className="app-header dev-locator-host">
       <DeveloperLocator code="header.dashboard" title="Dashboard Header" />
@@ -392,6 +421,7 @@ function Header() {
         <span className="app-logo-text gradient-text">VideoForge</span>
         <span className="app-logo-badge">CLIENT-SIDE</span>
       </div>
+      <AuthHeaderActions auth={auth} onOpenLogin={onOpenAuthDialog} />
     </header>
   );
 }

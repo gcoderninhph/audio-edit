@@ -1,22 +1,30 @@
-from flask import Response, jsonify, request, send_file
+from flask import Response, jsonify, request
 import io
+import json
 import os
 import requests
+import time
 from urllib.parse import urlparse
 
 try:
+    from auth_routes import require_access_token
+    from request_store import RequestStoreError, get_request_record, save_request_record
     from translation_fallback import (
         create_local_translation_job,
         get_local_translation_download,
         get_local_translation_status,
         is_local_translation_job,
+        RequestStoreError,
     )
 except ImportError:
+    from .auth_routes import require_access_token
+    from .request_store import RequestStoreError, get_request_record, save_request_record
     from .translation_fallback import (
         create_local_translation_job,
         get_local_translation_download,
         get_local_translation_status,
         is_local_translation_job,
+        RequestStoreError,
     )
 
 WHISPER_API_URL = "http://localhost:8081/api/transcriptions"
@@ -54,9 +62,76 @@ def should_use_local_translation_fallback(response=None, error=None):
         or 'api key' in response_text
 
 
+def get_claim_user_id(claims):
+    return str(claims.get('sub') or '').strip()
+
+
+def read_response_payload(response):
+    try:
+        return response.json()
+    except (ValueError, json.JSONDecodeError):
+        return None
+
+
+def first_payload_value(payload, keys):
+    if not isinstance(payload, dict):
+        return ''
+    for key in keys:
+        value = payload.get(key)
+        if value:
+            return str(value)
+    return ''
+
+
+def save_server_request(request_id, user_id, request_type, provider, **metadata):
+    if not request_id:
+        return None
+    now = time.time()
+    try:
+        save_request_record({
+            'request_id': request_id,
+            'user_id': user_id,
+            'request_type': request_type,
+            'provider': provider,
+            'status': metadata.get('status') or 'running',
+            'source_file_name': metadata.get('source_file_name'),
+            'target_language': metadata.get('target_language'),
+            'output_file_name': metadata.get('output_file_name'),
+            'details': metadata.get('details') or {},
+            'created_at': now,
+            'updated_at': now,
+        })
+        return None
+    except RequestStoreError:
+        return jsonify({'error': 'Request database is unavailable'}), 503
+
+
+def require_request_owner(request_id, claims):
+    try:
+        stored_request = get_request_record(request_id)
+    except RequestStoreError:
+        return None, (jsonify({'error': 'Request database is unavailable'}), 503)
+
+    if not stored_request or stored_request.get('user_id') != get_claim_user_id(claims):
+        return None, (jsonify({'error': 'Request not found'}), 404)
+
+    return stored_request, None
+
+
+def build_local_translation_response(file_bytes, file_name, target_language, user_id):
+    try:
+        return jsonify(create_local_translation_job(file_bytes, file_name, target_language, user_id)), 202
+    except RequestStoreError:
+        return jsonify({'error': 'Translation request database is unavailable'}), 503
+
+
 def register_proxy_routes(app):
     @app.route('/api/transcription/start', methods=['POST'])
     def start_transcription():
+        claims, auth_error = require_access_token()
+        if auth_error:
+            return auth_error
+
         if 'file' not in request.files:
             return jsonify({'error': 'No file part'}), 400
 
@@ -70,6 +145,19 @@ def register_proxy_routes(app):
 
         try:
             response = requests.post(WHISPER_API_URL, files=files, data=data)
+            response_payload = read_response_payload(response)
+            if response.ok:
+                request_id = first_payload_value(response_payload, ('id', 'jobId', 'requestId', 'request_id'))
+                request_error = save_server_request(
+                    request_id,
+                    get_claim_user_id(claims),
+                    'transcription',
+                    'whisper',
+                    source_file_name=file.filename,
+                    details={'modelSize': data['modelSize'], 'language': data['language'], 'device': data['device']},
+                )
+                if request_error:
+                    return request_error
             return build_proxy_response(response, 'Failed to communicate with Whisper API')
         except requests.RequestException as error:
             print(f"Whisper API error: {error}")
@@ -77,6 +165,14 @@ def register_proxy_routes(app):
 
     @app.route('/api/transcription/status/<string:job_id>', methods=['GET'])
     def get_transcription_status(job_id):
+        claims, auth_error = require_access_token()
+        if auth_error:
+            return auth_error
+
+        _stored_request, owner_error = require_request_owner(job_id, claims)
+        if owner_error:
+            return owner_error
+
         try:
             response = requests.get(f"{WHISPER_API_URL}/{job_id}")
             return build_proxy_response(response, 'Failed to communicate with Whisper API')
@@ -86,6 +182,10 @@ def register_proxy_routes(app):
 
     @app.route('/api/translation/start', methods=['POST'])
     def start_translation():
+        claims, auth_error = require_access_token()
+        if auth_error:
+            return auth_error
+
         if 'subtitle_file' not in request.files:
             return jsonify({'error': 'No subtitle_file part'}), 400
         if 'target_language' not in request.form:
@@ -103,16 +203,44 @@ def register_proxy_routes(app):
         try:
             response = requests.post(f"{LLM_SUBTRANS_API_URL}/translate", files=files, data=data)
             if should_use_local_translation_fallback(response=response):
-                return jsonify(create_local_translation_job(file_bytes, file.filename, target_language)), 202
+                return build_local_translation_response(file_bytes, file.filename, target_language, get_claim_user_id(claims))
+
+            response_payload = read_response_payload(response)
+            if response.ok:
+                request_id = first_payload_value(response_payload, ('requestId', 'request_id', 'id', 'jobId'))
+                output_file_name = first_payload_value(response_payload, ('outputFileName', 'output_file_name', 'fileName'))
+                request_error = save_server_request(
+                    request_id,
+                    get_claim_user_id(claims),
+                    'translation',
+                    'llm-subtrans',
+                    source_file_name=file.filename,
+                    target_language=target_language,
+                    output_file_name=output_file_name,
+                    details={'localFallback': False},
+                )
+                if request_error:
+                    return request_error
             return build_proxy_response(response, 'Failed to communicate with LLM-Subtrans API')
         except requests.RequestException as error:
             print(f"LLM-Subtrans API error: {error}")
-            return jsonify(create_local_translation_job(file_bytes, file.filename, target_language)), 202
+            return build_local_translation_response(file_bytes, file.filename, target_language, get_claim_user_id(claims))
 
     @app.route('/api/translation/status/<string:job_id>', methods=['GET'])
     def get_translation_status(job_id):
+        claims, auth_error = require_access_token()
+        if auth_error:
+            return auth_error
+
+        _stored_request, owner_error = require_request_owner(job_id, claims)
+        if owner_error:
+            return owner_error
+
         if is_local_translation_job(job_id):
-            job_status = get_local_translation_status(job_id)
+            try:
+                job_status = get_local_translation_status(job_id)
+            except RequestStoreError:
+                return jsonify({'error': 'Translation request database is unavailable'}), 503
             if not job_status:
                 return jsonify({'error': 'Translation job not found'}), 404
             return jsonify(job_status), 200
@@ -126,16 +254,28 @@ def register_proxy_routes(app):
 
     @app.route('/api/translation/download/<string:job_id>/<string:file_name>', methods=['GET'])
     def download_translation(job_id, file_name):
+        claims, auth_error = require_access_token()
+        if auth_error:
+            return auth_error
+
+        _stored_request, owner_error = require_request_owner(job_id, claims)
+        if owner_error:
+            return owner_error
+
         if is_local_translation_job(job_id):
-            local_download = get_local_translation_download(job_id, file_name)
+            try:
+                local_download = get_local_translation_download(job_id, file_name)
+            except RequestStoreError:
+                return jsonify({'error': 'Translation request database is unavailable'}), 503
             if not local_download:
                 return jsonify({'error': 'Translated subtitle file not found'}), 404
 
-            return send_file(
-                local_download['path'],
-                as_attachment=True,
-                download_name=local_download['output_file_name'],
-                mimetype='text/plain; charset=utf-8'
+            return Response(
+                local_download['content'],
+                content_type='text/plain; charset=utf-8',
+                headers={
+                    'Content-Disposition': f'attachment; filename="{local_download["output_file_name"]}"'
+                }
             )
 
         try:
@@ -156,6 +296,10 @@ def register_proxy_routes(app):
 
     @app.route('/api/voiceover/start', methods=['POST'])
     def start_voiceover():
+        claims, auth_error = require_access_token()
+        if auth_error:
+            return auth_error
+
         if 'file' not in request.files:
             return jsonify({'error': 'No file part'}), 400
 
@@ -175,6 +319,19 @@ def register_proxy_routes(app):
                 files=files,
                 timeout=30,
             )
+            response_payload = read_response_payload(response)
+            if response.ok:
+                request_id = first_payload_value(response_payload, ('request_id', 'requestId', 'id'))
+                request_error = save_server_request(
+                    request_id,
+                    get_claim_user_id(claims),
+                    'voiceover',
+                    'vbee-router',
+                    source_file_name=file.filename,
+                    details={'contentType': file.mimetype or 'text/plain'},
+                )
+                if request_error:
+                    return request_error
             return build_proxy_response(response, 'Failed to communicate with Vbee Router')
         except requests.RequestException as error:
             print(f"Vbee Router error: {error}")
@@ -182,6 +339,14 @@ def register_proxy_routes(app):
 
     @app.route('/api/voiceover/status/<string:request_id>', methods=['GET'])
     def get_voiceover_status(request_id):
+        claims, auth_error = require_access_token()
+        if auth_error:
+            return auth_error
+
+        _stored_request, owner_error = require_request_owner(request_id, claims)
+        if owner_error:
+            return owner_error
+
         try:
             response = requests.get(
                 build_vbee_router_url(f'/tasks/{request_id}'),
@@ -194,8 +359,20 @@ def register_proxy_routes(app):
 
     @app.route('/api/voiceover/download', methods=['POST'])
     def download_voiceover():
+        claims, auth_error = require_access_token()
+        if auth_error:
+            return auth_error
+
         payload = request.get_json(silent=True) or {}
+        request_id = str(payload.get('request_id') or '').strip()
         download_url = str(payload.get('download_url') or '').strip()
+
+        if not request_id:
+            return jsonify({'error': 'No request_id specified'}), 400
+
+        _stored_request, owner_error = require_request_owner(request_id, claims)
+        if owner_error:
+            return owner_error
 
         if not download_url:
             return jsonify({'error': 'No download_url specified'}), 400

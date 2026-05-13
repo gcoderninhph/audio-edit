@@ -1,4 +1,5 @@
 import { apiFetch } from './runtimeConfig';
+import { getAuthRequestHeaders } from './authClient';
 import { DEFAULT_TRANSLATION_LANGUAGE_KEY, normalizeSubtitleLanguageKey } from './subtitleTracks';
 
 function normalizeTranslationErrorMessage(message, fallbackMessage) {
@@ -138,6 +139,7 @@ export async function translateSubtitles(subtitles, targetLanguage, onProgress, 
 
     const startRes = await apiFetch('/api/translation/start', {
       method: 'POST',
+      headers: getAuthRequestHeaders(),
       body: formData
     });
 
@@ -173,7 +175,9 @@ export async function resumeTranslation(requestId, outputFileName, onProgress, o
 }
 
 export async function getTranslationJobSnapshot(requestId) {
-  const statusRes = await apiFetch(`/api/translation/status/${requestId}`);
+  const statusRes = await apiFetch(`/api/translation/status/${requestId}`, {
+    headers: getAuthRequestHeaders(),
+  });
   if (statusRes.status === 404) {
     return { state: 'missing' };
   }
@@ -199,7 +203,9 @@ export async function getTranslationJobSnapshot(requestId) {
 }
 
 export async function downloadTranslatedSubtitles(requestId, outputFileName) {
-  const downloadRes = await apiFetch(`/api/translation/download/${requestId}/${outputFileName}`);
+  const downloadRes = await apiFetch(`/api/translation/download/${requestId}/${outputFileName}`, {
+    headers: getAuthRequestHeaders(),
+  });
 
   if (!downloadRes.ok) {
     throw new Error(await readApiErrorMessage(downloadRes, 'Unable to download the translated subtitle file'));
@@ -220,7 +226,9 @@ async function pollTranslationJob(requestId, outputFileName, onProgress, { initi
     }
     waitMilliseconds = 3000;
 
-    const statusRes = await apiFetch(`/api/translation/status/${requestId}`);
+    const statusRes = await apiFetch(`/api/translation/status/${requestId}`, {
+      headers: getAuthRequestHeaders(),
+    });
     if (statusRes.status === 404) {
       throw new Error('The job does not exist (Job Not Found)');
     }

@@ -3,8 +3,10 @@ from flask_cors import CORS
 import os
 
 try:
+    from auth_routes import register_auth_routes
     from proxy_routes import register_proxy_routes
 except ImportError:
+    from .auth_routes import register_auth_routes
     from .proxy_routes import register_proxy_routes
 
 SERVER_PORT = int(os.environ.get('SERVER_PORT', '5000'))
@@ -27,6 +29,7 @@ def add_headers(response):
 def healthcheck():
     return jsonify({'status': 'ok'})
 
+register_auth_routes(app)
 register_proxy_routes(app)
 
 

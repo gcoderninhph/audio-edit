@@ -1,6 +1,4 @@
 from concurrent.futures import ThreadPoolExecutor
-from pathlib import Path
-import json
 import re
 import threading
 import time
@@ -8,9 +6,13 @@ import uuid
 
 from deep_translator import GoogleTranslator
 
+try:
+  from request_store import RequestStoreError, get_translation_job, save_request_record, save_translation_job
+except ImportError:
+  from .request_store import RequestStoreError, get_translation_job, save_request_record, save_translation_job
+
 
 LOCAL_TRANSLATION_JOB_PREFIX = 'local-translation-'
-LOCAL_TRANSLATION_ROOT = Path(__file__).resolve().parent / 'uploads' / 'translation-jobs'
 SRT_TIMING_PATTERN = re.compile(r'^\d{2}:\d{2}:\d{2},\d{3}\s*-->\s*\d{2}:\d{2}:\d{2},\d{3}$')
 LOCAL_TRANSLATION_JOBS = {}
 LOCAL_TRANSLATION_LOCK = threading.Lock()
@@ -47,66 +49,33 @@ def normalize_target_language(target_language):
   raise ValueError(f'Unsupported target language: {target_language}')
 
 
-def ensure_translation_root():
-  LOCAL_TRANSLATION_ROOT.mkdir(parents=True, exist_ok=True)
-
-
 def sanitize_file_name(file_name, fallback='translated.srt'):
   cleaned = re.sub(r'[^a-zA-Z0-9._-]+', '_', str(file_name or fallback)).strip('._')
   return cleaned or fallback
 
 
-def get_metadata_path(job_id):
-  return LOCAL_TRANSLATION_ROOT / f'{job_id}.json'
-
-
-def get_output_path(job_id, output_file_name):
-  return LOCAL_TRANSLATION_ROOT / f'{job_id}-{sanitize_file_name(output_file_name)}'
-
-
-def persist_job(job):
-  ensure_translation_root()
-  metadata = {
-    'job_id': job['job_id'],
-    'status': job['status'],
-    'error': job.get('error'),
-    'target_language': job['target_language'],
-    'output_file_name': job['output_file_name'],
-    'output_path': job['output_path'],
-    'created_at': job['created_at'],
-    'updated_at': job['updated_at'],
-  }
-  get_metadata_path(job['job_id']).write_text(json.dumps(metadata, ensure_ascii=False), encoding='utf-8')
-
-
-def load_persisted_job(job_id):
-  metadata_path = get_metadata_path(job_id)
-  if not metadata_path.exists():
-    return None
-
-  metadata = json.loads(metadata_path.read_text(encoding='utf-8'))
-  return {
-    'job_id': metadata['job_id'],
-    'status': metadata.get('status', 'failed'),
-    'error': metadata.get('error'),
-    'target_language': metadata.get('target_language', ''),
-    'output_file_name': metadata.get('output_file_name', 'translated.srt'),
-    'output_path': metadata.get('output_path'),
-    'created_at': metadata.get('created_at', time.time()),
-    'updated_at': metadata.get('updated_at', time.time()),
-  }
-
-
 def update_job(job_id, **updates):
   with LOCAL_TRANSLATION_LOCK:
-    job = LOCAL_TRANSLATION_JOBS.get(job_id) or load_persisted_job(job_id)
+    job = LOCAL_TRANSLATION_JOBS.get(job_id) or get_translation_job(job_id)
     if not job:
       return None
 
     job.update(updates)
     job['updated_at'] = time.time()
+    save_translation_job(job)
+    save_request_record({
+      'request_id': job['job_id'],
+      'user_id': job.get('user_id') or 'legacy-user',
+      'request_type': 'translation',
+      'provider': 'local-google-translate',
+      'status': job['status'],
+      'target_language': job.get('target_language'),
+      'output_file_name': job.get('output_file_name'),
+      'details': {'localFallback': True, 'error': job.get('error')},
+      'created_at': job.get('created_at') or job['updated_at'],
+      'updated_at': job['updated_at'],
+    })
     LOCAL_TRANSLATION_JOBS[job_id] = job
-    persist_job(job)
     return job
 
 
@@ -116,7 +85,7 @@ def get_local_translation_job(job_id):
     if job:
       return dict(job)
 
-  persisted_job = load_persisted_job(job_id)
+  persisted_job = get_translation_job(job_id)
   if persisted_job:
     with LOCAL_TRANSLATION_LOCK:
       LOCAL_TRANSLATION_JOBS[job_id] = persisted_job
@@ -125,24 +94,38 @@ def get_local_translation_job(job_id):
   return None
 
 
-def create_local_translation_job(file_bytes, original_file_name, target_language):
-  ensure_translation_root()
+def create_local_translation_job(file_bytes, original_file_name, target_language, user_id):
   job_id = f'{LOCAL_TRANSLATION_JOB_PREFIX}{uuid.uuid4()}'
   output_file_name = sanitize_file_name(f'translated_{original_file_name or "subtitles.srt"}')
+  now = time.time()
   job = {
     'job_id': job_id,
+    'user_id': user_id,
     'status': 'running',
     'error': None,
     'target_language': normalize_target_language(target_language),
     'output_file_name': output_file_name,
-    'output_path': str(get_output_path(job_id, output_file_name)),
-    'created_at': time.time(),
-    'updated_at': time.time(),
+    'output_content': None,
+    'created_at': now,
+    'updated_at': now,
   }
 
   with LOCAL_TRANSLATION_LOCK:
+    save_translation_job(job)
+    save_request_record({
+      'request_id': job_id,
+      'user_id': user_id,
+      'request_type': 'translation',
+      'provider': 'local-google-translate',
+      'status': 'running',
+      'source_file_name': original_file_name,
+      'target_language': job['target_language'],
+      'output_file_name': output_file_name,
+      'details': {'localFallback': True},
+      'created_at': now,
+      'updated_at': now,
+    })
     LOCAL_TRANSLATION_JOBS[job_id] = job
-    persist_job(job)
 
   LOCAL_TRANSLATION_EXECUTOR.submit(run_local_translation_job, job_id, bytes(file_bytes))
   return {
@@ -233,9 +216,7 @@ def run_local_translation_job(job_id, file_bytes):
       })
 
     output_text = rebuild_srt(translated_entries)
-    output_path = Path(job['output_path'])
-    output_path.write_text(output_text, encoding='utf-8')
-    update_job(job_id, status='finished', error=None)
+    update_job(job_id, status='finished', error=None, output_content=output_text)
   except Exception as error:
     update_job(job_id, status='failed', error=str(error))
 
@@ -264,11 +245,10 @@ def get_local_translation_download(job_id, file_name):
   if sanitize_file_name(file_name) != sanitize_file_name(job['output_file_name']):
     return None
 
-  output_path = Path(job['output_path'])
-  if not output_path.exists():
+  if not job.get('output_content'):
     return None
 
   return {
-    'path': output_path,
     'output_file_name': job['output_file_name'],
+    'content': job['output_content'],
   }

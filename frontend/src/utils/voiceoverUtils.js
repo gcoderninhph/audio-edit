@@ -1,4 +1,5 @@
 import { apiFetch } from './runtimeConfig';
+import { getAuthRequestHeaders } from './authClient';
 import { jsonToSrt } from './subtitleUtils';
 
 function normalizeErrorMessage(message, fallbackMessage) {
@@ -59,10 +60,12 @@ async function downloadVoiceoverAudio(downloadUrl, requestId) {
   const response = await apiFetch('/api/voiceover/download', {
     method: 'POST',
     headers: {
+      ...getAuthRequestHeaders(),
       'Content-Type': 'application/json',
     },
     body: JSON.stringify({
       download_url: downloadUrl,
+      request_id: requestId,
     }),
   });
 
@@ -89,7 +92,9 @@ async function pollVoiceoverJob(requestId, onProgress) {
   while (true) {
     await new Promise((resolve) => window.setTimeout(resolve, 500));
 
-    const statusResponse = await apiFetch(`/api/voiceover/status/${requestId}`);
+    const statusResponse = await apiFetch(`/api/voiceover/status/${requestId}`, {
+      headers: getAuthRequestHeaders(),
+    });
     if (statusResponse.status === 404) {
       throw new Error('The voiceover job does not exist');
     }
@@ -154,6 +159,7 @@ export async function createVoiceoverFromSubtitles(subtitles, onProgress) {
   onProgress?.({ phase: 'Sending request to Vbee...', percent: 10 });
   const startResponse = await apiFetch('/api/voiceover/start', {
     method: 'POST',
+    headers: getAuthRequestHeaders(),
     body: formData,
   });
 

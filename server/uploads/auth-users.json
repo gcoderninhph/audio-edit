@@ -1,0 +1,13 @@
+{
+  "users": [
+    {
+      "id": "user-gnw81klYxobnSVxa",
+      "email": "ninhmphpl@gmail.com",
+      "displayName": "Admin",
+      "passwordHash": "D6Hjk22hHUjhM19eM1ARknLonuXqBHz-LyddVMf4U74",
+      "passwordSalt": "0PadKBrTsJDGyPjq50jgh2Sr",
+      "passwordIterations": 200000,
+      "createdAt": 1778585526
+    }
+  ]
+}

@@ -30,6 +30,8 @@ export default function SubtitlePanel({
   isGeneratingVoiceover,
   voiceoverProgress,
   lastVoiceoverAudioName,
+  isAuthenticated = false,
+  onRequireAuth,
 }) {
   const [editingId, setEditingId] = useState(null);
   const [editingText, setEditingText] = useState('');
@@ -46,6 +48,7 @@ export default function SubtitlePanel({
   const canTranslateSelectedLanguage = hasOriginalSubtitles && selectedLanguageOption.translatable;
   const isVoiceoverSupportedLanguage = isVoiceoverSubtitleLanguageSupported(activeSubtitleLanguage);
   const canGenerateVoiceover = isVoiceoverSupportedLanguage && hasVisibleSubs;
+  const authRequiredLabel = 'Login required';
   const missingSelectedTranslation = !hasVisibleSubs && hasOriginalSubtitles && !isOriginalLanguageSelected;
 
   // Find the currently active subtitle index based on currentTime
@@ -89,6 +92,30 @@ export default function SubtitlePanel({
     } else if (e.key === 'Escape') {
       setEditingId(null);
     }
+  };
+
+  const handleStartTranscription = () => {
+    if (!isAuthenticated) {
+      onRequireAuth?.();
+      return;
+    }
+    onStartTranscription?.();
+  };
+
+  const handleStartTranslation = () => {
+    if (!isAuthenticated) {
+      onRequireAuth?.();
+      return;
+    }
+    onStartTranslation?.(activeSubtitleLanguage);
+  };
+
+  const handleStartVoiceover = () => {
+    if (!isAuthenticated) {
+      onRequireAuth?.();
+      return;
+    }
+    onStartVoiceover?.();
   };
 
   // ── Transcribing / Translating progress screens ──
@@ -167,9 +194,9 @@ export default function SubtitlePanel({
         <div className="subtitle-tools-content">
           <button
             className="btn btn-primary btn-sm subtitle-tool-btn"
-            onClick={onStartTranscription}
+            onClick={handleStartTranscription}
           >
-            {hasOriginalSubtitles ? '🔄 Recreate subtitles (original)' : '📝 Generate subtitles automatically'}
+            {!isAuthenticated ? authRequiredLabel : hasOriginalSubtitles ? '🔄 Recreate subtitles (original)' : '📝 Generate subtitles automatically'}
           </button>
 
           {hasOriginalSubtitles && (
@@ -194,9 +221,9 @@ export default function SubtitlePanel({
                     className="btn btn-primary btn-sm subtitle-input-button-group-action"
                     style={{ background: '#3b82f6' }}
                     disabled={!canTranslateSelectedLanguage}
-                    onClick={() => onStartTranslation(activeSubtitleLanguage)}
+                    onClick={handleStartTranslation}
                   >
-                    {selectedLanguageOption.hasSubtitles ? '🌐 Retranslate' : '🌐 Translate'}
+                    {!isAuthenticated ? authRequiredLabel : selectedLanguageOption.hasSubtitles ? '🌐 Retranslate' : '🌐 Translate'}
                   </button>
                 </div>
               </div>
@@ -214,10 +241,10 @@ export default function SubtitlePanel({
               <button
                 className="btn btn-primary btn-sm subtitle-tool-btn subtitle-voiceover-btn"
                 style={{ background: '#f59e0b' }}
-                onClick={onStartVoiceover}
+                onClick={handleStartVoiceover}
                 disabled={!canGenerateVoiceover}
               >
-                {isVoiceoverSupportedLanguage ? '🔊 Generate voiceover' : '🔒 Voiceover only for Vietnamese'}
+                {!isAuthenticated ? authRequiredLabel : isVoiceoverSupportedLanguage ? '🔊 Generate voiceover' : '🔒 Voiceover only for Vietnamese'}
               </button>
 
               {!isVoiceoverSupportedLanguage && (

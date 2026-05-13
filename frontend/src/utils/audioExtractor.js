@@ -1,5 +1,11 @@
 import { apiFetch } from './runtimeConfig';
+import { getAuthRequestHeaders } from './authClient';
 import { materializeVideoFile } from './projectStorage';
+
+async function readApiErrorMessage(response, fallbackMessage) {
+  const payload = await response.json().catch(() => null);
+  return payload?.error || payload?.message || fallbackMessage;
+}
 
 function mapTranscriptionSegments(segments = []) {
   return segments.map((seg, index) => ({
@@ -45,10 +51,11 @@ export async function transcribeVideo(ffmpeg, videoFile, duration, onProgress, o
 
     const startRes = await apiFetch('/api/transcription/start', {
       method: 'POST',
+      headers: getAuthRequestHeaders(),
       body: formData
     });
 
-    if (!startRes.ok) throw new Error('Unable to start the Whisper job');
+    if (!startRes.ok) throw new Error(await readApiErrorMessage(startRes, 'Unable to start the Whisper job'));
     const startData = await startRes.json();
     const jobId = startData.id;
 
@@ -72,7 +79,9 @@ export async function resumeTranscription(jobId, onProgress, options = {}) {
 }
 
 export async function getTranscriptionJobSnapshot(jobId) {
-  const statusRes = await apiFetch(`/api/transcription/status/${jobId}`);
+  const statusRes = await apiFetch(`/api/transcription/status/${jobId}`, {
+    headers: getAuthRequestHeaders(),
+  });
   if (statusRes.status === 404) {
     return { state: 'missing' };
   }
@@ -108,7 +117,9 @@ async function pollTranscriptionJob(jobId, onProgress, { initialDelayMs = 3000 }
     }
     waitMilliseconds = 3000;
 
-    const statusRes = await apiFetch(`/api/transcription/status/${jobId}`);
+    const statusRes = await apiFetch(`/api/transcription/status/${jobId}`, {
+      headers: getAuthRequestHeaders(),
+    });
     if (statusRes.status === 404) {
       throw new Error('The job does not exist (Job Not Found)');
     }
