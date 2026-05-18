@@ -144,7 +144,11 @@ function buildChunkArgs({ mergedPath, chunk, chunkOverlayAssets, workerPlan, fra
   const backgroundImagePath = getNativeBackgroundImagePath(frameBackground)
   const backgroundInputArgs = backgroundImagePath ? ['-loop', '1', '-i', backgroundImagePath] : []
   const overlayInputArgs = chunkOverlayAssets.flatMap((asset) => ['-loop', '1', '-i', asset.path])
-  const filterPlan = buildFrameFilter(framePreset, frameBackground, chunkOverlayAssets, motionSegments, { frameRate: nativeFrameRate })
+  const filterPlan = buildFrameFilter(framePreset, frameBackground, chunkOverlayAssets, motionSegments, {
+    frameRate: nativeFrameRate,
+    timeOffset: chunk.start,
+    duration: chunk.duration,
+  })
 
   return [
     '-hide_banner',

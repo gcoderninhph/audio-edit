@@ -62,13 +62,14 @@ def update_job(job_id, **updates):
 
     job.update(updates)
     job['updated_at'] = time.time()
+    request_status = 'success' if job['status'] == 'finished' else job['status']
     save_translation_job(job)
     save_request_record({
       'request_id': job['job_id'],
       'user_id': job.get('user_id') or 'legacy-user',
       'request_type': 'translation',
       'provider': 'local-google-translate',
-      'status': job['status'],
+      'status': request_status,
       'target_language': job.get('target_language'),
       'output_file_name': job.get('output_file_name'),
       'details': {'localFallback': True, 'error': job.get('error')},

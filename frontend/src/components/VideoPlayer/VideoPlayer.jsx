@@ -2,15 +2,13 @@ import { useRef, useState, useCallback, useEffect, useMemo } from 'react';
 import {
   createImageFrameBackgroundFromFile,
   getFrameBackgroundLabel,
-  getFrameBackgroundFillColor,
   getFramePresetById,
 } from '../../utils/frameComposer';
 import { getSubtitleAnchorOption } from '../../utils/subtitleRenderModel';
-import { drawFrameComposition, loadFrameBackgroundImage } from '../../utils/frameCanvasRenderer';
-import { getSceneMotionRenderState } from '../../utils/sceneMotion';
 import { getKeptScenes, getKeptDuration, mapRealToKeptTime, mapKeptToRealTime } from '../../utils/timeMapping';
 import VideoPlayerFrameControls from './VideoPlayerFrameControls';
 import VideoPlayerFrameSummaryBar from './VideoPlayerFrameSummaryBar';
+import VideoPlayerPreviewStage from './VideoPlayerPreviewStage';
 import VideoPlayerSidebar from './VideoPlayerSidebar';
 import VideoPlayerTransportControls from './VideoPlayerTransportControls';
 import useVideoPlayerVoiceover from './useVideoPlayerVoiceover';
@@ -85,10 +83,7 @@ export default function VideoPlayer({
   const [isPlaying, setIsPlaying] = useState(false);
   const [duration, setDuration] = useState(0);
   const [realCurrentTime, setRealCurrentTime] = useState(0);
-  const [frameBackgroundImage, setFrameBackgroundImage] = useState(null);
   const seekBarRef = useRef(null);
-  const canvasRef = useRef(null);
-  const animationFrameRef = useRef(null);
   const framePreset = useMemo(() => getFramePresetById(framePresetId), [framePresetId]);
 
   const keptScenes = useMemo(() => getKeptScenes(scenes, deletedSceneIds), [scenes, deletedSceneIds]);
@@ -232,27 +227,6 @@ export default function VideoPlayer({
   }, [onFrameBackgroundChange]);
 
   useEffect(() => {
-    let isDisposed = false;
-
-    loadFrameBackgroundImage(frameBackground)
-      .then((image) => {
-        if (!isDisposed) {
-          setFrameBackgroundImage(image);
-        }
-      })
-      .catch((error) => {
-        console.error('Failed to load frame background image:', error);
-        if (!isDisposed) {
-          setFrameBackgroundImage(null);
-        }
-      });
-
-    return () => {
-      isDisposed = true;
-    };
-  }, [frameBackground]);
-
-  useEffect(() => {
     const handleKeyPress = (event) => {
       if (event.target.tagName === 'INPUT' || event.target.tagName === 'TEXTAREA') return;
       if (event.code === 'Space') {
@@ -296,52 +270,6 @@ export default function VideoPlayer({
   const activeSubtitle = subtitles?.find(
     (subtitle) => realCurrentTime >= subtitle.start && realCurrentTime <= subtitle.end,
   );
-
-  useEffect(() => {
-    const canvasElement = canvasRef.current;
-    const videoElement = videoRef.current;
-    if (!canvasElement || !videoElement) return undefined;
-
-    canvasElement.width = framePreset.width;
-    canvasElement.height = framePreset.height;
-
-    const context = canvasElement.getContext('2d', { alpha: false });
-    if (!context) return undefined;
-
-    const renderFrame = () => {
-      const renderTime = videoElement.currentTime || 0;
-      const renderScene = scenes?.find((scene) => (
-        renderTime >= scene.start
-        && renderTime <= scene.end
-        && !deletedSceneIds?.has(scene.id)
-      ));
-
-      drawFrameComposition(context, {
-        framePreset,
-        frameBackground,
-        backgroundImage: frameBackgroundImage,
-        videoElement,
-        subtitleText: activeSubtitle?.text || '',
-        sceneMotion: renderScene ? getSceneMotionRenderState(renderScene, renderTime) : null,
-        subtitleSettings,
-      });
-      animationFrameRef.current = window.requestAnimationFrame(renderFrame);
-    };
-
-    renderFrame();
-
-    return () => {
-      if (animationFrameRef.current) {
-        window.cancelAnimationFrame(animationFrameRef.current);
-      }
-    };
-  }, [activeSubtitle?.text, deletedSceneIds, frameBackground, frameBackgroundImage, framePreset, scenes, subtitleSettings, videoRef]);
-
-  const frameStageStyle = useMemo(() => ({
-    aspectRatio: `${framePreset.width} / ${framePreset.height}`,
-    backgroundColor: getFrameBackgroundFillColor(frameBackground),
-    maxWidth: `${Math.round((450 * framePreset.width) / framePreset.height)}px`,
-  }), [frameBackground, framePreset.height, framePreset.width]);
 
   return (
     <div className="video-player-container dev-locator-host" id="video-player">
@@ -392,25 +320,25 @@ export default function VideoPlayer({
             onToggleSection={onToggleSidebarSection}
           />
 
-          <div className="video-frame-preview">
-            <div className="video-frame-stage" style={frameStageStyle}>
-              <canvas ref={canvasRef} className="video-frame-canvas" onClick={handlePlayPause} />
-              <video
-                ref={videoRef}
-                src={videoUrl}
-                onLoadedMetadata={handleLoadedMetadata}
-                onDurationChange={handleLoadedMetadata}
-                onTimeUpdate={handleTimeUpdate}
-                onPlay={handlePlay}
-                onPause={handlePause}
-                onEnded={handleEnded}
-                onClick={handlePlayPause}
-                preload="metadata"
-                playsInline
-              />
-              <audio ref={voiceoverRef} src={voiceoverTrack?.previewUrl || undefined} preload="metadata" />
-            </div>
-          </div>
+          <VideoPlayerPreviewStage
+            framePreset={framePreset}
+            frameBackground={frameBackground}
+            videoRef={videoRef}
+            voiceoverRef={voiceoverRef}
+            videoUrl={videoUrl}
+            scenes={scenes}
+            deletedSceneIds={deletedSceneIds}
+            subtitleText={activeSubtitle?.text || ''}
+            subtitleSettings={subtitleSettings}
+            voiceoverTrack={voiceoverTrack}
+            onLoadedMetadata={handleLoadedMetadata}
+            onDurationChange={handleLoadedMetadata}
+            onTimeUpdate={handleTimeUpdate}
+            onPlay={handlePlay}
+            onPause={handlePause}
+            onEnded={handleEnded}
+            onTogglePlayback={handlePlayPause}
+          />
         </div>
       </div>
 

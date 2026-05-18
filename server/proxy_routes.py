@@ -77,8 +77,10 @@ def first_payload_value(payload, keys):
     if not isinstance(payload, dict):
         return ''
     for key in keys:
+        if key not in payload:
+            continue
         value = payload.get(key)
-        if value:
+        if value is not None and str(value).strip() != '':
             return str(value)
     return ''
 
@@ -100,6 +102,47 @@ def save_server_request(request_id, user_id, request_type, provider, **metadata)
             'details': metadata.get('details') or {},
             'created_at': now,
             'updated_at': now,
+        })
+        return None
+    except RequestStoreError:
+        return jsonify({'error': 'Request database is unavailable'}), 503
+
+
+def normalize_server_request_status(raw_status, request_type):
+    status = str(raw_status or '').strip().lower()
+    if request_type == 'transcription' and status == '2':
+        return 'success'
+    if status in {'2', 'success', 'succeeded', 'complete', 'completed', 'finished', 'done'}:
+        return 'success'
+    if status in {'-1', 'failed', 'failure', 'error', 'errored', 'cancelled', 'canceled'}:
+        return 'failed'
+    return 'running'
+
+
+def sync_server_request_status(stored_request, response_payload, request_type):
+    raw_status = first_payload_value(response_payload, ('status', 'state', 'jobStatus', 'taskStatus'))
+    if not raw_status:
+        return None
+
+    details = dict(stored_request.get('details') or {})
+    details['providerStatus'] = raw_status
+    if isinstance(response_payload, dict):
+        details['hasDownloadUrl'] = bool(response_payload.get('download_url') or response_payload.get('downloadUrl'))
+
+    try:
+        save_request_record({
+            'request_id': stored_request['request_id'],
+            'user_id': stored_request['user_id'],
+            'request_type': stored_request.get('request_type') or request_type,
+            'provider': stored_request.get('provider') or '',
+            'status': normalize_server_request_status(raw_status, request_type),
+            'source_file_name': stored_request.get('source_file_name'),
+            'target_language': stored_request.get('target_language'),
+            'output_file_name': first_payload_value(response_payload, ('outputFileName', 'output_file_name', 'fileName'))
+                or stored_request.get('output_file_name'),
+            'details': details,
+            'created_at': stored_request.get('created_at') or time.time(),
+            'updated_at': time.time(),
         })
         return None
     except RequestStoreError:
@@ -169,12 +212,16 @@ def register_proxy_routes(app):
         if auth_error:
             return auth_error
 
-        _stored_request, owner_error = require_request_owner(job_id, claims)
+        stored_request, owner_error = require_request_owner(job_id, claims)
         if owner_error:
             return owner_error
 
         try:
             response = requests.get(f"{WHISPER_API_URL}/{job_id}")
+            if response.ok:
+                request_error = sync_server_request_status(stored_request, read_response_payload(response), 'transcription')
+                if request_error:
+                    return request_error
             return build_proxy_response(response, 'Failed to communicate with Whisper API')
         except requests.RequestException as error:
             print(f"Whisper API error: {error}")
@@ -232,7 +279,7 @@ def register_proxy_routes(app):
         if auth_error:
             return auth_error
 
-        _stored_request, owner_error = require_request_owner(job_id, claims)
+        stored_request, owner_error = require_request_owner(job_id, claims)
         if owner_error:
             return owner_error
 
@@ -247,6 +294,10 @@ def register_proxy_routes(app):
 
         try:
             response = requests.get(f"{LLM_SUBTRANS_API_URL}/jobs/{job_id}")
+            if response.ok:
+                request_error = sync_server_request_status(stored_request, read_response_payload(response), 'translation')
+                if request_error:
+                    return request_error
             return build_proxy_response(response, 'Failed to communicate with LLM-Subtrans API')
         except requests.RequestException as error:
             print(f"LLM-Subtrans API error: {error}")
@@ -343,7 +394,7 @@ def register_proxy_routes(app):
         if auth_error:
             return auth_error
 
-        _stored_request, owner_error = require_request_owner(request_id, claims)
+        stored_request, owner_error = require_request_owner(request_id, claims)
         if owner_error:
             return owner_error
 
@@ -352,6 +403,10 @@ def register_proxy_routes(app):
                 build_vbee_router_url(f'/tasks/{request_id}'),
                 timeout=15,
             )
+            if response.ok:
+                request_error = sync_server_request_status(stored_request, read_response_payload(response), 'voiceover')
+                if request_error:
+                    return request_error
             return build_proxy_response(response, 'Failed to communicate with Vbee Router')
         except requests.RequestException as error:
             print(f"Vbee Router error: {error}")

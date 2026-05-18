@@ -11,6 +11,7 @@ import {
   hasSceneMotionSegments,
 } from './frameMotionFilter.mjs'
 import { DEFAULT_NATIVE_FRAME_RATE, normalizeNativeFrameRate } from './nativeFfmpeg.mjs'
+import { WATERMARK_TEXT, buildWatermarkMotionSegments } from '../../src/utils/watermarkMotion.js'
 
 function formatSeconds(seconds) {
   return Number(seconds || 0).toFixed(3)
@@ -44,7 +45,32 @@ function formatFrameRate(frameRate) {
   return String(normalizeNativeFrameRate(frameRate)).replace(/\.0+$/, '')
 }
 
-export function buildFrameFilter(framePreset, frameBackground, overlayAssets, motionSegments, { frameRate = DEFAULT_NATIVE_FRAME_RATE } = {}) {
+function buildLinearExpression(segment, axis) {
+  const startValue = axis === 'x' ? segment.startX : segment.startY
+  const endValue = axis === 'x' ? segment.endX : segment.endY
+  const duration = Math.max(0.001, segment.end - segment.start)
+  return `${formatFilterNumber(startValue, 6)}+(${formatFilterNumber(endValue - startValue, 6)})*((t-${formatSeconds(segment.start)})/${formatSeconds(duration)})`
+}
+
+function buildPiecewiseWatermarkExpression(segments, axis) {
+  return segments.reduceRight((expression, segment) => (
+    `if(between(t,${formatSeconds(segment.start)},${formatSeconds(segment.end)}),${buildLinearExpression(segment, axis)},${expression})`
+  ), axis === 'x' ? formatFilterNumber(segments.at(-1)?.endX || 0.16, 6) : formatFilterNumber(segments.at(-1)?.endY || 0.22, 6))
+}
+
+function buildMovingWatermarkFilter(inputLabel, outputLabel, framePreset, timeOffset = 0, duration = 0) {
+  const fontSize = Math.max(28, Math.min(88, Math.round(Math.min(framePreset.width, framePreset.height) * 0.06)))
+  const margin = Math.max(18, Math.round(fontSize * 0.9))
+  const borderWidth = Math.max(2, Math.round(fontSize * 0.08))
+  const shadowOffset = Math.max(2, Math.round(fontSize * 0.05))
+  const segments = buildWatermarkMotionSegments(timeOffset, Math.max(0.001, duration || 1))
+  const xExpression = `${margin}+max(0,w-text_w-${margin * 2})*(${buildPiecewiseWatermarkExpression(segments, 'x')})`
+  const yExpression = `${margin}+max(0,h-text_h-${margin * 2})*(${buildPiecewiseWatermarkExpression(segments, 'y')})`
+
+  return `[${inputLabel}]drawtext=text='${WATERMARK_TEXT}':font='Arial':fontsize=${fontSize}:fontcolor=white@0.42:borderw=${borderWidth}:bordercolor=black@0.38:shadowcolor=black@0.35:shadowx=${shadowOffset}:shadowy=${shadowOffset}:x='${xExpression}':y='${yExpression}'[${outputLabel}]`
+}
+
+export function buildFrameFilter(framePreset, frameBackground, overlayAssets, motionSegments, { frameRate = DEFAULT_NATIVE_FRAME_RATE, timeOffset = 0, duration = 0 } = {}) {
   const safeOverlayAssets = Array.isArray(overlayAssets) ? overlayAssets : []
   const safeMotionSegments = Array.isArray(motionSegments) ? motionSegments : []
   const usesMotionSegments = hasSceneMotionSegments(safeMotionSegments)
@@ -79,6 +105,9 @@ export function buildFrameFilter(framePreset, frameBackground, overlayAssets, mo
   const subtitleInputOffset = backgroundImagePath ? 2 : 1
 
   let currentLabel = 'v0'
+  filterChain.push(buildMovingWatermarkFilter(currentLabel, 'vwm', framePreset, timeOffset, duration))
+  currentLabel = 'vwm'
+
   safeOverlayAssets.forEach((asset, index) => {
     const nextLabel = `v${index + 1}`
     filterChain.push(

@@ -13,6 +13,7 @@ import {
   resolveSubtitleCardPosition,
   wrapSubtitleText,
 } from './subtitleRenderModel'
+import { WATERMARK_TEXT, getWatermarkPositionAtTime } from './watermarkMotion'
 
 const backgroundImageCache = new Map()
 
@@ -234,6 +235,35 @@ function drawSubtitleCard(
   )
 }
 
+function drawMovingWatermark(context, framePreset, currentTime = 0) {
+  const fontSize = clamp(Math.round(Math.min(framePreset.width, framePreset.height) * 0.06), 28, 88)
+  const padding = Math.max(18, Math.round(fontSize * 0.9))
+  const position = getWatermarkPositionAtTime(currentTime)
+
+  context.save()
+  context.font = `700 ${fontSize}px Arial, sans-serif`
+  context.textAlign = 'left'
+  context.textBaseline = 'top'
+
+  const textWidth = context.measureText(WATERMARK_TEXT).width
+  const availableX = Math.max(0, framePreset.width - textWidth - (padding * 2))
+  const availableY = Math.max(0, framePreset.height - fontSize - (padding * 2))
+  const x = padding + (availableX * position.x)
+  const y = padding + (availableY * position.y)
+
+  context.globalAlpha = 0.44
+  context.lineWidth = Math.max(2, Math.round(fontSize * 0.08))
+  context.strokeStyle = 'rgba(0, 0, 0, 0.55)'
+  context.fillStyle = 'rgba(255, 255, 255, 0.92)'
+  context.shadowColor = 'rgba(0, 0, 0, 0.35)'
+  context.shadowBlur = Math.max(4, Math.round(fontSize * 0.12))
+  context.shadowOffsetX = Math.max(2, Math.round(fontSize * 0.05))
+  context.shadowOffsetY = Math.max(2, Math.round(fontSize * 0.05))
+  context.strokeText(WATERMARK_TEXT, x, y)
+  context.fillText(WATERMARK_TEXT, x, y)
+  context.restore()
+}
+
 function drawVideoFadeBackground(context, framePreset, frameBackground, videoElement) {
   if (!canDrawVideoFrame(videoElement)) {
     return false
@@ -297,6 +327,7 @@ export function drawFrameComposition(context, {
   backgroundImage = null,
   videoElement,
   subtitleText,
+  currentTime = 0,
   sceneMotion = null,
   fontFamily = DEFAULT_SUBTITLE_FONT_FAMILY,
   subtitleSettings = DEFAULT_SUBTITLE_SETTINGS,
@@ -310,6 +341,7 @@ export function drawFrameComposition(context, {
     drawSceneMotionVideo(context, videoElement, layout)
   }
 
+  drawMovingWatermark(context, framePreset, currentTime)
   drawSubtitleCard(context, subtitleText, framePreset, fontFamily, subtitleSettings)
   context.restore()
 }
