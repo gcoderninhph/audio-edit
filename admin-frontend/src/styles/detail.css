@@ -26,7 +26,7 @@
   min-width: 150px;
 }
 
-.credit-dialog {
+.credit-dialog:not(.package-dialog) {
   width: min(440px, calc(100vw - 24px));
 }
 

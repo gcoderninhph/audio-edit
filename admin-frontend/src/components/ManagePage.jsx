@@ -81,7 +81,10 @@ export default function ManagePage({ onNavigate, onHeaderActionsChange }) {
                 <tr key={user.id} className="clickable-row" onClick={() => onNavigate(`/admin/users/${encodeURIComponent(user.id)}`)}>
                   <td><div className="user-cell"><UserRound size={18} /><span><strong>{user.displayName || user.username || user.email || user.id}</strong><small>{[user.username, user.email].filter(Boolean).join(' · ') || user.id}</small></span></div></td>
                   <td><span className="role-pill">{user.role || 'user'}</span></td>
-                  <td><span className={user.isPremium ? 'premium-pill' : 'plan-pill'}>{user.isPremium ? 'Premium' : 'Standard'}</span></td>
+                  <td>
+                    <strong><span className={user.isPremium ? 'premium-pill' : 'plan-pill'}>{user.isPremium ? 'Premium' : 'Standard'}</span></strong>
+                    {(user.premiumStartAt || user.premiumEndAt) ? <small>{formatDateTime(user.premiumStartAt)} - {formatDateTime(user.premiumEndAt)}</small> : null}
+                  </td>
                   <td><span className="status-pill">{user.isLocked ? 'Locked' : 'Active'}</span></td>
                   <td>{formatNumber(user.credits)}</td>
                   <td>{formatDateTime(user.createdAt)}</td>

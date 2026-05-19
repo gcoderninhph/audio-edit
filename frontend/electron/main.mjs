@@ -28,8 +28,11 @@ const frontendDir = path.resolve(__dirname, '..')
 const distDir = path.join(frontendDir, 'dist')
 const isDeveloper = true
 const serverUrl = 'https://audio-test.accstore.pro.vn'
+const sessionDataDir = path.join(app.getPath('userData'), 'session-data')
 
 process.env.ELECTRON_IS_DEVELOPER = isDeveloper ? '1' : '0'
+app.setPath('sessionData', sessionDataDir)
+app.commandLine.appendSwitch('disable-gpu-shader-disk-cache')
 app.commandLine.appendSwitch('enable-experimental-web-platform-features')
 
 const rendererDevUrl = process.env.ELECTRON_RENDERER_URL
@@ -121,11 +124,37 @@ async function createMainWindow() {
   mainWindow.webContents.on('did-fail-load', (_event, errorCode, errorDescription, validatedURL) => {
     logDesktopEvent('renderer', 'Renderer failed to load', { errorCode, errorDescription, validatedURL }, 'error')
   })
+  mainWindow.webContents.on('console-message', (details) => {
+    logDesktopEvent('renderer-console', 'Renderer console message', {
+      level: details.level,
+      line: details.lineNumber,
+      message: details.message,
+      sourceId: details.sourceId,
+    }, details.level === 'error' || details.level === 'warning' ? 'error' : 'info')
+  })
   mainWindow.webContents.on('render-process-gone', (_event, details) => {
     logDesktopEvent('renderer', 'Renderer process gone', details, 'error')
   })
-  mainWindow.webContents.on('did-finish-load', () => {
+  mainWindow.webContents.on('did-finish-load', async () => {
     logDesktopEvent('renderer', 'Renderer finished load', { rendererStartUrl })
+    try {
+      const domState = await mainWindow.webContents.executeJavaScript(
+        `(() => {
+          const root = document.getElementById('root')
+          return {
+            bodyClassName: document.body?.className || '',
+            bodyTextSample: (document.body?.innerText || '').trim().slice(0, 200),
+            documentTitle: document.title,
+            rootChildCount: root?.childElementCount || 0,
+            rootHtmlSample: (root?.innerHTML || '').trim().slice(0, 200),
+          }
+        })()`,
+        true,
+      )
+      logDesktopEvent('renderer', 'Renderer DOM snapshot after load', domState)
+    } catch (error) {
+      logDesktopEvent('renderer', 'Unable to capture renderer DOM snapshot', error, 'error')
+    }
   })
 
   mainWindow.once('ready-to-show', () => {

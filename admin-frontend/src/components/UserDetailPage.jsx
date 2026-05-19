@@ -1,11 +1,18 @@
 import { ArrowLeft, Coins, Lock, LockOpen, Plus, RefreshCw, Star } from 'lucide-react'
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { addUserCredits, fetchAdminUser, fetchCreditHistory, fetchUserRequests, updateAdminUser } from '../api/adminApi'
-import { formatDateTime, formatNumber, getRequestSource } from '../utils/format'
+import { formatDateTime, formatDateTimeInputValue, formatNumber, getRequestSource, parseDateTimeInputValue } from '../utils/format'
 import DeveloperMarker from './DeveloperMarker'
 import Pagination from './Pagination'
 
 const PAGE_SIZE = 10
+
+function buildPremiumWindowForm(userRecord) {
+  return {
+    endAt: formatDateTimeInputValue(userRecord?.premiumEndAt),
+    startAt: formatDateTimeInputValue(userRecord?.premiumStartAt),
+  }
+}
 
 export default function UserDetailPage({ userId, onNavigate, onHeaderActionsChange }) {
   const [user, setUser] = useState(null)
@@ -17,7 +24,9 @@ export default function UserDetailPage({ userId, onNavigate, onHeaderActionsChan
   const [historyPagination, setHistoryPagination] = useState(null)
   const [creditAmount, setCreditAmount] = useState('')
   const [creditNote, setCreditNote] = useState('')
+  const [premiumWindow, setPremiumWindow] = useState(() => buildPremiumWindowForm())
   const [isDialogOpen, setIsDialogOpen] = useState(false)
+  const [isPremiumDialogOpen, setIsPremiumDialogOpen] = useState(false)
   const [error, setError] = useState('')
   const [isLoading, setIsLoading] = useState(true)
   const [isSavingCredits, setIsSavingCredits] = useState(false)
@@ -34,6 +43,7 @@ export default function UserDetailPage({ userId, onNavigate, onHeaderActionsChan
         fetchCreditHistory(userId, { page: historyPage, pageSize: PAGE_SIZE }),
       ])
       setUser(userPayload.user || null)
+      setPremiumWindow(buildPremiumWindowForm(userPayload.user || null))
       setRequests(requestPayload.requests || [])
       setHistory(historyPayload.history || [])
       setRequestPagination(requestPayload.pagination || null)
@@ -92,16 +102,55 @@ export default function UserDetailPage({ userId, onNavigate, onHeaderActionsChan
     }
   }
 
-  const handlePremiumToggle = async () => {
+  const openPremiumDialog = () => {
+    setPremiumWindow(buildPremiumWindowForm(user))
+    setIsPremiumDialogOpen(true)
+    setError('')
+  }
+
+  const closePremiumDialog = () => {
+    setPremiumWindow(buildPremiumWindowForm(user))
+    setIsPremiumDialogOpen(false)
+  }
+
+  const handlePremiumSave = async (event) => {
+    event.preventDefault()
     if (!user) return
+
+    const hasStartAt = Boolean(premiumWindow.startAt)
+    const hasEndAt = Boolean(premiumWindow.endAt)
+    let nextPremiumStartAt = 0
+    let nextPremiumEndAt = 0
+
+    if (hasStartAt || hasEndAt) {
+      if (!hasStartAt || !hasEndAt) {
+        setError('Enter both premium start and end time.')
+        return
+      }
+      nextPremiumStartAt = parseDateTimeInputValue(premiumWindow.startAt)
+      nextPremiumEndAt = parseDateTimeInputValue(premiumWindow.endAt)
+      if (!Number.isFinite(nextPremiumStartAt) || !Number.isFinite(nextPremiumEndAt)) {
+        setError('Enter valid premium start and end time values.')
+        return
+      }
+      if (nextPremiumEndAt <= nextPremiumStartAt) {
+        setError('Premium end time must be after the start time.')
+        return
+      }
+    }
 
     setIsSavingPremium(true)
     setError('')
     try {
-      const payload = await updateAdminUser(userId, { isPremium: !user.isPremium })
+      const payload = await updateAdminUser(userId, {
+        premiumEndAt: nextPremiumEndAt,
+        premiumStartAt: nextPremiumStartAt,
+      })
       setUser(payload.user || null)
+      setPremiumWindow(buildPremiumWindowForm(payload.user || null))
+      setIsPremiumDialogOpen(false)
     } catch (saveError) {
-      setError(saveError.message || 'Unable to update premium access.')
+      setError(saveError.message || 'Unable to update premium access window.')
     } finally {
       setIsSavingPremium(false)
     }
@@ -140,29 +189,36 @@ export default function UserDetailPage({ userId, onNavigate, onHeaderActionsChan
             <span className="plan-pill">Credits {formatNumber(user?.credits)}</span>
           </div>
           <div className="toolbar-actions">
-          <button
-            type="button"
-            className={`${user?.isPremium ? 'ghost-button' : 'primary-button'} compact`}
-            onClick={() => void handlePremiumToggle()}
-            disabled={isLoading || isSavingPremium || !user}
-          >
-            <Star size={17} />
-            {isSavingPremium ? 'Saving...' : user?.isPremium ? 'Disable premium' : 'Enable premium'}
-          </button>
-          <button
-            type="button"
-            className="ghost-button compact"
-            onClick={() => void handleLockToggle()}
-            disabled={isLoading || isSavingLock || !user || user.role === 'admin'}
-          >
-            {user?.isLocked ? <LockOpen size={17} /> : <Lock size={17} />}
-            {isSavingLock ? 'Saving...' : user?.role === 'admin' ? 'Admin cannot be locked' : user?.isLocked ? 'Unlock account' : 'Lock account'}
-          </button>
-          <button type="button" className="primary-button compact" onClick={() => setIsDialogOpen(true)}><Coins size={17} /> Add credits</button>
+            <button
+              type="button"
+              className={`${user?.isPremium ? 'ghost-button' : 'primary-button'} compact`}
+              onClick={openPremiumDialog}
+              disabled={isLoading || isSavingPremium || !user}
+            >
+              <Star size={17} />
+              {isSavingPremium ? 'Saving...' : (user?.premiumStartAt || user?.premiumEndAt) ? 'Edit premium window' : 'Set premium window'}
+            </button>
+            <button
+              type="button"
+              className="ghost-button compact"
+              onClick={() => void handleLockToggle()}
+              disabled={isLoading || isSavingLock || !user || user.role === 'admin'}
+            >
+              {user?.isLocked ? <LockOpen size={17} /> : <Lock size={17} />}
+              {isSavingLock ? 'Saving...' : user?.role === 'admin' ? 'Admin cannot be locked' : user?.isLocked ? 'Unlock account' : 'Lock account'}
+            </button>
+            <button type="button" className="primary-button compact" onClick={() => setIsDialogOpen(true)}>
+              <Coins size={17} /> Add credits
+            </button>
           </div>
         </div>
       </section>
 
+      {(user?.premiumStartAt || user?.premiumEndAt) && (
+        <div className="notice notice-info">
+          Premium window: {formatDateTime(user.premiumStartAt)} - {formatDateTime(user.premiumEndAt)}
+        </div>
+      )}
       {error && <div className="notice notice-error">{error}</div>}
       {isLoading && <div className="notice notice-info">Loading user detail...</div>}
 
@@ -222,6 +278,30 @@ export default function UserDetailPage({ userId, onNavigate, onHeaderActionsChan
             <div className="dialog-actions">
               <button type="button" className="ghost-button" onClick={() => setIsDialogOpen(false)}>Cancel</button>
               <button type="submit" className="primary-button compact" disabled={isSavingCredits}><Plus size={17} /> Confirm</button>
+            </div>
+          </form>
+        </div>
+      )}
+
+      {isPremiumDialogOpen && (
+        <div className="dialog-backdrop" role="presentation">
+          <form className="credit-dialog package-dialog dev-host" onSubmit={handlePremiumSave}>
+            <DeveloperMarker code="admin.react.detail.premium-window" title="Admin React Premium Window" />
+            <div className="section-heading compact"><p>Premium access</p><h2>Set premium window</h2></div>
+            <div className="package-form-grid">
+              <label className="field">
+                <span>Start</span>
+                <input type="datetime-local" value={premiumWindow.startAt} onChange={(event) => setPremiumWindow((current) => ({ ...current, startAt: event.target.value }))} />
+              </label>
+              <label className="field">
+                <span>End</span>
+                <input type="datetime-local" value={premiumWindow.endAt} onChange={(event) => setPremiumWindow((current) => ({ ...current, endAt: event.target.value }))} />
+              </label>
+            </div>
+            <div className="dialog-actions">
+              <button type="button" className="ghost-button" onClick={closePremiumDialog} disabled={isSavingPremium}>Cancel</button>
+              <button type="button" className="ghost-button" onClick={() => setPremiumWindow({ startAt: '', endAt: '' })} disabled={isSavingPremium || (!premiumWindow.startAt && !premiumWindow.endAt && !user?.premiumStartAt && !user?.premiumEndAt)}>Clear</button>
+              <button type="submit" className="primary-button compact" disabled={isSavingPremium}><Star size={17} /> {isSavingPremium ? 'Saving...' : 'Save window'}</button>
             </div>
           </form>
         </div>

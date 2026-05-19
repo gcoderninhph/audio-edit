@@ -3,6 +3,25 @@ import os
 import time
 
 try:
+    from auth_user_record import (
+        _normalize_is_locked,
+        _normalize_is_premium,
+        _normalize_role,
+        _row_to_user_record,
+        build_premium_state,
+        normalize_premium_window,
+    )
+except ImportError:
+    from .auth_user_record import (
+        _normalize_is_locked,
+        _normalize_is_premium,
+        _normalize_role,
+        _row_to_user_record,
+        build_premium_state,
+        normalize_premium_window,
+    )
+
+try:
     import pymysql
 except ImportError as import_error:
     pymysql = None
@@ -88,42 +107,6 @@ def _read_legacy_json_users():
     return users if isinstance(users, list) else []
 
 
-def _normalize_role(value):
-    return ADMIN_USER_ROLE if str(value or '').strip().lower() == ADMIN_USER_ROLE else DEFAULT_USER_ROLE
-
-
-def _normalize_is_premium(value):
-    if isinstance(value, bool):
-        return value
-    return str(value or '').strip().lower() in {'1', 'true', 'yes', 'on'}
-
-
-def _normalize_is_locked(value):
-    if isinstance(value, bool):
-        return value
-    return str(value or '').strip().lower() in {'1', 'true', 'yes', 'on'}
-
-
-def _row_to_user_record(row):
-    if not row:
-        return None
-    return {
-        'id': row['id'],
-        'credits': max(0, int(row.get('credits') or 0)),
-        'email': row['email'],
-        'isLocked': _normalize_is_locked(row.get('is_locked')),
-        'isPremium': _normalize_is_premium(row.get('is_premium')),
-        'role': _normalize_role(row.get('role')),
-        'username': str(row.get('username') or '').strip(),
-        'displayName': row.get('display_name') or row['email'].split('@', 1)[0],
-        'passwordHash': row.get('password_hash') or '',
-        'passwordSalt': row.get('password_salt') or '',
-        'passwordIterations': row.get('password_iterations') or 0,
-        'createdAt': row.get('created_at') or 0,
-        'updatedAt': row.get('updated_at') or 0,
-    }
-
-
 def _migrate_legacy_json_users(cursor):
     for user in _read_legacy_json_users():
         email = str(user.get('email') or '').strip().lower()
@@ -191,6 +174,8 @@ def ensure_auth_schema():
                         display_name VARCHAR(80) NOT NULL,
                         role VARCHAR(16) NOT NULL DEFAULT 'user',
                         is_premium TINYINT(1) NOT NULL DEFAULT 0,
+                        premium_start_at BIGINT NOT NULL DEFAULT 0,
+                        premium_end_at BIGINT NOT NULL DEFAULT 0,
                         is_locked TINYINT(1) NOT NULL DEFAULT 0,
                         credits INT NOT NULL DEFAULT 0,
                         password_hash VARCHAR(255) NOT NULL,
@@ -206,7 +191,9 @@ def ensure_auth_schema():
                 _ensure_column(cursor, 'auth_users', 'username', 'VARCHAR(80) NULL UNIQUE AFTER email')
                 _ensure_column(cursor, 'auth_users', 'role', f"VARCHAR(16) NOT NULL DEFAULT '{DEFAULT_USER_ROLE}' AFTER display_name")
                 _ensure_column(cursor, 'auth_users', 'is_premium', 'TINYINT(1) NOT NULL DEFAULT 0 AFTER role')
-                _ensure_column(cursor, 'auth_users', 'is_locked', 'TINYINT(1) NOT NULL DEFAULT 0 AFTER is_premium')
+                _ensure_column(cursor, 'auth_users', 'premium_start_at', 'BIGINT NOT NULL DEFAULT 0 AFTER is_premium')
+                _ensure_column(cursor, 'auth_users', 'premium_end_at', 'BIGINT NOT NULL DEFAULT 0 AFTER premium_start_at')
+                _ensure_column(cursor, 'auth_users', 'is_locked', 'TINYINT(1) NOT NULL DEFAULT 0 AFTER premium_end_at')
                 try:
                     cursor.execute(
                         f'ALTER TABLE auth_users ADD COLUMN credits INT NOT NULL DEFAULT {DEFAULT_INITIAL_CREDITS} AFTER display_name'
@@ -217,6 +204,8 @@ def ensure_auth_schema():
                 cursor.execute('ALTER TABLE auth_users MODIFY COLUMN username VARCHAR(80) NULL')
                 cursor.execute(f"ALTER TABLE auth_users MODIFY COLUMN role VARCHAR(16) NOT NULL DEFAULT '{DEFAULT_USER_ROLE}'")
                 cursor.execute('ALTER TABLE auth_users MODIFY COLUMN is_premium TINYINT(1) NOT NULL DEFAULT 0')
+                cursor.execute('ALTER TABLE auth_users MODIFY COLUMN premium_start_at BIGINT NOT NULL DEFAULT 0')
+                cursor.execute('ALTER TABLE auth_users MODIFY COLUMN premium_end_at BIGINT NOT NULL DEFAULT 0')
                 cursor.execute('ALTER TABLE auth_users MODIFY COLUMN is_locked TINYINT(1) NOT NULL DEFAULT 0')
                 cursor.execute(
                     f'ALTER TABLE auth_users MODIFY COLUMN credits INT NOT NULL DEFAULT {DEFAULT_INITIAL_CREDITS}'
@@ -304,6 +293,16 @@ def create_registered_user(user_record):
     normalized_is_locked = _normalize_is_locked(
         user_record['isLocked'] if 'isLocked' in user_record else user_record.get('is_locked')
     )
+    normalized_premium_start_at, normalized_premium_end_at = normalize_premium_window(
+        user_record['premiumStartAt'] if 'premiumStartAt' in user_record else user_record.get('premium_start_at'),
+        user_record['premiumEndAt'] if 'premiumEndAt' in user_record else user_record.get('premium_end_at'),
+        allow_empty=True,
+    )
+    premium_state = build_premium_state(
+        normalized_premium_start_at,
+        normalized_premium_end_at,
+        legacy_is_premium=user_record['isPremium'] if 'isPremium' in user_record else user_record.get('is_premium'),
+    )
     if normalized_role == ADMIN_USER_ROLE:
         normalized_is_locked = False
     try:
@@ -313,8 +312,8 @@ def create_registered_user(user_record):
                 cursor.execute(
                     """
                     INSERT INTO auth_users
-                        (id, email, username, display_name, role, is_premium, is_locked, credits, password_hash, password_salt, password_iterations, created_at, updated_at)
-                    VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+                        (id, email, username, display_name, role, is_premium, premium_start_at, premium_end_at, is_locked, credits, password_hash, password_salt, password_iterations, created_at, updated_at)
+                    VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
                     """,
                     (
                         user_record['id'],
@@ -322,9 +321,9 @@ def create_registered_user(user_record):
                         user_record.get('username') or None,
                         user_record['displayName'],
                         normalized_role,
-                        1 if _normalize_is_premium(
-                            user_record['isPremium'] if 'isPremium' in user_record else user_record.get('is_premium')
-                        ) else 0,
+                        1 if premium_state['isPremium'] else 0,
+                        normalized_premium_start_at,
+                        normalized_premium_end_at,
                         1 if normalized_is_locked else 0,
                         int(user_record.get('credits') or DEFAULT_INITIAL_CREDITS),
                         user_record['passwordHash'],
@@ -369,95 +368,19 @@ def refund_user_credits(user_id, amount):
     return refund_user_credits_impl(user_id, amount)
 
 
-def cleanup_refresh_tokens(now):
-    ensure_auth_schema()
-    driver = _require_driver()
-    try:
-        connection = _connect(MYSQL_DATABASE)
-        try:
-            with connection.cursor() as cursor:
-                cursor.execute('DELETE FROM auth_refresh_tokens WHERE expires_at <= %s', (int(now),))
-        finally:
-            connection.close()
-    except driver.MySQLError as error:
-        raise AuthStoreError('Unable to clean refresh tokens') from error
-
-
-def store_refresh_token(token_id, user_id, expires_at, created_at):
-    ensure_auth_schema()
-    driver = _require_driver()
-    try:
-        connection = _connect(MYSQL_DATABASE)
-        try:
-            with connection.cursor() as cursor:
-                cursor.execute(
-                    """
-                    INSERT INTO auth_refresh_tokens (token_id, user_id, expires_at, created_at)
-                    VALUES (%s, %s, %s, %s)
-                    ON DUPLICATE KEY UPDATE user_id = VALUES(user_id), expires_at = VALUES(expires_at)
-                    """,
-                    (token_id, user_id, int(expires_at), int(created_at)),
-                )
-        finally:
-            connection.close()
-    except driver.MySQLError as error:
-        raise AuthStoreError('Unable to store refresh token') from error
-
-
-def get_refresh_token(token_id, now):
-    ensure_auth_schema()
-    driver = _require_driver()
-    try:
-        connection = _connect(MYSQL_DATABASE)
-        try:
-            with connection.cursor() as cursor:
-                cursor.execute('SELECT * FROM auth_refresh_tokens WHERE token_id = %s LIMIT 1', (token_id,))
-                row = cursor.fetchone()
-                if not row:
-                    return None
-                if int(row['expires_at']) <= int(now):
-                    cursor.execute('DELETE FROM auth_refresh_tokens WHERE token_id = %s', (token_id,))
-                    return None
-                return {
-                    'tokenId': row['token_id'],
-                    'userId': row['user_id'],
-                    'expiresAt': int(row['expires_at']),
-                }
-        finally:
-            connection.close()
-    except driver.MySQLError as error:
-        raise AuthStoreError('Unable to read refresh token') from error
-
-
-def revoke_refresh_token(token_id):
-    if not token_id:
-        return
-
-    ensure_auth_schema()
-    driver = _require_driver()
-    try:
-        connection = _connect(MYSQL_DATABASE)
-        try:
-            with connection.cursor() as cursor:
-                cursor.execute('DELETE FROM auth_refresh_tokens WHERE token_id = %s', (token_id,))
-        finally:
-            connection.close()
-    except driver.MySQLError as error:
-        raise AuthStoreError('Unable to revoke refresh token') from error
-
-
-def revoke_refresh_tokens_for_user(user_id):
-    if not user_id:
-        return
-
-    ensure_auth_schema()
-    driver = _require_driver()
-    try:
-        connection = _connect(MYSQL_DATABASE)
-        try:
-            with connection.cursor() as cursor:
-                cursor.execute('DELETE FROM auth_refresh_tokens WHERE user_id = %s', (user_id,))
-        finally:
-            connection.close()
-    except driver.MySQLError as error:
-        raise AuthStoreError('Unable to revoke refresh tokens for user') from error
+try:
+    from auth_refresh_store import (
+        cleanup_refresh_tokens,
+        get_refresh_token,
+        revoke_refresh_token,
+        revoke_refresh_tokens_for_user,
+        store_refresh_token,
+    )
+except ImportError:
+    from .auth_refresh_store import (
+        cleanup_refresh_tokens,
+        get_refresh_token,
+        revoke_refresh_token,
+        revoke_refresh_tokens_for_user,
+        store_refresh_token,
+    )

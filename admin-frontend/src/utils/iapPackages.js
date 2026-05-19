@@ -35,7 +35,8 @@ export function buildPackFunctionPayload(packType, formState) {
   return {
     credits: behavior.usesCredits ? Number(formState.credits || 0) : 0,
     functionType: behavior.functionType,
-    premiumMode: behavior.usesPremium ? formState.premiumMode || 'lifetime' : 'none',
+    premiumDurationDays: behavior.usesPremium ? Number(formState.premiumDurationDays || 0) : 0,
+    premiumMode: behavior.usesPremium ? 'timed' : 'none',
   }
 }
 
@@ -45,8 +46,10 @@ export function formatPackFunctionSummary(packType, functionRecord) {
   if (behavior.usesCredits && Number(functionRecord?.credits || 0) > 0) {
     summaryParts.push(`${Number(functionRecord.credits)} credits`)
   }
-  if (behavior.usesPremium && functionRecord?.premiumMode && functionRecord.premiumMode !== 'none') {
-    summaryParts.push(functionRecord.premiumMode === 'lifetime' ? 'Premium lifetime' : functionRecord.premiumMode)
+  if (behavior.usesPremium && Number(functionRecord?.premiumDurationDays || 0) > 0) {
+    summaryParts.push(`Premium ${Number(functionRecord.premiumDurationDays)} days`)
+  } else if (behavior.usesPremium && functionRecord?.premiumMode === 'lifetime') {
+    summaryParts.push('Premium lifetime (legacy)')
   }
   return summaryParts.join(' + ') || '-'
 }

@@ -245,6 +245,7 @@ def register_iap_routes(app):
                 payload.get('functionType'),
                 credits=payload.get('credits'),
                 premium_mode=payload.get('premiumMode'),
+                premium_duration_days=payload.get('premiumDurationDays'),
                 is_active=payload.get('isActive', True),
             )
             return jsonify({'packFunction': pack_function}), 201

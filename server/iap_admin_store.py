@@ -10,7 +10,7 @@ except ImportError:
 MAX_IAP_ADMIN_NAME_LENGTH = 120
 MAX_PACK_ID_LENGTH = 80
 PACK_FUNCTION_TYPES = {'addCredits', 'unlockPremium', 'creditsAndPremium'}
-PREMIUM_MODES = {'none', 'lifetime'}
+PREMIUM_MODES = {'none', 'timed', 'lifetime'}
 
 _schema_ready = False
 
@@ -61,6 +61,16 @@ def _normalize_credits(value):
     return normalized_value
 
 
+def _normalize_premium_duration_days(value):
+    try:
+        normalized_value = int(value or 0)
+    except (TypeError, ValueError) as error:
+        raise IapAdminValidationError('Premium duration days must be an integer value.') from error
+    if normalized_value < 0:
+        raise IapAdminValidationError('Premium duration days cannot be negative.')
+    return normalized_value
+
+
 def _normalize_discount(value):
     try:
         normalized_value = Decimal(str(value or '0')).quantize(Decimal('0.01'), rounding=ROUND_HALF_UP)
@@ -90,6 +100,7 @@ def _row_to_pack_function(row):
         'functionType': row.get('function_type') or 'addCredits',
         'credits': int(row.get('credits') or 0),
         'premiumMode': row.get('premium_mode') or 'none',
+        'premiumDurationDays': int(row.get('premium_duration_days') or 0),
         'isActive': bool(row.get('is_active') or 0),
         'createdAt': int(row.get('created_at') or 0),
         'updatedAt': int(row.get('updated_at') or 0),
@@ -131,6 +142,7 @@ def ensure_iap_admin_schema():
                         function_type VARCHAR(32) NOT NULL,
                         credits INT NOT NULL DEFAULT 0,
                         premium_mode VARCHAR(32) NOT NULL DEFAULT 'none',
+                        premium_duration_days INT NOT NULL DEFAULT 0,
                         is_active TINYINT(1) NOT NULL DEFAULT 1,
                         created_at BIGINT NOT NULL,
                         updated_at BIGINT NOT NULL,
@@ -139,6 +151,12 @@ def ensure_iap_admin_schema():
                     ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
                     """
                 )
+                try:
+                    cursor.execute('ALTER TABLE iap_pack_functions ADD COLUMN premium_duration_days INT NOT NULL DEFAULT 0 AFTER premium_mode')
+                except driver.MySQLError as error:
+                    if int((error.args or [0])[0] or 0) != 1060:
+                        raise
+                cursor.execute('ALTER TABLE iap_pack_functions MODIFY COLUMN premium_duration_days INT NOT NULL DEFAULT 0')
                 cursor.execute(
                     """
                     CREATE TABLE IF NOT EXISTS iap_sales (
@@ -181,14 +199,27 @@ def list_iap_pack_functions():
         raise AuthStoreError('Unable to list IAP pack functions') from error
 
 
-def create_iap_pack_function(pack_iap_id, function_type, credits=0, premium_mode='none', is_active=True):
+def create_iap_pack_function(pack_iap_id, function_type, credits=0, premium_mode='none', premium_duration_days=0, is_active=True):
     ensure_iap_admin_schema()
     normalized_function_type = str(function_type or '').strip()
-    normalized_premium_mode = str(premium_mode or 'none').strip()
     if normalized_function_type not in PACK_FUNCTION_TYPES:
         raise IapAdminValidationError('Pack function must be addCredits, unlockPremium, or creditsAndPremium.')
+    uses_premium = normalized_function_type in {'unlockPremium', 'creditsAndPremium'}
+    normalized_premium_duration_days = _normalize_premium_duration_days(premium_duration_days)
+    normalized_premium_mode = str(premium_mode or ('timed' if uses_premium else 'none')).strip()
     if normalized_premium_mode not in PREMIUM_MODES:
-        raise IapAdminValidationError('Premium mode must be none or lifetime.')
+        raise IapAdminValidationError('Premium mode must be none, timed, or lifetime.')
+    if not uses_premium:
+        normalized_premium_mode = 'none'
+        normalized_premium_duration_days = 0
+    elif normalized_premium_mode == 'none' and normalized_premium_duration_days > 0:
+        normalized_premium_mode = 'timed'
+    if uses_premium and normalized_premium_mode == 'none':
+        raise IapAdminValidationError('Premium pack functions require a premium duration in days.')
+    if normalized_premium_mode == 'timed' and normalized_premium_duration_days <= 0:
+        raise IapAdminValidationError('Premium duration days must be greater than 0.')
+    if normalized_premium_mode == 'lifetime':
+        normalized_premium_duration_days = 0
     driver = _require_driver()
     now = _now()
     try:
@@ -198,10 +229,19 @@ def create_iap_pack_function(pack_iap_id, function_type, credits=0, premium_mode
                 cursor.execute(
                     """
                     INSERT INTO iap_pack_functions
-                        (pack_iap_id, function_type, credits, premium_mode, is_active, created_at, updated_at)
-                    VALUES (%s, %s, %s, %s, %s, %s, %s)
+                        (pack_iap_id, function_type, credits, premium_mode, premium_duration_days, is_active, created_at, updated_at)
+                    VALUES (%s, %s, %s, %s, %s, %s, %s, %s)
                     """,
-                    (_normalize_pack_id(pack_iap_id, 'packIapId'), normalized_function_type, _normalize_credits(credits), normalized_premium_mode, 1 if _normalize_bool(is_active) else 0, now, now),
+                    (
+                        _normalize_pack_id(pack_iap_id, 'packIapId'),
+                        normalized_function_type,
+                        _normalize_credits(credits),
+                        normalized_premium_mode,
+                        normalized_premium_duration_days,
+                        1 if _normalize_bool(is_active) else 0,
+                        now,
+                        now,
+                    ),
                 )
                 record_id = cursor.lastrowid
         finally:

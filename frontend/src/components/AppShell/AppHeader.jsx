@@ -1,5 +1,6 @@
 import DeveloperLocator from '../DeveloperLocator/DeveloperLocator';
 import AuthHeaderActions from '../Auth/AuthHeaderActions';
+import { isPremiumActiveForUser } from '../../utils/authClient';
 
 function CrownIcon() {
   return (
@@ -20,7 +21,7 @@ export default function AppHeader({
   showClientBadge = false,
   title = 'VideoForge',
 }) {
-  const isPremium = Boolean(auth.user?.isPremium);
+  const isPremium = isPremiumActiveForUser(auth.user);
   const canPromptPremiumLogin = !auth.isAuthenticated && typeof onOpenAuthDialog === 'function';
   const premiumTitle = isPremium
     ? 'Premium active: preview and export do not show the G Studio watermark.'

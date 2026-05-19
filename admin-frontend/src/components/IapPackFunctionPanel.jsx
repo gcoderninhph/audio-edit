@@ -18,7 +18,7 @@ import DeveloperMarker from './DeveloperMarker'
 const DEFAULT_FORM_STATE = {
   credits: '1000',
   packIapId: '',
-  premiumMode: 'lifetime',
+  premiumDurationDays: '30',
 }
 
 export default function IapPackFunctionPanel({ onHeaderActionsChange }) {
@@ -90,7 +90,9 @@ export default function IapPackFunctionPanel({ onHeaderActionsChange }) {
       ...current,
       credits: nextBehavior.usesCredits ? current.credits : '0',
       packIapId,
-      premiumMode: nextBehavior.usesPremium ? current.premiumMode : 'none',
+      premiumDurationDays: nextBehavior.usesPremium
+        ? (current.premiumDurationDays && current.premiumDurationDays !== '0' ? current.premiumDurationDays : DEFAULT_FORM_STATE.premiumDurationDays)
+        : '0',
     }))
   }
 
@@ -188,11 +190,8 @@ export default function IapPackFunctionPanel({ onHeaderActionsChange }) {
               )}
               {selectedBehavior.usesPremium && (
                 <label className="field">
-                  <span>Premium grant</span>
-                  <select value={formState.premiumMode} onChange={(event) => setFormState((current) => ({ ...current, premiumMode: event.target.value }))}>
-                    <option value="lifetime">Lifetime</option>
-                    <option value="none">None</option>
-                  </select>
+                  <span>Premium duration (days)</span>
+                  <input type="number" min="1" step="1" value={formState.premiumDurationDays} onChange={(event) => setFormState((current) => ({ ...current, premiumDurationDays: event.target.value }))} />
                 </label>
               )}
             </div>

@@ -4,6 +4,7 @@ import Timeline from '../Timeline/Timeline';
 import SceneList from '../SceneList/SceneList';
 import SubtitlePanel from '../SubtitlePanel/SubtitlePanel';
 import ExportPanel from '../ExportPanel/ExportPanel';
+import { isPremiumActiveForUser } from '../../utils/authClient';
 
 export default function AppEditorWorkspace({
   activePlayerSidebarSection,
@@ -23,7 +24,7 @@ export default function AppEditorWorkspace({
   selectedSceneConfig,
   selectedSceneConfigIndex,
 }) {
-  const hideWatermark = Boolean(auth.user?.isPremium)
+  const hideWatermark = isPremiumActiveForUser(auth.user)
 
   return (
     <main className="app-main">

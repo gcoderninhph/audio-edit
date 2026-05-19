@@ -4,15 +4,36 @@ const AUTH_STORAGE_KEY = 'audio-edit.auth-session.v1';
 const TOKEN_REFRESH_WINDOW_MS = 60_000;
 export const AUTH_SESSION_CHANGED_EVENT = 'audio-edit:auth-session-changed';
 
+function normalizePremiumTimestamp(value) {
+  const timestamp = Number(value) || 0;
+  if (timestamp <= 0) return 0;
+  return timestamp > 100000000000 ? Math.floor(timestamp / 1000) : Math.floor(timestamp);
+}
+
+export function isPremiumActiveForUser(user = {}) {
+  const safeUser = user && typeof user === 'object' ? user : {};
+  const premiumStartAt = normalizePremiumTimestamp(safeUser.premiumStartAt);
+  const premiumEndAt = normalizePremiumTimestamp(safeUser.premiumEndAt);
+  if (premiumStartAt && premiumEndAt) {
+    const nowSeconds = Math.floor(Date.now() / 1000);
+    return premiumStartAt <= nowSeconds && nowSeconds < premiumEndAt;
+  }
+  return Boolean(safeUser.isPremium);
+}
+
 function normalizeAuthUser(user = {}) {
   const email = String(user.email || '');
+  const premiumStartAt = normalizePremiumTimestamp(user.premiumStartAt);
+  const premiumEndAt = normalizePremiumTimestamp(user.premiumEndAt);
   return {
     id: String(user.id || ''),
     credits: Math.max(0, Number(user.credits) || 0),
     email,
-    isPremium: Boolean(user.isPremium),
+    isPremium: isPremiumActiveForUser({ ...user, premiumEndAt, premiumStartAt }),
     isTemporaryAdmin: Boolean(user.isTemporaryAdmin),
     mustSetupAdmin: Boolean(user.mustSetupAdmin),
+    premiumEndAt,
+    premiumStartAt,
     role: String(user.role || 'user'),
     displayName: String(user.displayName || email.split('@')[0] || 'Editor'),
     username: String(user.username || ''),

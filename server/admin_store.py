@@ -6,14 +6,19 @@ try:
         AuthStoreError,
         MYSQL_DATABASE,
         _connect,
-        _normalize_is_locked,
-        _normalize_is_premium,
-        _normalize_role,
         _require_driver,
-        _row_to_user_record,
         ensure_auth_schema,
         find_user_by_id,
         revoke_refresh_tokens_for_user,
+    )
+    from auth_user_record import (
+        PremiumWindowValidationError,
+        _normalize_is_locked,
+        _normalize_is_premium,
+        _normalize_role,
+        _row_to_user_record,
+        is_premium_active,
+        normalize_premium_window,
     )
 except ImportError:
     from .auth_credit_store import set_user_credit_balance
@@ -23,14 +28,19 @@ except ImportError:
         AuthStoreError,
         MYSQL_DATABASE,
         _connect,
-        _normalize_is_locked,
-        _normalize_is_premium,
-        _normalize_role,
         _require_driver,
-        _row_to_user_record,
         ensure_auth_schema,
         find_user_by_id,
         revoke_refresh_tokens_for_user,
+    )
+    from .auth_user_record import (
+        PremiumWindowValidationError,
+        _normalize_is_locked,
+        _normalize_is_premium,
+        _normalize_role,
+        _row_to_user_record,
+        is_premium_active,
+        normalize_premium_window,
     )
 
 
@@ -166,21 +176,46 @@ def get_auth_user_summary():
 
 
 
-def update_auth_user_admin_fields(user_id, role=None, credits=None, is_premium=None, is_locked=None, actor_user_id=None):
+def update_auth_user_admin_fields(
+    user_id,
+    role=None,
+    credits=None,
+    is_premium=None,
+    premium_start_at=None,
+    premium_end_at=None,
+    is_locked=None,
+    actor_user_id=None,
+):
     ensure_auth_schema()
     driver = _require_driver()
     next_role = _normalize_role(role) if role is not None else None
     next_credits = max(0, int(credits or 0)) if credits is not None else None
     next_is_premium = _normalize_is_premium(is_premium) if is_premium is not None else None
     next_is_locked = _normalize_is_locked(is_locked) if is_locked is not None else None
+    has_premium_start_at = premium_start_at is not None
+    has_premium_end_at = premium_end_at is not None
 
-    if next_role is None and next_credits is None and next_is_premium is None and next_is_locked is None:
+    if next_role is None and next_credits is None and next_is_premium is None and next_is_locked is None and not has_premium_start_at and not has_premium_end_at:
         raise AuthStoreError('No admin fields were provided to update')
 
     try:
         current_user = get_auth_user(user_id)
         final_role = next_role if next_role is not None else current_user.get('role')
         final_is_locked = next_is_locked if next_is_locked is not None else bool(current_user.get('isLocked'))
+        current_premium_start_at = int(current_user.get('premiumStartAt') or 0)
+        current_premium_end_at = int(current_user.get('premiumEndAt') or 0)
+
+        if has_premium_start_at != has_premium_end_at:
+            raise PremiumWindowValidationError('Premium start and end time must both be provided.')
+
+        if has_premium_start_at and has_premium_end_at:
+            next_premium_start_at, next_premium_end_at = normalize_premium_window(premium_start_at, premium_end_at, allow_empty=True)
+        elif next_is_premium is False:
+            next_premium_start_at, next_premium_end_at = 0, 0
+        elif next_is_premium is True:
+            raise PremiumWindowValidationError('Premium now requires both a start and end time.')
+        else:
+            next_premium_start_at, next_premium_end_at = current_premium_start_at, current_premium_end_at
 
         if final_role == ADMIN_USER_ROLE and final_is_locked:
             raise AdminAccountLockError('Admin accounts cannot be locked')
@@ -216,13 +251,18 @@ def update_auth_user_admin_fields(user_id, role=None, credits=None, is_premium=N
                 details={'source': 'admin-users'},
             )
 
-        if next_is_premium is not None and next_is_premium != bool(current_user.get('isPremium')):
+        if next_premium_start_at != current_premium_start_at or next_premium_end_at != current_premium_end_at:
             connection = _connect(MYSQL_DATABASE)
             try:
                 with connection.cursor() as cursor:
                     cursor.execute(
-                        'UPDATE auth_users SET is_premium = %s, updated_at = UNIX_TIMESTAMP() WHERE id = %s',
-                        (1 if next_is_premium else 0, user_id),
+                        'UPDATE auth_users SET is_premium = %s, premium_start_at = %s, premium_end_at = %s, updated_at = UNIX_TIMESTAMP() WHERE id = %s',
+                        (
+                            1 if is_premium_active(next_premium_start_at, next_premium_end_at) else 0,
+                            next_premium_start_at,
+                            next_premium_end_at,
+                            user_id,
+                        ),
                     )
             finally:
                 connection.close()

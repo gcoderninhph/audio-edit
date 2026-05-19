@@ -88,6 +88,8 @@ def get_local_user():
         'email': AUTH_USERNAME.lower(),
         'isLocked': False,
         'isPremium': False,
+        'premiumStartAt': 0,
+        'premiumEndAt': 0,
         'role': DEFAULT_USER_ROLE,
         'username': normalize_username(AUTH_USERNAME.split('@', 1)[0]),
         'displayName': AUTH_DISPLAY_NAME,
