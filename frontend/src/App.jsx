@@ -5,6 +5,7 @@ import { useAuthSession } from './hooks/useAuthSession';
 import AuthDialog from './components/Auth/AuthDialog';
 import AppHeader from './components/AppShell/AppHeader';
 import AppEditorWorkspace from './components/AppShell/AppEditorWorkspace';
+import PremiumPackagesDialog from './components/AppShell/PremiumPackagesDialog';
 import AdminBootstrapSetup from './components/Admin/AdminBootstrapSetup';
 import AdminConsole from './components/Admin/AdminConsole';
 import ProjectDashboard from './components/ProjectDashboard/ProjectDashboard';
@@ -18,6 +19,8 @@ function App() {
   const [isAdminConsoleOpen, setIsAdminConsoleOpen] = useState(false);
   const [isProjectBrowserOpen, setIsProjectBrowserOpen] = useState(false);
   const [isAuthDialogOpen, setIsAuthDialogOpen] = useState(false);
+  const [premiumDialogSourceCode, setPremiumDialogSourceCode] = useState('header.dashboard');
+  const [isPremiumDialogOpen, setIsPremiumDialogOpen] = useState(false);
   const { redo, setCurrentTime, undo, videoRef } = editor;
   const hasVideo = !!editor.videoUrl;
   const hasActiveBackgroundTask = Boolean(
@@ -143,8 +146,17 @@ function App() {
     setIsAuthDialogOpen(true);
   }, [auth]);
 
+  const handleOpenPremiumDialog = useCallback((sourceCode = 'header.dashboard') => {
+    setPremiumDialogSourceCode(sourceCode);
+    setIsPremiumDialogOpen(true);
+  }, []);
+
   const handleCloseAuthDialog = useCallback(() => {
     setIsAuthDialogOpen(false);
+  }, []);
+
+  const handleClosePremiumDialog = useCallback(() => {
+    setIsPremiumDialogOpen(false);
   }, []);
 
   const handleOpenAdminConsole = useCallback(() => {
@@ -163,6 +175,14 @@ function App() {
       onClose={handleCloseAuthDialog}
     />
   );
+  const premiumDialog = (
+    <PremiumPackagesDialog
+      auth={auth}
+      locatorCode={premiumDialogSourceCode}
+      onClose={handleClosePremiumDialog}
+      open={isPremiumDialogOpen}
+    />
+  );
   const isAdminConsoleVisible = isAdminConsoleOpen && auth.isAdmin && !auth.requiresAdminSetup;
 
   if (auth.requiresAdminSetup) {
@@ -173,10 +193,12 @@ function App() {
           locatorCode="header.admin-bootstrap"
           locatorTitle="Admin Bootstrap Header"
           onOpenAuthDialog={handleOpenAuthDialog}
+          onOpenPremiumDialog={handleOpenPremiumDialog}
           title="VideoForge Admin"
         />
         <AdminBootstrapSetup auth={auth} />
         {authDialog}
+        {premiumDialog}
       </div>
     );
   }
@@ -190,6 +212,7 @@ function App() {
           locatorTitle="Admin Console Header"
           onOpenAdminConsole={handleOpenAdminConsole}
           onOpenAuthDialog={handleOpenAuthDialog}
+          onOpenPremiumDialog={handleOpenPremiumDialog}
           title="VideoForge Admin"
         >
           <button className="btn btn-ghost btn-sm" type="button" onClick={handleCloseAdminConsole}>
@@ -200,6 +223,7 @@ function App() {
           <AdminConsole />
         </main>
         {authDialog}
+        {premiumDialog}
       </div>
     );
   }
@@ -214,6 +238,7 @@ function App() {
           locatorTitle="Dashboard Header"
           onOpenAdminConsole={handleOpenAdminConsole}
           onOpenAuthDialog={handleOpenAuthDialog}
+          onOpenPremiumDialog={handleOpenPremiumDialog}
           showPremiumButton
           showClientBadge
         />
@@ -226,6 +251,7 @@ function App() {
           </div>
         </main>
         {authDialog}
+        {premiumDialog}
       </div>
     );
   }
@@ -240,6 +266,7 @@ function App() {
           locatorTitle="Dashboard Header"
           onOpenAdminConsole={handleOpenAdminConsole}
           onOpenAuthDialog={handleOpenAuthDialog}
+          onOpenPremiumDialog={handleOpenPremiumDialog}
           showPremiumButton
           showClientBadge
         />
@@ -250,6 +277,7 @@ function App() {
           />
         </main>
         {authDialog}
+        {premiumDialog}
       </div>
     );
   }
@@ -263,6 +291,7 @@ function App() {
         locatorTitle="Editor Header"
         onOpenAdminConsole={handleOpenAdminConsole}
         onOpenAuthDialog={handleOpenAuthDialog}
+        onOpenPremiumDialog={handleOpenPremiumDialog}
         showPremiumButton
       >
           {editor.isUploading && (
@@ -329,6 +358,7 @@ function App() {
         selectedSceneConfigIndex={selectedSceneConfigIndex}
       />
       {authDialog}
+      {premiumDialog}
     </div>
   );
 }

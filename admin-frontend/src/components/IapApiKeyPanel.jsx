@@ -5,9 +5,15 @@ import { formatDateTime } from '../utils/format'
 import DeveloperMarker from './DeveloperMarker'
 
 const DEFAULT_FORM_STATE = {
+  headerFormat: '<API_KEY>',
   headerName: 'X-Api-Key',
   method: 'POST',
   name: '',
+}
+
+function buildKeyFormatPreview(headerFormat, apiKey) {
+  const normalizedFormat = String(headerFormat || '<API_KEY>').trim() || '<API_KEY>'
+  return normalizedFormat.replace('<API_KEY>', String(apiKey || '<API_KEY>').trim() || '<API_KEY>')
 }
 
 export default function IapApiKeyPanel({ onHeaderActionsChange, onNavigate }) {
@@ -65,6 +71,7 @@ export default function IapApiKeyPanel({ onHeaderActionsChange, onNavigate }) {
     setError('')
     try {
       await createAdminIapApiKey({
+        headerFormat: formState.headerFormat,
         headerName: formState.headerName,
         isActive: true,
         method: formState.method,
@@ -115,9 +122,15 @@ export default function IapApiKeyPanel({ onHeaderActionsChange, onNavigate }) {
               <tr key={keyRecord.id}>
                 <td><strong>{keyRecord.name}</strong><small>{keyRecord.id}</small></td>
                 <td>{keyRecord.method}</td>
-                <td>{keyRecord.headerName}</td>
+                <td>
+                  <strong>{keyRecord.headerName}</strong>
+                  <small>Format: {keyRecord.headerFormat || '<API_KEY>'}</small>
+                </td>
                 <td>/api/pay/info</td>
-                <td><code className="inline-code">{keyRecord.apiKey}</code></td>
+                <td>
+                  <code className="inline-code">{keyRecord.apiKey}</code>
+                  <small>Example: {buildKeyFormatPreview(keyRecord.headerFormat, keyRecord.apiKey)}</small>
+                </td>
                 <td>{keyRecord.lastUsedAt ? formatDateTime(keyRecord.lastUsedAt) : '-'}</td>
                 <td><span className={keyRecord.isActive ? 'status-pill status-success' : 'plan-pill'}>{keyRecord.isActive ? 'Active' : 'Inactive'}</span></td>
                 <td><button type="button" className="ghost-button compact danger-text" onClick={() => void removeKey(keyRecord)}><Trash2 size={16} /> Delete</button></td>
@@ -154,6 +167,16 @@ export default function IapApiKeyPanel({ onHeaderActionsChange, onNavigate }) {
               <label className="field">
                 <span>Header name</span>
                 <input value={formState.headerName} onChange={(event) => setFormState((current) => ({ ...current, headerName: event.target.value }))} placeholder="X-Api-Key" required />
+              </label>
+              <label className="field field-wide">
+                <span>Value format</span>
+                <input
+                  value={formState.headerFormat}
+                  onChange={(event) => setFormState((current) => ({ ...current, headerFormat: event.target.value }))}
+                  placeholder="<API_KEY>"
+                  required
+                />
+                <small className="field-hint">Use {'<API_KEY>'} as the placeholder. Example: {'apikey <API_KEY>'} or {'Bearer <API_KEY>'}.</small>
               </label>
               <label className="field">
                 <span>Hook endpoint</span>

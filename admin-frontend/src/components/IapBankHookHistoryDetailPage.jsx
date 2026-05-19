@@ -21,6 +21,10 @@ function getJsonPayload(payload) {
   }
 }
 
+function getBankTransactionTime(record) {
+  return record?.transactionDate || (record?.transactionAt ? formatDateTime(record.transactionAt) : '-')
+}
+
 export default function IapBankHookHistoryDetailPage({ historyId, onHeaderActionsChange, onNavigate }) {
   const [error, setError] = useState('')
   const [isLoading, setIsLoading] = useState(true)
@@ -75,7 +79,7 @@ export default function IapBankHookHistoryDetailPage({ historyId, onHeaderAction
         {record && (
           <div className="iap-history-detail-grid">
             <DetailItem label="Received at" value={formatDateTime(record.receivedAt)} />
-            <DetailItem label="Bank transaction time" value={record.transactionAt ? formatDateTime(record.transactionAt) : (record.transactionDate || '-')} />
+            <DetailItem label="Bank transaction time" value={getBankTransactionTime(record)} />
             <DetailItem label="API key" value={record.apiKeyName ? `${record.apiKeyName} (#${record.apiKeyId})` : '-'} />
             <DetailItem label="Gateway" value={record.gateway} />
             <DetailItem label="Transfer amount" value={formatNumber(record.transferAmount)} />

@@ -9,7 +9,10 @@ except ImportError:
 
 
 DEFAULT_PAYMENT_HEADER_NAME = 'X-Api-Key'
+DEFAULT_PAYMENT_HEADER_FORMAT = '<API_KEY>'
 DEFAULT_PAYMENT_METHOD = 'POST'
+API_KEY_FORMAT_PLACEHOLDER = '<API_KEY>'
+MAX_HEADER_FORMAT_LENGTH = 200
 MAX_API_KEY_NAME_LENGTH = 120
 PAYMENT_HOOK_METHODS = ('GET', 'POST', 'PUT', 'PATCH', 'DELETE')
 HEADER_NAME_PATTERN = re.compile(r'^[A-Za-z0-9-]{2,80}$')
@@ -59,12 +62,28 @@ def _normalize_header_name(value):
     return normalized_value
 
 
+def _normalize_header_format(value):
+    normalized_value = ' '.join(str(value or DEFAULT_PAYMENT_HEADER_FORMAT).strip().split())
+    if not normalized_value:
+        normalized_value = DEFAULT_PAYMENT_HEADER_FORMAT
+    if len(normalized_value) > MAX_HEADER_FORMAT_LENGTH:
+        raise IapApiKeyValidationError(f'Header format cannot exceed {MAX_HEADER_FORMAT_LENGTH} characters.')
+    if normalized_value.count(API_KEY_FORMAT_PLACEHOLDER) != 1:
+        raise IapApiKeyValidationError('Header format must contain exactly one <API_KEY> placeholder.')
+    return normalized_value
+
+
+def _build_header_value(api_key, header_format):
+    return _normalize_header_format(header_format).replace(API_KEY_FORMAT_PLACEHOLDER, str(api_key or '').strip())
+
+
 def _row_to_api_key(row):
     return {
         'id': int(row.get('id') or 0),
         'name': row.get('name') or '',
         'apiKey': row.get('api_key') or '',
         'method': row.get('hook_method') or DEFAULT_PAYMENT_METHOD,
+        'headerFormat': row.get('header_format') or DEFAULT_PAYMENT_HEADER_FORMAT,
         'headerName': row.get('header_name') or DEFAULT_PAYMENT_HEADER_NAME,
         'isActive': bool(row.get('is_active') or 0),
         'lastUsedAt': int(row.get('last_used_at') or 0),
@@ -92,6 +111,7 @@ def ensure_iap_api_key_schema():
                         api_key VARCHAR(160) NOT NULL UNIQUE,
                         hook_method VARCHAR(8) NOT NULL DEFAULT 'POST',
                         header_name VARCHAR(80) NOT NULL DEFAULT 'X-Api-Key',
+                        header_format VARCHAR(200) NOT NULL DEFAULT '<API_KEY>',
                         is_active TINYINT(1) NOT NULL DEFAULT 1,
                         last_used_at BIGINT NOT NULL DEFAULT 0,
                         created_at BIGINT NOT NULL,
@@ -102,8 +122,10 @@ def ensure_iap_api_key_schema():
                 )
                 _ensure_column(cursor, 'iap_api_keys', 'hook_method', "VARCHAR(8) NOT NULL DEFAULT 'POST' AFTER api_key")
                 _ensure_column(cursor, 'iap_api_keys', 'header_name', "VARCHAR(80) NOT NULL DEFAULT 'X-Api-Key' AFTER hook_method")
+                _ensure_column(cursor, 'iap_api_keys', 'header_format', "VARCHAR(200) NOT NULL DEFAULT '<API_KEY>' AFTER header_name")
                 cursor.execute("ALTER TABLE iap_api_keys MODIFY COLUMN hook_method VARCHAR(8) NOT NULL DEFAULT 'POST'")
                 cursor.execute("ALTER TABLE iap_api_keys MODIFY COLUMN header_name VARCHAR(80) NOT NULL DEFAULT 'X-Api-Key'")
+                cursor.execute("ALTER TABLE iap_api_keys MODIFY COLUMN header_format VARCHAR(200) NOT NULL DEFAULT '<API_KEY>'")
         finally:
             connection.close()
     except driver.MySQLError as error:
@@ -147,7 +169,13 @@ def get_iap_api_key(key_id):
         raise AuthStoreError('Unable to load IAP API key') from error
 
 
-def create_iap_api_key(name, hook_method=DEFAULT_PAYMENT_METHOD, header_name=DEFAULT_PAYMENT_HEADER_NAME, is_active=True):
+def create_iap_api_key(
+    name,
+    hook_method=DEFAULT_PAYMENT_METHOD,
+    header_name=DEFAULT_PAYMENT_HEADER_NAME,
+    header_format=DEFAULT_PAYMENT_HEADER_FORMAT,
+    is_active=True,
+):
     ensure_iap_api_key_schema()
     driver = _require_driver()
     now = _now()
@@ -158,14 +186,15 @@ def create_iap_api_key(name, hook_method=DEFAULT_PAYMENT_METHOD, header_name=DEF
             with connection.cursor() as cursor:
                 cursor.execute(
                     """
-                    INSERT INTO iap_api_keys (name, api_key, hook_method, header_name, is_active, created_at, updated_at)
-                    VALUES (%s, %s, %s, %s, %s, %s, %s)
+                    INSERT INTO iap_api_keys (name, api_key, hook_method, header_name, header_format, is_active, created_at, updated_at)
+                    VALUES (%s, %s, %s, %s, %s, %s, %s, %s)
                     """,
                     (
                         _normalize_name(name),
                         api_key,
                         _normalize_hook_method(hook_method),
                         _normalize_header_name(header_name),
+                        _normalize_header_format(header_format),
                         1 if _normalize_is_active(is_active) else 0,
                         now,
                         now,
@@ -194,13 +223,22 @@ def delete_iap_api_key(key_id):
     return current_key
 
 
-def _extract_key_from_headers(headers, header_name):
+def _matches_key_in_headers(headers, header_name, api_key, header_format):
     if not headers:
-        return ''
+        return False
     header_value = str(headers.get(header_name) or '').strip()
-    if header_name.lower() == 'authorization' and header_value.lower().startswith('bearer '):
-        return header_value.split(' ', 1)[1].strip()
-    return header_value
+    if not header_value:
+        return False
+
+    expected_value = _build_header_value(api_key, header_format)
+    if header_value == expected_value:
+        return True
+
+    if _normalize_header_format(header_format) == DEFAULT_PAYMENT_HEADER_FORMAT and str(header_name or '').strip().lower() == 'authorization':
+        if header_value.lower().startswith('bearer '):
+            return header_value.split(' ', 1)[1].strip() == str(api_key or '').strip()
+
+    return False
 
 
 def validate_iap_hook_request(request_method, headers):
@@ -218,7 +256,8 @@ def validate_iap_hook_request(request_method, headers):
                 rows = cursor.fetchall() or []
                 for row in rows:
                     header_name = row.get('header_name') or DEFAULT_PAYMENT_HEADER_NAME
-                    if _extract_key_from_headers(headers, header_name) != (row.get('api_key') or ''):
+                    header_format = row.get('header_format') or DEFAULT_PAYMENT_HEADER_FORMAT
+                    if not _matches_key_in_headers(headers, header_name, row.get('api_key') or '', header_format):
                         continue
                     cursor.execute('UPDATE iap_api_keys SET last_used_at = %s WHERE id = %s', (_now(), row['id']))
                     return _row_to_api_key(row)

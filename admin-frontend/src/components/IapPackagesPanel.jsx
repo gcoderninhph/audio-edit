@@ -10,14 +10,32 @@ import { formatCurrency, formatDateTime } from '../utils/format'
 import { DEFAULT_IAP_PACK_TYPE, getIapPackTypeLabel, IAP_PACK_TYPE_OPTIONS, normalizeIapPackType } from '../utils/iapPackages'
 import DeveloperMarker from './DeveloperMarker'
 
+const MAX_PACKAGE_DETAIL_LENGTH = 30
+
 const DEFAULT_FORM_STATE = {
   currency: 'VND',
   description: '',
   id: '',
   isActive: true,
+  isRecommended: false,
   name: '',
   packType: DEFAULT_IAP_PACK_TYPE,
   price: '',
+}
+
+function buildPackageDetail(packageRecord) {
+  return [packageRecord?.id, packageRecord?.description].filter(Boolean).join(' · ')
+}
+
+function truncateText(value, maxLength) {
+  const normalizedValue = String(value || '').trim()
+  if (!normalizedValue || normalizedValue.length <= maxLength) {
+    return normalizedValue
+  }
+  if (maxLength <= 3) {
+    return normalizedValue.slice(0, maxLength)
+  }
+  return `${normalizedValue.slice(0, maxLength - 3)}...`
 }
 
 function buildPayload(formState) {
@@ -26,6 +44,7 @@ function buildPayload(formState) {
     description: String(formState.description || '').trim(),
     id: String(formState.id || '').trim(),
     isActive: Boolean(formState.isActive),
+    isRecommended: Boolean(formState.isRecommended),
     name: String(formState.name || '').trim(),
     packType: normalizeIapPackType(formState.packType),
     price: Number(formState.price || 0),
@@ -39,6 +58,7 @@ function buildFormState(packageRecord) {
     description: packageRecord.description || '',
     id: packageRecord.id || '',
     isActive: Boolean(packageRecord.isActive),
+    isRecommended: Boolean(packageRecord.isRecommended),
     name: packageRecord.name || '',
     packType: normalizeIapPackType(packageRecord.packType),
     price: String(packageRecord.price ?? ''),
@@ -118,6 +138,7 @@ export default function IapPackagesPanel({ onHeaderActionsChange }) {
           currency: payload.currency,
           description: payload.description,
           isActive: payload.isActive,
+          isRecommended: payload.isRecommended,
           name: payload.name,
           packType: payload.packType,
           price: payload.price,
@@ -167,6 +188,7 @@ export default function IapPackagesPanel({ onHeaderActionsChange }) {
               <th>Pack</th>
               <th>Pack type</th>
               <th>Price</th>
+              <th>Recommend</th>
               <th>Status</th>
               <th>Updated</th>
               <th>Actions</th>
@@ -180,7 +202,7 @@ export default function IapPackagesPanel({ onHeaderActionsChange }) {
                     <Package size={18} />
                     <span>
                       <strong>{packageRecord.name}</strong>
-                      <small>{packageRecord.id}{packageRecord.description ? ` · ${packageRecord.description}` : ''}</small>
+                      <small title={buildPackageDetail(packageRecord)}>{truncateText(buildPackageDetail(packageRecord), MAX_PACKAGE_DETAIL_LENGTH)}</small>
                     </span>
                   </div>
                 </td>
@@ -190,18 +212,35 @@ export default function IapPackagesPanel({ onHeaderActionsChange }) {
                   <small>{packageRecord.currency}</small>
                 </td>
                 <td>
+                  <span className={packageRecord.isRecommended ? 'status-pill status-success' : 'plan-pill'}>
+                    {packageRecord.isRecommended ? 'Recommended' : '-'}
+                  </span>
+                </td>
+                <td>
                   <span className={packageRecord.isActive ? 'status-pill status-success' : 'plan-pill'}>
                     {packageRecord.isActive ? 'Active' : 'Hidden'}
                   </span>
                 </td>
                 <td>{formatDateTime(packageRecord.updatedAt)}</td>
                 <td>
-                  <div className="table-actions">
-                    <button type="button" className="ghost-button compact" onClick={() => openEditDialog(packageRecord)}>
-                      <Pencil size={16} /> Edit
+                  <div className="iap-action-group" role="group" aria-label={`Package actions for ${packageRecord.name}`}>
+                    <button
+                      type="button"
+                      className="iap-action-button"
+                      onClick={() => openEditDialog(packageRecord)}
+                      aria-label={`Edit package ${packageRecord.name}`}
+                      title="Edit package"
+                    >
+                      <Pencil size={15} />
                     </button>
-                    <button type="button" className="ghost-button compact danger-text" onClick={() => void handleDelete(packageRecord)}>
-                      <Trash2 size={16} /> Delete
+                    <button
+                      type="button"
+                      className="iap-action-button iap-action-button-danger"
+                      onClick={() => void handleDelete(packageRecord)}
+                      aria-label={`Delete package ${packageRecord.name}`}
+                      title="Delete package"
+                    >
+                      <Trash2 size={15} />
                     </button>
                   </div>
                 </td>
@@ -209,7 +248,7 @@ export default function IapPackagesPanel({ onHeaderActionsChange }) {
             ))}
             {!packages.length && (
               <tr>
-                <td colSpan="6" className="empty-cell">{isLoading ? 'Loading IAP packages...' : 'No IAP packages created yet.'}</td>
+                <td colSpan="7" className="empty-cell">{isLoading ? 'Loading IAP packages...' : 'No IAP packages created yet.'}</td>
               </tr>
             )}
           </tbody>
@@ -288,6 +327,15 @@ export default function IapPackagesPanel({ onHeaderActionsChange }) {
                   disabled={isSaving}
                 />
                 <span>Expose this package in the public client API</span>
+              </label>
+              <label className="checkbox-field">
+                <input
+                  type="checkbox"
+                  checked={formState.isRecommended}
+                  onChange={(event) => setFormState((current) => ({ ...current, isRecommended: event.target.checked }))}
+                  disabled={isSaving}
+                />
+                <span>Mark this package as recommended in the desktop client</span>
               </label>
               <label className="field package-description-field">
                 <span>Description</span>

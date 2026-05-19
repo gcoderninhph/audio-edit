@@ -86,6 +86,7 @@ def _serialize_iap_package(package_record):
         'credits': int(package_record.get('credits') or 0),
         'description': package_record.get('description') or '',
         'isActive': bool(package_record.get('isActive')),
+        'isRecommended': bool(package_record.get('isRecommended')),
         'createdAt': int(package_record.get('createdAt') or 0),
         'updatedAt': int(package_record.get('updatedAt') or 0),
     }
@@ -166,6 +167,7 @@ def register_iap_routes(app):
                 credits=payload.get('credits'),
                 description=payload.get('description'),
                 is_active=payload.get('isActive', True),
+                is_recommended=payload.get('isRecommended', False),
                 pack_type=payload.get('packType'),
             )
             invalidate_public_iap_packages_cache()
@@ -194,7 +196,7 @@ def register_iap_routes(app):
                 return _iap_store_error_response()
 
         payload = request.get_json(silent=True) or {}
-        if not any(field in payload for field in ('name', 'price', 'currency', 'credits', 'description', 'isActive', 'packType')):
+        if not any(field in payload for field in ('name', 'price', 'currency', 'credits', 'description', 'isActive', 'isRecommended', 'packType')):
             return jsonify({'error': 'No IAP package changes were provided'}), 400
 
         try:
@@ -206,6 +208,7 @@ def register_iap_routes(app):
                 credits=payload.get('credits') if 'credits' in payload else None,
                 description=payload.get('description') if 'description' in payload else None,
                 is_active=payload.get('isActive') if 'isActive' in payload else None,
+                is_recommended=payload.get('isRecommended') if 'isRecommended' in payload else None,
                 pack_type=payload.get('packType') if 'packType' in payload else None,
             )
             invalidate_public_iap_packages_cache()
@@ -234,6 +237,7 @@ def register_iap_routes(app):
             api_key = create_iap_api_key(
                 payload.get('name'),
                 hook_method=payload.get('method'),
+                header_format=payload.get('headerFormat'),
                 header_name=payload.get('headerName'),
                 is_active=payload.get('isActive', True),
             )

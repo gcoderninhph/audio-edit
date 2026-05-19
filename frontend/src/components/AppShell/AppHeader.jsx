@@ -17,17 +17,21 @@ export default function AppHeader({
   locatorTitle,
   onOpenAdminConsole,
   onOpenAuthDialog,
+  onOpenPremiumDialog,
   showPremiumButton = false,
   showClientBadge = false,
   title = 'VideoForge',
 }) {
   const isPremium = isPremiumActiveForUser(auth.user);
+  const canOpenPremiumDialog = typeof onOpenPremiumDialog === 'function';
   const canPromptPremiumLogin = !auth.isAuthenticated && typeof onOpenAuthDialog === 'function';
   const premiumTitle = isPremium
-    ? 'Premium active: preview and export do not show the G Studio watermark.'
-    : canPromptPremiumLogin
-      ? 'Log in to view premium account status.'
-      : 'Premium is enabled per account by an admin.';
+    ? 'Premium active. Click to view premium plans.'
+    : canOpenPremiumDialog
+      ? 'View premium plans.'
+      : canPromptPremiumLogin
+        ? 'Log in to view premium account status.'
+        : 'Premium is enabled per account by an admin.';
 
   return (
     <header className="app-header dev-locator-host">
@@ -42,8 +46,8 @@ export default function AppHeader({
         {showPremiumButton && (
           <button
             type="button"
-            className={`premium-header-button${isPremium ? ' premium-header-button-active' : ''}${canPromptPremiumLogin ? '' : ' premium-header-button-static'}`}
-            onClick={canPromptPremiumLogin ? onOpenAuthDialog : undefined}
+            className={`premium-header-button${isPremium ? ' premium-header-button-active' : ''}${canOpenPremiumDialog || canPromptPremiumLogin ? '' : ' premium-header-button-static'}`}
+            onClick={canOpenPremiumDialog ? () => onOpenPremiumDialog(locatorCode) : (canPromptPremiumLogin ? onOpenAuthDialog : undefined)}
             title={premiumTitle}
             aria-label={premiumTitle}
             aria-pressed={isPremium}

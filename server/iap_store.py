@@ -91,6 +91,12 @@ def _normalize_is_active(value):
     return str(value or '').strip().lower() in {'1', 'true', 'yes', 'on'}
 
 
+def _normalize_is_recommended(value):
+    if isinstance(value, bool):
+        return value
+    return str(value or '').strip().lower() in {'1', 'true', 'yes', 'on'}
+
+
 def _row_to_iap_package(row):
     if not row:
         return None
@@ -103,6 +109,7 @@ def _row_to_iap_package(row):
         'credits': int(row.get('credits') or 0),
         'description': row.get('description') or '',
         'isActive': bool(row.get('is_active') or 0),
+        'isRecommended': bool(row.get('is_recommended') or 0),
         'createdAt': int(row.get('created_at') or 0),
         'updatedAt': int(row.get('updated_at') or 0),
     }
@@ -130,6 +137,7 @@ def ensure_iap_package_schema():
                         credits INT NOT NULL DEFAULT 0,
                         description TEXT NOT NULL,
                         is_active TINYINT(1) NOT NULL DEFAULT 1,
+                        is_recommended TINYINT(1) NOT NULL DEFAULT 0,
                         created_at BIGINT NOT NULL,
                         updated_at BIGINT NOT NULL,
                         INDEX idx_iap_packages_active (is_active),
@@ -138,6 +146,7 @@ def ensure_iap_package_schema():
                     """
                 )
                 _ensure_column(cursor, 'iap_packages', 'pack_type', "VARCHAR(64) NOT NULL DEFAULT 'addCredit' AFTER name")
+                _ensure_column(cursor, 'iap_packages', 'is_recommended', "TINYINT(1) NOT NULL DEFAULT 0 AFTER is_active")
         finally:
             connection.close()
     except driver.MySQLError as error:
@@ -155,7 +164,7 @@ def list_iap_packages(include_inactive=False):
         try:
             with connection.cursor() as cursor:
                 cursor.execute(
-                    f'SELECT * FROM iap_packages{where_clause} ORDER BY is_active DESC, updated_at DESC, created_at DESC'
+                    f'SELECT * FROM iap_packages{where_clause} ORDER BY is_active DESC, is_recommended DESC, updated_at DESC, created_at DESC'
                 )
                 return [_row_to_iap_package(row) for row in cursor.fetchall() or []]
         finally:
@@ -185,7 +194,7 @@ def get_iap_package(package_id):
         raise AuthStoreError('Unable to load IAP package') from error
 
 
-def create_iap_package(package_id, name, price, currency=None, credits=0, description='', is_active=True, pack_type=None):
+def create_iap_package(package_id, name, price, currency=None, credits=0, description='', is_active=True, is_recommended=False, pack_type=None):
     ensure_iap_package_schema()
     driver = _require_driver()
     normalized_package = {
@@ -197,6 +206,7 @@ def create_iap_package(package_id, name, price, currency=None, credits=0, descri
         'credits': _normalize_credits(credits),
         'description': _normalize_description(description),
         'is_active': 1 if _normalize_is_active(is_active) else 0,
+        'is_recommended': 1 if _normalize_is_recommended(is_recommended) else 0,
     }
     now = int(time.time())
     try:
@@ -206,8 +216,8 @@ def create_iap_package(package_id, name, price, currency=None, credits=0, descri
                 cursor.execute(
                     """
                     INSERT INTO iap_packages
-                        (id, name, pack_type, price, currency, credits, description, is_active, created_at, updated_at)
-                    VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+                        (id, name, pack_type, price, currency, credits, description, is_active, is_recommended, created_at, updated_at)
+                    VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
                     """,
                     (
                         normalized_package['id'],
@@ -218,6 +228,7 @@ def create_iap_package(package_id, name, price, currency=None, credits=0, descri
                         normalized_package['credits'],
                         normalized_package['description'],
                         normalized_package['is_active'],
+                        normalized_package['is_recommended'],
                         now,
                         now,
                     ),
@@ -232,7 +243,7 @@ def create_iap_package(package_id, name, price, currency=None, credits=0, descri
     return get_iap_package(normalized_package['id'])
 
 
-def update_iap_package(package_id, name=None, price=None, currency=None, credits=None, description=None, is_active=None, pack_type=None):
+def update_iap_package(package_id, name=None, price=None, currency=None, credits=None, description=None, is_active=None, is_recommended=None, pack_type=None):
     ensure_iap_package_schema()
     driver = _require_driver()
     current_package = get_iap_package(package_id)
@@ -251,6 +262,8 @@ def update_iap_package(package_id, name=None, price=None, currency=None, credits
         updates['description'] = _normalize_description(description)
     if is_active is not None:
         updates['is_active'] = 1 if _normalize_is_active(is_active) else 0
+    if is_recommended is not None:
+        updates['is_recommended'] = 1 if _normalize_is_recommended(is_recommended) else 0
     if not updates:
         raise IapPackageValidationError('No IAP package changes were provided.')
 

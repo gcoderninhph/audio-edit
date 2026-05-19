@@ -8,8 +8,7 @@ import Pagination from './Pagination'
 const PAGE_SIZE = 20
 
 function getBankTimeLabel(record) {
-  if (record?.transactionAt) return formatDateTime(record.transactionAt)
-  return record?.transactionDate || '-'
+  return record?.transactionDate || (record?.transactionAt ? formatDateTime(record.transactionAt) : '-')
 }
 
 function getAccountLabel(record) {
