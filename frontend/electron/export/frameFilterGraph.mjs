@@ -70,7 +70,7 @@ function buildMovingWatermarkFilter(inputLabel, outputLabel, framePreset, timeOf
   return `[${inputLabel}]drawtext=text='${WATERMARK_TEXT}':font='Arial':fontsize=${fontSize}:fontcolor=white@0.42:borderw=${borderWidth}:bordercolor=black@0.38:shadowcolor=black@0.35:shadowx=${shadowOffset}:shadowy=${shadowOffset}:x='${xExpression}':y='${yExpression}'[${outputLabel}]`
 }
 
-export function buildFrameFilter(framePreset, frameBackground, overlayAssets, motionSegments, { frameRate = DEFAULT_NATIVE_FRAME_RATE, timeOffset = 0, duration = 0 } = {}) {
+export function buildFrameFilter(framePreset, frameBackground, overlayAssets, motionSegments, { frameRate = DEFAULT_NATIVE_FRAME_RATE, timeOffset = 0, duration = 0, hideWatermark = false } = {}) {
   const safeOverlayAssets = Array.isArray(overlayAssets) ? overlayAssets : []
   const safeMotionSegments = Array.isArray(motionSegments) ? motionSegments : []
   const usesMotionSegments = hasSceneMotionSegments(safeMotionSegments)
@@ -105,8 +105,10 @@ export function buildFrameFilter(framePreset, frameBackground, overlayAssets, mo
   const subtitleInputOffset = backgroundImagePath ? 2 : 1
 
   let currentLabel = 'v0'
-  filterChain.push(buildMovingWatermarkFilter(currentLabel, 'vwm', framePreset, timeOffset, duration))
-  currentLabel = 'vwm'
+  if (!hideWatermark) {
+    filterChain.push(buildMovingWatermarkFilter(currentLabel, 'vwm', framePreset, timeOffset, duration))
+    currentLabel = 'vwm'
+  }
 
   safeOverlayAssets.forEach((asset, index) => {
     const nextLabel = `v${index + 1}`

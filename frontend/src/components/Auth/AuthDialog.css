@@ -19,6 +19,17 @@
   white-space: nowrap;
 }
 
+.auth-credit-pill {
+  padding: 5px 9px;
+  border: 1px solid rgba(245, 158, 11, 0.24);
+  border-radius: var(--radius-sm);
+  color: #fcd34d;
+  background: rgba(245, 158, 11, 0.12);
+  font-size: 0.75rem;
+  font-weight: 700;
+  white-space: nowrap;
+}
+
 .auth-dialog-backdrop {
   position: fixed;
   inset: 0;

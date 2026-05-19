@@ -1,5 +1,5 @@
 import { apiFetch } from './runtimeConfig';
-import { getAuthRequestHeaders } from './authClient';
+import { getAuthRequestHeaders, updateStoredAuthCredits } from './authClient';
 import { DEFAULT_TRANSLATION_LANGUAGE_KEY, normalizeSubtitleLanguageKey } from './subtitleTracks';
 
 function normalizeTranslationErrorMessage(message, fallbackMessage) {
@@ -148,6 +148,10 @@ export async function translateSubtitles(subtitles, targetLanguage, onProgress, 
     }
 
     const startData = await startRes.json();
+    const nextCreditBalance = Number(startData.creditBalance);
+    if (Number.isFinite(nextCreditBalance)) {
+      updateStoredAuthCredits(nextCreditBalance);
+    }
     const requestId = startData.requestId;
     const outputFileName = startData.outputFileName;
 

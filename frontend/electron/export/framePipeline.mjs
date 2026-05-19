@@ -140,7 +140,7 @@ function buildChunkOutputPath(jobDirectory, index) {
   return path.join(jobDirectory, `frame-chunk-${String(index).padStart(3, '0')}.mp4`)
 }
 
-function buildChunkArgs({ mergedPath, chunk, chunkOverlayAssets, workerPlan, framePreset, frameBackground, encoderPlan, outputPath, motionSegments, nativeFrameRate }) {
+function buildChunkArgs({ mergedPath, chunk, chunkOverlayAssets, workerPlan, framePreset, frameBackground, encoderPlan, outputPath, motionSegments, nativeFrameRate, hideWatermark }) {
   const backgroundImagePath = getNativeBackgroundImagePath(frameBackground)
   const backgroundInputArgs = backgroundImagePath ? ['-loop', '1', '-i', backgroundImagePath] : []
   const overlayInputArgs = chunkOverlayAssets.flatMap((asset) => ['-loop', '1', '-i', asset.path])
@@ -148,6 +148,7 @@ function buildChunkArgs({ mergedPath, chunk, chunkOverlayAssets, workerPlan, fra
     frameRate: nativeFrameRate,
     timeOffset: chunk.start,
     duration: chunk.duration,
+    hideWatermark,
   })
 
   return [
@@ -240,6 +241,7 @@ export async function frameMergedVideo({
   keptScenes,
   framePreset,
   frameBackground,
+  hideWatermark = false,
   overlayAssets,
 }) {
   const encoderPlan = await getNativeEncodePlan(exportQualityProfileId)
@@ -315,6 +317,7 @@ export async function frameMergedVideo({
       frameBackground,
       encoderPlan,
       outputPath,
+      hideWatermark,
       motionSegments: chunkSceneMotionSegments,
       nativeFrameRate,
     }), {

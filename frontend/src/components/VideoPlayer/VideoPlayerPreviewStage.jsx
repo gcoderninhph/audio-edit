@@ -21,6 +21,7 @@ export default function VideoPlayerPreviewStage({
   onPause,
   onEnded,
   onTogglePlayback,
+  hideWatermark = false,
 }) {
   const [frameBackgroundImage, setFrameBackgroundImage] = useState(null)
   const canvasRef = useRef(null)
@@ -70,6 +71,7 @@ export default function VideoPlayerPreviewStage({
         framePreset,
         frameBackground,
         backgroundImage: frameBackgroundImage,
+        hideWatermark,
         videoElement,
         subtitleText,
         currentTime: renderTime,
@@ -86,7 +88,7 @@ export default function VideoPlayerPreviewStage({
         window.cancelAnimationFrame(animationFrameRef.current)
       }
     }
-  }, [deletedSceneIds, frameBackground, frameBackgroundImage, framePreset, scenes, subtitleSettings, subtitleText, videoRef])
+  }, [deletedSceneIds, frameBackground, frameBackgroundImage, framePreset, hideWatermark, scenes, subtitleSettings, subtitleText, videoRef])
 
   const frameStageStyle = useMemo(() => ({
     aspectRatio: `${framePreset.width} / ${framePreset.height}`,

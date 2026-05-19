@@ -31,6 +31,7 @@ export default function SubtitlePanel({
   voiceoverProgress,
   lastVoiceoverAudioName,
   isAuthenticated = false,
+  authCredits = 0,
   onRequireAuth,
 }) {
   const [editingId, setEditingId] = useState(null);
@@ -49,6 +50,10 @@ export default function SubtitlePanel({
   const isVoiceoverSupportedLanguage = isVoiceoverSubtitleLanguageSupported(activeSubtitleLanguage);
   const canGenerateVoiceover = isVoiceoverSupportedLanguage && hasVisibleSubs;
   const authRequiredLabel = 'Login required';
+  const creditBalance = Math.max(0, Number(authCredits) || 0);
+  const transcriptionCreditCost = 20;
+  const translationCreditCost = 100;
+  const voiceoverCreditCost = 200;
   const missingSelectedTranslation = !hasVisibleSubs && hasOriginalSubtitles && !isOriginalLanguageSelected;
 
   // Find the currently active subtitle index based on currentTime
@@ -192,11 +197,21 @@ export default function SubtitlePanel({
       {/* Tools content */}
       {(showToolsAlways || toolsExpanded) && (
         <div className="subtitle-tools-content">
+          {isAuthenticated && (
+            <div className="subtitle-tool-note">
+              Current balance: <strong>{creditBalance} credits</strong>
+            </div>
+          )}
+
           <button
             className="btn btn-primary btn-sm subtitle-tool-btn"
             onClick={handleStartTranscription}
           >
-            {!isAuthenticated ? authRequiredLabel : hasOriginalSubtitles ? '🔄 Recreate subtitles (original)' : '📝 Generate subtitles automatically'}
+            {!isAuthenticated
+              ? authRequiredLabel
+              : hasOriginalSubtitles
+                ? `🔄 Recreate subtitles (original · ${transcriptionCreditCost} credits)`
+                : `📝 Generate subtitles automatically · ${transcriptionCreditCost} credits`}
           </button>
 
           {hasOriginalSubtitles && (
@@ -223,7 +238,11 @@ export default function SubtitlePanel({
                     disabled={!canTranslateSelectedLanguage}
                     onClick={handleStartTranslation}
                   >
-                    {!isAuthenticated ? authRequiredLabel : selectedLanguageOption.hasSubtitles ? '🌐 Retranslate' : '🌐 Translate'}
+                    {!isAuthenticated
+                      ? authRequiredLabel
+                      : selectedLanguageOption.hasSubtitles
+                        ? `🌐 Retranslate · ${translationCreditCost} credits`
+                        : `🌐 Translate · ${translationCreditCost} credits`}
                   </button>
                 </div>
               </div>
@@ -244,7 +263,11 @@ export default function SubtitlePanel({
                 onClick={handleStartVoiceover}
                 disabled={!canGenerateVoiceover}
               >
-                {!isAuthenticated ? authRequiredLabel : isVoiceoverSupportedLanguage ? '🔊 Generate voiceover' : '🔒 Voiceover only for Vietnamese'}
+                {!isAuthenticated
+                  ? authRequiredLabel
+                  : isVoiceoverSupportedLanguage
+                    ? `🔊 Generate voiceover · ${voiceoverCreditCost} credits`
+                    : '🔒 Voiceover only for Vietnamese'}
               </button>
 
               {!isVoiceoverSupportedLanguage && (

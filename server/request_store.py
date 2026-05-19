@@ -345,3 +345,59 @@ def get_request_record(request_id):
             connection.close()
     except driver.MySQLError as error:
         raise RequestStoreError('Unable to read server request') from error
+
+
+def list_recent_request_records(limit=50):
+    ensure_request_schema()
+    driver = _require_driver()
+    safe_limit = max(1, min(200, int(limit or 50)))
+    try:
+        connection = _connect(MYSQL_DATABASE)
+        try:
+            with connection.cursor() as cursor:
+                cursor.execute('SELECT * FROM server_requests ORDER BY updated_at DESC LIMIT %s', (safe_limit,))
+                return [_row_to_request_record(row) for row in cursor.fetchall() or []]
+        finally:
+            connection.close()
+    except driver.MySQLError as error:
+        raise RequestStoreError('Unable to list server requests') from error
+
+
+def list_user_request_records_page(user_id, page=1, page_size=10):
+    ensure_request_schema()
+    driver = _require_driver()
+    safe_page = max(1, int(page or 1))
+    safe_page_size = max(1, min(100, int(page_size or 10)))
+    try:
+        connection = _connect(MYSQL_DATABASE)
+        try:
+            with connection.cursor() as cursor:
+                cursor.execute('SELECT COUNT(*) AS total_items FROM server_requests WHERE user_id = %s', (user_id,))
+                total_items = int((cursor.fetchone() or {}).get('total_items') or 0)
+                total_pages = max(1, (total_items + safe_page_size - 1) // safe_page_size)
+                current_page = min(safe_page, total_pages)
+                cursor.execute(
+                    """
+                    SELECT *
+                    FROM server_requests
+                    WHERE user_id = %s
+                    ORDER BY updated_at DESC, created_at DESC
+                    LIMIT %s OFFSET %s
+                    """,
+                    (user_id, safe_page_size, (current_page - 1) * safe_page_size),
+                )
+                return {
+                    'requests': [_row_to_request_record(row) for row in cursor.fetchall() or []],
+                    'pagination': {
+                        'page': current_page,
+                        'pageSize': safe_page_size,
+                        'totalItems': total_items,
+                        'totalPages': total_pages,
+                        'hasNext': current_page < total_pages,
+                        'hasPrevious': current_page > 1,
+                    },
+                }
+        finally:
+            connection.close()
+    except driver.MySQLError as error:
+        raise RequestStoreError('Unable to list user server requests') from error

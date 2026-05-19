@@ -1,0 +1,48 @@
+.detail-hero {
+  grid-template-columns: auto minmax(0, 1fr) auto;
+}
+
+.detail-hero-actions {
+  display: inline-flex;
+  align-items: center;
+  justify-content: flex-end;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+
+.detail-user-tags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.detail-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  gap: 18px;
+}
+
+.compact-table td:first-child {
+  min-width: 150px;
+}
+
+.credit-dialog {
+  width: min(440px, calc(100vw - 24px));
+}
+
+@media (max-width: 1050px) {
+  .detail-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+@media (max-width: 720px) {
+  .detail-hero {
+    display: grid;
+    grid-template-columns: 1fr;
+  }
+
+  .detail-hero-actions {
+    justify-content: stretch;
+  }
+}

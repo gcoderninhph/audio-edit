@@ -9,23 +9,35 @@ import time
 from flask import jsonify, request
 
 try:
+    from admin_bootstrap import announce_temporary_admin_account, get_temporary_admin_user, is_temporary_admin_claims
+    from auth_identity import get_current_user_state, normalize_display_name, normalize_username, public_user_from_record
     from auth_store import (
+        ADMIN_USER_ROLE,
+        DEFAULT_INITIAL_CREDITS,
+        DEFAULT_USER_ROLE,
         AuthStoreError,
         DuplicateUserError,
         cleanup_refresh_tokens as cleanup_stored_refresh_tokens,
         create_registered_user,
         find_registered_user,
+        find_user_by_id,
         get_refresh_token,
         revoke_refresh_token,
         store_refresh_token,
     )
 except ImportError:
+    from .admin_bootstrap import announce_temporary_admin_account, get_temporary_admin_user, is_temporary_admin_claims
+    from .auth_identity import get_current_user_state, normalize_display_name, normalize_username, public_user_from_record
     from .auth_store import (
+        ADMIN_USER_ROLE,
+        DEFAULT_INITIAL_CREDITS,
+        DEFAULT_USER_ROLE,
         AuthStoreError,
         DuplicateUserError,
         cleanup_refresh_tokens as cleanup_stored_refresh_tokens,
         create_registered_user,
         find_registered_user,
+        find_user_by_id,
         get_refresh_token,
         revoke_refresh_token,
         store_refresh_token,
@@ -57,22 +69,29 @@ def get_current_timestamp():
 
 
 def get_local_user():
+    try:
+        stored_local_user = find_user_by_id(AUTH_USER_ID)
+    except AuthStoreError:
+        stored_local_user = None
+
+    if stored_local_user:
+        return public_user_from_record(stored_local_user)
+
     return {
         'id': AUTH_USER_ID,
+        'credits': DEFAULT_INITIAL_CREDITS,
         'email': AUTH_USERNAME.lower(),
+        'isPremium': False,
+        'role': DEFAULT_USER_ROLE,
+        'username': normalize_username(AUTH_USERNAME.split('@', 1)[0]),
         'displayName': AUTH_DISPLAY_NAME,
+        'isTemporaryAdmin': False,
+        'mustSetupAdmin': False,
     }
 
 
 def normalize_email(email):
     return str(email or '').strip().lower()
-
-
-def normalize_display_name(display_name, email):
-    normalized_name = str(display_name or '').strip()
-    if normalized_name:
-        return normalized_name[:80]
-    return email.split('@', 1)[0] if '@' in email else 'Editor'
 
 
 def hash_password(password, salt=None):
@@ -106,21 +125,17 @@ def verify_password(password, user_record):
     return hmac.compare_digest(base64url_encode(password_hash), expected_hash)
 
 
-def public_user_from_record(user_record):
-    return {
-        'id': user_record['id'],
-        'email': user_record['email'],
-        'displayName': user_record.get('displayName') or normalize_display_name('', user_record['email']),
-    }
-
-
 def get_user_for_credentials(email, password):
-    normalized_email = normalize_email(email)
-    if hmac.compare_digest(normalized_email, normalize_email(AUTH_USERNAME)) \
+    normalized_identifier = normalize_email(email)
+    if hmac.compare_digest(normalized_identifier, normalize_email(AUTH_USERNAME)) \
             and hmac.compare_digest(str(password or ''), AUTH_PASSWORD):
         return get_local_user()
 
-    registered_user = find_registered_user(normalized_email)
+    temporary_admin_user = get_temporary_admin_user(normalized_identifier, password)
+    if temporary_admin_user:
+        return temporary_admin_user
+
+    registered_user = find_registered_user(normalized_identifier)
     if registered_user and verify_password(password, registered_user):
         return public_user_from_record(registered_user)
 
@@ -174,16 +189,28 @@ def build_token_pair(user):
     access_token = encode_jwt({
         'type': 'access',
         'sub': user['id'],
+        'credits': max(0, int(user.get('credits') or 0)),
         'email': user['email'],
+        'isPremium': bool(user.get('isPremium')),
+        'role': user.get('role') or DEFAULT_USER_ROLE,
+        'username': user.get('username') or '',
         'displayName': user['displayName'],
+        'isTemporaryAdmin': bool(user.get('isTemporaryAdmin')),
+        'mustSetupAdmin': bool(user.get('mustSetupAdmin')),
         'iat': now,
         'exp': access_expires_at,
     })
     refresh_token = encode_jwt({
         'type': 'refresh',
         'sub': user['id'],
+        'credits': max(0, int(user.get('credits') or 0)),
         'email': user['email'],
+        'isPremium': bool(user.get('isPremium')),
+        'role': user.get('role') or DEFAULT_USER_ROLE,
+        'username': user.get('username') or '',
         'displayName': user['displayName'],
+        'isTemporaryAdmin': bool(user.get('isTemporaryAdmin')),
+        'mustSetupAdmin': bool(user.get('mustSetupAdmin')),
         'jti': refresh_token_id,
         'iat': now,
         'exp': refresh_expires_at,
@@ -220,6 +247,20 @@ def require_access_token():
         return None, (jsonify({'error': 'Login is required to use this feature'}), 401)
 
 
+def require_admin_access(allow_temporary_admin=False):
+    claims, auth_error = require_access_token()
+    if auth_error:
+        return None, auth_error
+
+    is_admin = claims.get('role') == ADMIN_USER_ROLE
+    is_temporary = is_temporary_admin_claims(claims)
+    if not is_admin:
+        return None, (jsonify({'error': 'Admin access is required'}), 403)
+    if is_temporary and not allow_temporary_admin:
+        return None, (jsonify({'error': 'Complete temporary admin setup before opening the admin console'}), 403)
+    return claims, None
+
+
 def get_json_payload():
     return request.get_json(silent=True) or {}
 
@@ -236,10 +277,12 @@ def auth_store_error_response():
 
 
 def register_auth_routes(app):
+    announce_temporary_admin_account()
+
     @app.route('/api/auth/login', methods=['POST'])
     def login():
         payload = get_json_payload()
-        email = payload.get('email') or payload.get('username')
+        email = payload.get('email') or payload.get('username') or payload.get('identifier')
         password = payload.get('password')
 
         try:
@@ -255,6 +298,7 @@ def register_auth_routes(app):
     def register():
         payload = get_json_payload()
         email = normalize_email(payload.get('email'))
+        username = normalize_username(payload.get('username'))
         password = str(payload.get('password') or '')
         display_name = normalize_display_name(payload.get('displayName') or payload.get('name'), email)
 
@@ -264,15 +308,23 @@ def register_auth_routes(app):
         if len(password) < MIN_PASSWORD_LENGTH:
             return jsonify({'error': f'Password must be at least {MIN_PASSWORD_LENGTH} characters'}), 400
 
+        if payload.get('username') and not username:
+            return jsonify({'error': 'Username may only contain letters, numbers, dots, dashes, or underscores'}), 400
+
         try:
             if normalize_email(AUTH_USERNAME) == email or find_registered_user(email):
                 return jsonify({'error': 'This email is already registered'}), 409
+            if username and find_registered_user(username):
+                return jsonify({'error': 'This username is already registered'}), 409
 
             password_state = hash_password(password)
             user_record = {
                 'id': f'user-{secrets.token_urlsafe(12)}',
                 'email': email,
+                'credits': DEFAULT_INITIAL_CREDITS,
                 'displayName': display_name,
+                'role': DEFAULT_USER_ROLE,
+                'username': username or None,
                 'passwordHash': password_state['hash'],
                 'passwordSalt': password_state['salt'],
                 'passwordIterations': password_state['iterations'],
@@ -303,11 +355,18 @@ def register_auth_routes(app):
                 return jsonify({'error': 'Refresh token was revoked'}), 401
 
             revoke_refresh_token(token_id)
-            return jsonify(build_token_pair({
-                'id': claims.get('sub') or AUTH_USER_ID,
-                'email': claims.get('email') or AUTH_USERNAME.lower(),
-                'displayName': claims.get('displayName') or AUTH_DISPLAY_NAME,
-            }))
+            current_user = get_current_user_state(
+                claims.get('sub') or AUTH_USER_ID,
+                claims.get('email') or AUTH_USERNAME.lower(),
+                claims.get('displayName') or AUTH_DISPLAY_NAME,
+                claims.get('credits') or DEFAULT_INITIAL_CREDITS,
+                bool(claims.get('isPremium')),
+                claims.get('role') or DEFAULT_USER_ROLE,
+                claims.get('username') or '',
+                is_temporary_admin=is_temporary_admin_claims(claims),
+                must_setup_admin=bool(claims.get('mustSetupAdmin')),
+            )
+            return jsonify(build_token_pair(current_user))
         except AuthStoreError:
             return auth_store_error_response()
 
@@ -321,12 +380,23 @@ def register_auth_routes(app):
         if claims.get('type') != 'access':
             return jsonify({'error': 'Invalid access token'}), 401
 
+        try:
+            current_user = get_current_user_state(
+                claims.get('sub') or AUTH_USER_ID,
+                claims.get('email') or AUTH_USERNAME.lower(),
+                claims.get('displayName') or AUTH_DISPLAY_NAME,
+                claims.get('credits') or DEFAULT_INITIAL_CREDITS,
+                bool(claims.get('isPremium')),
+                claims.get('role') or DEFAULT_USER_ROLE,
+                claims.get('username') or '',
+                is_temporary_admin=is_temporary_admin_claims(claims),
+                must_setup_admin=bool(claims.get('mustSetupAdmin')),
+            )
+        except AuthStoreError:
+            return auth_store_error_response()
+
         return jsonify({
-            'user': {
-                'id': claims.get('sub') or AUTH_USER_ID,
-                'email': claims.get('email') or AUTH_USERNAME.lower(),
-                'displayName': claims.get('displayName') or AUTH_DISPLAY_NAME,
-            },
+            'user': current_user,
             'accessTokenExpiresAt': claims.get('exp'),
         })
 

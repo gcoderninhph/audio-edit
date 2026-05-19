@@ -3,14 +3,11 @@ import './App.css';
 import { useVideoEditor } from './hooks/useVideoEditor';
 import { useAuthSession } from './hooks/useAuthSession';
 import AuthDialog from './components/Auth/AuthDialog';
-import AuthHeaderActions from './components/Auth/AuthHeaderActions';
+import AppHeader from './components/AppShell/AppHeader';
+import AppEditorWorkspace from './components/AppShell/AppEditorWorkspace';
+import AdminBootstrapSetup from './components/Admin/AdminBootstrapSetup';
+import AdminConsole from './components/Admin/AdminConsole';
 import ProjectDashboard from './components/ProjectDashboard/ProjectDashboard';
-import VideoPlayer from './components/VideoPlayer/VideoPlayer';
-import Timeline from './components/Timeline/Timeline';
-import SceneList from './components/SceneList/SceneList';
-import SubtitlePanel from './components/SubtitlePanel/SubtitlePanel';
-import ExportPanel from './components/ExportPanel/ExportPanel';
-import DeveloperLocator from './components/DeveloperLocator/DeveloperLocator';
 
 function App() {
   const editor = useVideoEditor();
@@ -18,6 +15,7 @@ function App() {
   const [activeRightTab, setActiveRightTab] = useState('scenes');
   const [activePlayerSidebarSection, setActivePlayerSidebarSection] = useState(null);
   const [selectedSceneConfigId, setSelectedSceneConfigId] = useState(null);
+  const [isAdminConsoleOpen, setIsAdminConsoleOpen] = useState(false);
   const [isProjectBrowserOpen, setIsProjectBrowserOpen] = useState(false);
   const [isAuthDialogOpen, setIsAuthDialogOpen] = useState(false);
   const { redo, setCurrentTime, undo, videoRef } = editor;
@@ -149,6 +147,14 @@ function App() {
     setIsAuthDialogOpen(false);
   }, []);
 
+  const handleOpenAdminConsole = useCallback(() => {
+    setIsAdminConsoleOpen(true);
+  }, []);
+
+  const handleCloseAdminConsole = useCallback(() => {
+    setIsAdminConsoleOpen(false);
+  }, []);
+
   const authDialog = (
     <AuthDialog
       key={isAuthDialogOpen ? 'auth-dialog-open' : 'auth-dialog-closed'}
@@ -157,12 +163,60 @@ function App() {
       onClose={handleCloseAuthDialog}
     />
   );
+  const isAdminConsoleVisible = isAdminConsoleOpen && auth.isAdmin && !auth.requiresAdminSetup;
+
+  if (auth.requiresAdminSetup) {
+    return (
+      <div className="app">
+        <AppHeader
+          auth={auth}
+          locatorCode="header.admin-bootstrap"
+          locatorTitle="Admin Bootstrap Header"
+          onOpenAuthDialog={handleOpenAuthDialog}
+          title="VideoForge Admin"
+        />
+        <AdminBootstrapSetup auth={auth} />
+        {authDialog}
+      </div>
+    );
+  }
+
+  if (isAdminConsoleVisible) {
+    return (
+      <div className="app">
+        <AppHeader
+          auth={auth}
+          locatorCode="header.admin-console"
+          locatorTitle="Admin Console Header"
+          onOpenAdminConsole={handleOpenAdminConsole}
+          onOpenAuthDialog={handleOpenAuthDialog}
+          title="VideoForge Admin"
+        >
+          <button className="btn btn-ghost btn-sm" type="button" onClick={handleCloseAdminConsole}>
+            ← Studio
+          </button>
+        </AppHeader>
+        <main className="app-main">
+          <AdminConsole />
+        </main>
+        {authDialog}
+      </div>
+    );
+  }
 
   // ── Loading Screen ──
   if (editor.isRestoring) {
     return (
       <div className="app">
-        <Header auth={auth} onOpenAuthDialog={handleOpenAuthDialog} />
+        <AppHeader
+          auth={auth}
+          locatorCode="header.dashboard"
+          locatorTitle="Dashboard Header"
+          onOpenAdminConsole={handleOpenAdminConsole}
+          onOpenAuthDialog={handleOpenAuthDialog}
+          showPremiumButton
+          showClientBadge
+        />
         <main className="app-main">
           <div className="restore-loading">
             <div className="detecting-spinner" />
@@ -180,7 +234,15 @@ function App() {
   if (!hasVideo || isProjectBrowserOpen) {
     return (
       <div className="app">
-        <Header auth={auth} onOpenAuthDialog={handleOpenAuthDialog} />
+        <AppHeader
+          auth={auth}
+          locatorCode="header.dashboard"
+          locatorTitle="Dashboard Header"
+          onOpenAdminConsole={handleOpenAdminConsole}
+          onOpenAuthDialog={handleOpenAuthDialog}
+          showPremiumButton
+          showClientBadge
+        />
         <main className="app-main">
           <ProjectDashboard
             onOpenProject={handleOpenProject}
@@ -195,15 +257,14 @@ function App() {
   // ── Editor View ──
   return (
     <div className="app">
-      {/* Header with status */}
-      <header className="app-header">
-        <DeveloperLocator code="header.editor" title="Editor Header" />
-        <div className="app-logo">
-          <div className="app-logo-icon">🎬</div>
-          <span className="app-logo-text gradient-text">VideoForge</span>
-        </div>
-
-        <div className="header-status">
+      <AppHeader
+        auth={auth}
+        locatorCode="header.editor"
+        locatorTitle="Editor Header"
+        onOpenAdminConsole={handleOpenAdminConsole}
+        onOpenAuthDialog={handleOpenAuthDialog}
+        showPremiumButton
+      >
           {editor.isUploading && (
             <span className="status-badge uploading">
               ⬆️ Uploading {editor.uploadProgress}%
@@ -215,7 +276,6 @@ function App() {
           {editor.autoSaveStatus === 'saved' && (
             <span className="status-badge saved">✅ Saved</span>
           )}
-          <AuthHeaderActions auth={auth} onOpenLogin={handleOpenAuthDialog} />
           <div className="undo-redo-btns">
             <button
               className="btn btn-ghost btn-sm"
@@ -241,8 +301,7 @@ function App() {
           >
             ← Projects
           </button>
-        </div>
-      </header>
+      </AppHeader>
 
       {/* Upload progress bar */}
       {editor.isUploading && (
@@ -251,178 +310,26 @@ function App() {
         </div>
       )}
 
-      <main className="app-main">
-        <div className="editor-view">
-          {/* Left: Video Player */}
-          <div className="editor-left">
-            <div className="change-video-area dev-locator-host">
-              <DeveloperLocator code="editor.video.current-source" title="Current Video Source" />
-              <span className="current-video-name">
-                📹 <strong>{editor.videoName}</strong>
-              </span>
-            </div>
-            <VideoPlayer
-              videoUrl={editor.videoUrl}
-              videoRef={editor.videoRef}
-              onTimeUpdate={editor.setCurrentTime}
-              onDurationChange={editor.setVideoDuration}
-              framePresetId={editor.framePresetId}
-              onFramePresetChange={editor.setFramePresetId}
-              exportQualityProfileId={editor.exportConfig.qualityProfileId}
-              onExportQualityProfileChange={editor.exportConfig.setQualityProfileId}
-              exportFileName={editor.exportConfig.fileName}
-              onExportFileNameChange={editor.exportConfig.setFileName}
-              exportOutputDirectory={editor.exportConfig.outputDirectory}
-              onChooseExportOutputDirectory={editor.exportConfig.chooseOutputDirectory}
-              frameBackground={editor.frameBackground}
-              onFrameBackgroundChange={editor.setFrameBackground}
-              subtitleSettings={editor.subtitleSettings}
-              onSubtitleSettingsChange={editor.setSubtitleSettings}
-              currentScene={editor.currentScene}
-              scenes={editor.scenes}
-              deletedSceneIds={editor.deletedSceneIds}
-              subtitles={editor.filteredSubtitles}
-              voiceoverTrack={editor.voiceoverTrack}
-              videoVolume={editor.videoVolume}
-              voiceoverVolume={editor.voiceoverVolume}
-              onVideoVolumeChange={editor.handleVideoVolumeChange}
-              onVoiceoverVolumeChange={editor.handleVoiceoverVolumeChange}
-              onToggleVideoMute={editor.handleToggleVideoMute}
-              selectedScene={selectedSceneConfig}
-              selectedSceneIndex={selectedSceneConfigIndex}
-              onSceneMotionChange={editor.setSceneMotionConfig}
-              onDetectSceneFace={editor.detectSceneFace}
-              bulkMotionRules={editor.sceneBulkMotionRules}
-              onBulkMotionRulesChange={editor.setSceneBulkMotionRules}
-              onApplyBulkMotionConfig={editor.applySceneMotionBulkConfig}
-              activeSidebarSection={activePlayerSidebarSection}
-              onToggleSidebarSection={handleTogglePlayerSidebarSection}
-              onCloseSidebarSection={handleClosePlayerSidebar}
-            />
-          </div>
-
-          {/* Right: Panels */}
-          <div className="editor-right">
-            <div className="editor-right-tabs dev-locator-host">
-              <DeveloperLocator code="editor.tabs.right" title="Editor Right Tabs" />
-              <button
-                className={`editor-tab ${activeRightTab === 'scenes' ? 'active' : ''}`}
-                onClick={() => setActiveRightTab('scenes')}
-              >
-                🎬 Scenes
-              </button>
-              <button
-                className={`editor-tab ${activeRightTab === 'subtitles' ? 'active' : ''}`}
-                onClick={() => setActiveRightTab('subtitles')}
-              >
-                📝 Subtitles
-              </button>
-            </div>
-
-            <div className="editor-right-panel" style={{ display: activeRightTab === 'scenes' ? 'flex' : 'none' }}>
-              <SceneList
-                scenes={editor.scenes}
-                deletedSceneIds={editor.deletedSceneIds}
-                thumbnails={editor.thumbnails}
-                currentScene={editor.currentScene}
-                isDetecting={editor.isDetecting}
-                detectProgress={editor.detectProgress}
-                keptScenes={editor.keptScenes}
-                keptDuration={editor.keptDuration}
-                onToggleDelete={editor.toggleDeleteScene}
-                onRestoreAll={editor.restoreAllScenes}
-                onDeleteAll={editor.deleteAllScenes}
-                onSeekToScene={editor.seekToScene}
-                onOpenSceneConfig={handleOpenSceneConfig}
-                onOpenBulkSceneConfig={handleOpenSceneBulkConfig}
-                onStartDetection={editor.startDetection}
-                sensitivity={editor.sensitivity}
-                onSensitivityChange={editor.setSensitivity}
-                videoFile={editor.videoFile}
-              />
-            </div>
-
-            <div className="editor-right-panel" style={{ display: activeRightTab === 'subtitles' ? 'flex' : 'none', padding: 0 }}>
-              <SubtitlePanel
-                subtitles={editor.filteredSubtitles}
-                currentTime={editor.currentTime}
-                onUpdateSubtitle={editor.updateSubtitle}
-                onSeekToTime={handleSeek}
-                activeSubtitleLanguage={editor.activeSubtitleLanguage}
-                onActiveSubtitleLanguageChange={editor.setActiveSubtitleLanguage}
-                subtitleLanguageOptions={editor.subtitleLanguageOptions}
-                onStartTranscription={editor.startTranscription}
-                isTranscribing={editor.isTranscribing}
-                transcribeProgress={editor.transcribeProgress}
-                onStartTranslation={editor.startTranslation}
-                isTranslating={editor.isTranslating}
-                translateProgress={editor.translateProgress}
-                onStartVoiceover={editor.startVoiceover}
-                isGeneratingVoiceover={editor.isGeneratingVoiceover}
-                voiceoverProgress={editor.voiceoverProgress}
-                lastVoiceoverAudioName={editor.lastVoiceoverAudioName}
-                isAuthenticated={auth.isAuthenticated}
-                onRequireAuth={handleOpenAuthDialog}
-              />
-            </div>
-          </div>
-
-          {/* Timeline (full width) */}
-          <div className="editor-timeline dev-locator-host">
-            <DeveloperLocator code="panel.timeline" title="Timeline Panel Wrapper" />
-            <Timeline
-              scenes={editor.scenes}
-              deletedSceneIds={editor.deletedSceneIds}
-              currentTime={editor.currentTime}
-              duration={editor.videoDuration}
-              currentScene={editor.currentScene}
-              onSeek={handleSeek}
-              subtitles={editor.filteredSubtitles}
-              voiceoverTrack={editor.voiceoverTrack}
-              onSubtitleClick={handleOpenSubtitleConfig}
-              onVoiceoverClick={handleOpenVoiceoverAudioConfig}
-            />
-          </div>
-
-          {/* Export Panel (full width) */}
-          <div className="editor-export dev-locator-host">
-            <DeveloperLocator code="panel.export" title="Export Panel Wrapper" />
-            <ExportPanel
-              scenes={editor.scenes}
-              keptScenes={editor.keptScenes}
-              keptDuration={editor.keptDuration}
-              deletedSceneIds={editor.deletedSceneIds}
-              duration={editor.videoDuration}
-              isExporting={editor.isExporting}
-              exportProgress={editor.exportProgress}
-              exportResult={editor.exportResult}
-              videoName={editor.videoName}
-              frameSummary={editor.frameSummary}
-              frameBackgroundLabel={editor.frameBackgroundLabel}
-              exportConfig={editor.exportConfig}
-              onOpenExportConfig={handleOpenExportConfig}
-              onExport={editor.startExport}
-            />
-          </div>
-        </div>
-      </main>
+      <AppEditorWorkspace
+        activePlayerSidebarSection={activePlayerSidebarSection}
+        activeRightTab={activeRightTab}
+        auth={auth}
+        editor={editor}
+        onClosePlayerSidebar={handleClosePlayerSidebar}
+        onOpenExportConfig={handleOpenExportConfig}
+        onOpenSceneBulkConfig={handleOpenSceneBulkConfig}
+        onOpenSceneConfig={handleOpenSceneConfig}
+        onOpenSubtitleConfig={handleOpenSubtitleConfig}
+        onOpenVoiceoverAudioConfig={handleOpenVoiceoverAudioConfig}
+        onRequireAuth={handleOpenAuthDialog}
+        onSeek={handleSeek}
+        onSetActiveRightTab={setActiveRightTab}
+        onTogglePlayerSidebarSection={handleTogglePlayerSidebarSection}
+        selectedSceneConfig={selectedSceneConfig}
+        selectedSceneConfigIndex={selectedSceneConfigIndex}
+      />
       {authDialog}
     </div>
-  );
-}
-
-// ── Shared Header Component ──
-function Header({ auth, onOpenAuthDialog }) {
-  return (
-    <header className="app-header dev-locator-host">
-      <DeveloperLocator code="header.dashboard" title="Dashboard Header" />
-      <div className="app-logo">
-        <div className="app-logo-icon">🎬</div>
-        <span className="app-logo-text gradient-text">VideoForge</span>
-        <span className="app-logo-badge">CLIENT-SIDE</span>
-      </div>
-      <AuthHeaderActions auth={auth} onOpenLogin={onOpenAuthDialog} />
-    </header>
   );
 }
 

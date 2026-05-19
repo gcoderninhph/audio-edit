@@ -325,6 +325,7 @@ export function drawFrameComposition(context, {
   framePreset,
   frameBackground,
   backgroundImage = null,
+  hideWatermark = false,
   videoElement,
   subtitleText,
   currentTime = 0,
@@ -341,7 +342,9 @@ export function drawFrameComposition(context, {
     drawSceneMotionVideo(context, videoElement, layout)
   }
 
-  drawMovingWatermark(context, framePreset, currentTime)
+  if (!hideWatermark) {
+    drawMovingWatermark(context, framePreset, currentTime)
+  }
   drawSubtitleCard(context, subtitleText, framePreset, fontFamily, subtitleSettings)
   context.restore()
 }

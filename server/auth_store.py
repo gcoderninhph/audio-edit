@@ -1,5 +1,6 @@
 import json
 import os
+import time
 
 try:
     import pymysql
@@ -15,6 +16,12 @@ MYSQL_PORT = int(os.environ.get('AUTH_MYSQL_PORT') or os.environ.get('MYSQL_PORT
 MYSQL_USER = os.environ.get('AUTH_MYSQL_USER') or os.environ.get('MYSQL_USER', 'root')
 MYSQL_PASSWORD = os.environ.get('AUTH_MYSQL_PASSWORD') or os.environ.get('MYSQL_PASSWORD', '12345678')
 MYSQL_DATABASE = os.environ.get('AUTH_MYSQL_DATABASE') or os.environ.get('MYSQL_DATABASE', 'audio_studio')
+DEFAULT_INITIAL_CREDITS = int(os.environ.get('AUTH_INITIAL_CREDITS', '1000'))
+DEFAULT_USER_ROLE = 'user'
+ADMIN_USER_ROLE = 'admin'
+LOCAL_AUTH_USER_ID = os.environ.get('AUTH_USER_ID', 'local-user')
+LOCAL_AUTH_EMAIL = str(os.environ.get('AUTH_USERNAME', 'demo@local')).strip().lower()
+LOCAL_AUTH_DISPLAY_NAME = os.environ.get('AUTH_DISPLAY_NAME', 'Local Editor')
 LEGACY_AUTH_USER_STORE_PATH = os.environ.get(
     'AUTH_USER_STORE_PATH',
     os.path.join(os.path.dirname(__file__), 'uploads', 'auth-users.json')
@@ -29,6 +36,13 @@ class AuthStoreError(RuntimeError):
 
 class DuplicateUserError(AuthStoreError):
     pass
+
+
+class InsufficientCreditsError(AuthStoreError):
+    def __init__(self, available_credits, required_credits):
+        super().__init__('Not enough credits')
+        self.available_credits = max(0, int(available_credits or 0))
+        self.required_credits = max(0, int(required_credits or 0))
 
 
 def _require_driver():
@@ -74,17 +88,32 @@ def _read_legacy_json_users():
     return users if isinstance(users, list) else []
 
 
+def _normalize_role(value):
+    return ADMIN_USER_ROLE if str(value or '').strip().lower() == ADMIN_USER_ROLE else DEFAULT_USER_ROLE
+
+
+def _normalize_is_premium(value):
+    if isinstance(value, bool):
+        return value
+    return str(value or '').strip().lower() in {'1', 'true', 'yes', 'on'}
+
+
 def _row_to_user_record(row):
     if not row:
         return None
     return {
         'id': row['id'],
+        'credits': max(0, int(row.get('credits') or 0)),
         'email': row['email'],
+        'isPremium': _normalize_is_premium(row.get('is_premium')),
+        'role': _normalize_role(row.get('role')),
+        'username': str(row.get('username') or '').strip(),
         'displayName': row.get('display_name') or row['email'].split('@', 1)[0],
         'passwordHash': row.get('password_hash') or '',
         'passwordSalt': row.get('password_salt') or '',
         'passwordIterations': row.get('password_iterations') or 0,
         'createdAt': row.get('created_at') or 0,
+        'updatedAt': row.get('updated_at') or 0,
     }
 
 
@@ -112,6 +141,20 @@ def _migrate_legacy_json_users(cursor):
         )
 
 
+def _ensure_column(cursor, table_name, column_name, definition):
+    cursor.execute(
+        """
+        SELECT COUNT(*) AS column_count
+        FROM information_schema.columns
+        WHERE table_schema = %s AND table_name = %s AND column_name = %s
+        """,
+        (MYSQL_DATABASE, table_name, column_name),
+    )
+    row = cursor.fetchone() or {}
+    if int(row.get('column_count') or 0) == 0:
+        cursor.execute(f'ALTER TABLE `{table_name}` ADD COLUMN `{column_name}` {definition}')
+
+
 def ensure_auth_schema():
     global _schema_ready
     if _schema_ready:
@@ -137,15 +180,36 @@ def ensure_auth_schema():
                     CREATE TABLE IF NOT EXISTS auth_users (
                         id VARCHAR(80) NOT NULL PRIMARY KEY,
                         email VARCHAR(160) NOT NULL UNIQUE,
+                        username VARCHAR(80) NULL UNIQUE,
                         display_name VARCHAR(80) NOT NULL,
+                        role VARCHAR(16) NOT NULL DEFAULT 'user',
+                        is_premium TINYINT(1) NOT NULL DEFAULT 0,
+                        credits INT NOT NULL DEFAULT 0,
                         password_hash VARCHAR(255) NOT NULL,
                         password_salt VARCHAR(255) NOT NULL,
                         password_iterations INT NOT NULL,
                         created_at BIGINT NOT NULL,
                         updated_at BIGINT NOT NULL,
-                        INDEX idx_auth_users_email (email)
+                        INDEX idx_auth_users_email (email),
+                        INDEX idx_auth_users_role (role)
                     ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
                     """
+                )
+                _ensure_column(cursor, 'auth_users', 'username', 'VARCHAR(80) NULL UNIQUE AFTER email')
+                _ensure_column(cursor, 'auth_users', 'role', f"VARCHAR(16) NOT NULL DEFAULT '{DEFAULT_USER_ROLE}' AFTER display_name")
+                _ensure_column(cursor, 'auth_users', 'is_premium', 'TINYINT(1) NOT NULL DEFAULT 0 AFTER role')
+                try:
+                    cursor.execute(
+                        f'ALTER TABLE auth_users ADD COLUMN credits INT NOT NULL DEFAULT {DEFAULT_INITIAL_CREDITS} AFTER display_name'
+                    )
+                except driver.MySQLError as error:
+                    if int((error.args or [0])[0] or 0) != 1060:
+                        raise
+                cursor.execute('ALTER TABLE auth_users MODIFY COLUMN username VARCHAR(80) NULL')
+                cursor.execute(f"ALTER TABLE auth_users MODIFY COLUMN role VARCHAR(16) NOT NULL DEFAULT '{DEFAULT_USER_ROLE}'")
+                cursor.execute('ALTER TABLE auth_users MODIFY COLUMN is_premium TINYINT(1) NOT NULL DEFAULT 0')
+                cursor.execute(
+                    f'ALTER TABLE auth_users MODIFY COLUMN credits INT NOT NULL DEFAULT {DEFAULT_INITIAL_CREDITS}'
                 )
                 cursor.execute(
                     """
@@ -159,6 +223,25 @@ def ensure_auth_schema():
                     ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
                     """
                 )
+                now = int(time.time())
+                cursor.execute(
+                    """
+                    INSERT IGNORE INTO auth_users
+                        (id, email, display_name, credits, password_hash, password_salt, password_iterations, created_at, updated_at)
+                    VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s)
+                    """,
+                    (
+                        LOCAL_AUTH_USER_ID,
+                        LOCAL_AUTH_EMAIL,
+                        LOCAL_AUTH_DISPLAY_NAME,
+                        DEFAULT_INITIAL_CREDITS,
+                        '',
+                        '',
+                        0,
+                        now,
+                        now,
+                    ),
+                )
                 _migrate_legacy_json_users(cursor)
         finally:
             database_connection.close()
@@ -171,11 +254,32 @@ def ensure_auth_schema():
 def find_registered_user(email):
     ensure_auth_schema()
     driver = _require_driver()
+    identifier = str(email or '').strip().lower()
+    if not identifier:
+        return None
     try:
         connection = _connect(MYSQL_DATABASE)
         try:
             with connection.cursor() as cursor:
-                cursor.execute('SELECT * FROM auth_users WHERE email = %s LIMIT 1', (email,))
+                cursor.execute(
+                    'SELECT * FROM auth_users WHERE email = %s OR username = %s LIMIT 1',
+                    (identifier, identifier),
+                )
+                return _row_to_user_record(cursor.fetchone())
+        finally:
+            connection.close()
+    except driver.MySQLError as error:
+        raise AuthStoreError('Unable to read auth user') from error
+
+
+def find_user_by_id(user_id):
+    ensure_auth_schema()
+    driver = _require_driver()
+    try:
+        connection = _connect(MYSQL_DATABASE)
+        try:
+            with connection.cursor() as cursor:
+                cursor.execute('SELECT * FROM auth_users WHERE id = %s LIMIT 1', (user_id,))
                 return _row_to_user_record(cursor.fetchone())
         finally:
             connection.close()
@@ -193,13 +297,19 @@ def create_registered_user(user_record):
                 cursor.execute(
                     """
                     INSERT INTO auth_users
-                        (id, email, display_name, password_hash, password_salt, password_iterations, created_at, updated_at)
-                    VALUES (%s, %s, %s, %s, %s, %s, %s, %s)
+                        (id, email, username, display_name, role, is_premium, credits, password_hash, password_salt, password_iterations, created_at, updated_at)
+                    VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
                     """,
                     (
                         user_record['id'],
                         user_record['email'],
+                        user_record.get('username') or None,
                         user_record['displayName'],
+                        _normalize_role(user_record.get('role')),
+                            1 if _normalize_is_premium(
+                                user_record['isPremium'] if 'isPremium' in user_record else user_record.get('is_premium')
+                            ) else 0,
+                        int(user_record.get('credits') or DEFAULT_INITIAL_CREDITS),
                         user_record['passwordHash'],
                         user_record['passwordSalt'],
                         int(user_record['passwordIterations']),
@@ -213,6 +323,33 @@ def create_registered_user(user_record):
         raise DuplicateUserError('This email is already registered') from error
     except driver.MySQLError as error:
         raise AuthStoreError('Unable to create auth user') from error
+
+
+def update_user_credits(user_id, delta_credits):
+    try:
+        from auth_credit_store import update_user_credits as update_user_credits_impl
+    except ImportError:
+        from .auth_credit_store import update_user_credits as update_user_credits_impl
+
+    return update_user_credits_impl(user_id, delta_credits)
+
+
+def debit_user_credits(user_id, amount):
+    try:
+        from auth_credit_store import debit_user_credits as debit_user_credits_impl
+    except ImportError:
+        from .auth_credit_store import debit_user_credits as debit_user_credits_impl
+
+    return debit_user_credits_impl(user_id, amount)
+
+
+def refund_user_credits(user_id, amount):
+    try:
+        from auth_credit_store import refund_user_credits as refund_user_credits_impl
+    except ImportError:
+        from .auth_credit_store import refund_user_credits as refund_user_credits_impl
+
+    return refund_user_credits_impl(user_id, amount)
 
 
 def cleanup_refresh_tokens(now):

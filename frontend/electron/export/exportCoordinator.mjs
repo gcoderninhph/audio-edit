@@ -32,6 +32,7 @@ async function runNativeExportJob(sender, payload = {}) {
   const jobDirectory = buildJobDirectory(jobId)
   const framePreset = resolveFramePreset(payload.frameSettings)
   const frameBackground = sanitizeFrameBackground(payload.frameSettings?.backgroundColor)
+  const hideWatermark = Boolean(payload.frameSettings?.hideWatermark)
   const exportQualityProfileId = payload.exportQualityProfileId || null
   const outputTarget = resolveExportOutputTarget(payload.outputTarget, payload.source?.fileName || 'output.mp4')
   const keptScenes = Array.isArray(payload.keptScenes)
@@ -121,6 +122,7 @@ async function runNativeExportJob(sender, payload = {}) {
       keptScenes,
       framePreset,
       frameBackground: nativeFrameBackground,
+      hideWatermark,
       overlayAssets,
       emitLog,
       emitProgress,

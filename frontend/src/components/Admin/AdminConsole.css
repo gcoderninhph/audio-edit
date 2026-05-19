@@ -1,0 +1,212 @@
+.admin-console-page {
+  display: grid;
+  gap: 20px;
+  padding: 24px 0 40px;
+}
+
+.admin-console-hero,
+.admin-console-section {
+  padding: 20px;
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-lg);
+  background: var(--bg-card);
+}
+
+.admin-console-hero {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+  background:
+    radial-gradient(circle at top left, rgba(59, 130, 246, 0.16), transparent 32%),
+    radial-gradient(circle at bottom right, rgba(16, 185, 129, 0.14), transparent 28%),
+    var(--bg-card);
+}
+
+.admin-console-kicker {
+  margin: 0 0 8px;
+  color: #60a5fa;
+  font-size: 0.72rem;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.admin-console-hero h1,
+.admin-console-section h2 {
+  margin: 0;
+}
+
+.admin-console-copy,
+.admin-console-section-header p {
+  margin: 8px 0 0;
+  color: var(--text-secondary);
+  line-height: 1.5;
+}
+
+.admin-console-summary {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 16px;
+}
+
+.admin-summary-card {
+  padding: 18px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: var(--radius-md);
+  background: rgba(255, 255, 255, 0.03);
+}
+
+.admin-summary-card span {
+  display: block;
+  color: var(--text-secondary);
+  font-size: 0.78rem;
+  margin-bottom: 10px;
+}
+
+.admin-summary-card strong {
+  font-size: 1.8rem;
+  line-height: 1;
+}
+
+.admin-console-error,
+.admin-console-empty {
+  padding: 16px;
+  border: 1px solid rgba(248, 113, 113, 0.24);
+  border-radius: var(--radius-md);
+  background: rgba(239, 68, 68, 0.08);
+  color: #fecaca;
+}
+
+.admin-console-empty {
+  border-color: var(--border-color);
+  background: rgba(255, 255, 255, 0.03);
+  color: var(--text-secondary);
+}
+
+.admin-console-section-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+  margin-bottom: 16px;
+}
+
+.admin-user-table-wrapper {
+  overflow-x: auto;
+}
+
+.admin-user-table {
+  width: 100%;
+  border-collapse: collapse;
+}
+
+.admin-user-table th,
+.admin-user-table td {
+  padding: 12px 10px;
+  border-top: 1px solid rgba(255, 255, 255, 0.08);
+  text-align: left;
+  vertical-align: middle;
+}
+
+.admin-user-table thead th {
+  border-top: none;
+  color: var(--text-secondary);
+  font-size: 0.75rem;
+  font-weight: 700;
+  text-transform: uppercase;
+}
+
+.admin-user-primary {
+  font-weight: 700;
+}
+
+.admin-user-secondary {
+  margin-top: 4px;
+  color: var(--text-secondary);
+  font-size: 0.75rem;
+}
+
+.admin-user-select,
+.admin-user-input {
+  min-height: 36px;
+  width: 100%;
+  padding: 0 10px;
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-sm);
+  background: rgba(255, 255, 255, 0.04);
+  color: var(--text-primary);
+  font: inherit;
+}
+
+.admin-request-list {
+  display: grid;
+  gap: 12px;
+}
+
+.admin-request-card {
+  padding: 16px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: var(--radius-md);
+  background: rgba(255, 255, 255, 0.03);
+}
+
+.admin-request-topline {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 8px;
+}
+
+.admin-request-status {
+  padding: 4px 10px;
+  border-radius: 999px;
+  font-size: 0.72rem;
+  font-weight: 800;
+  text-transform: uppercase;
+}
+
+.admin-request-status.status-running,
+.admin-request-status.status-processing,
+.admin-request-status.status-queued {
+  background: rgba(59, 130, 246, 0.14);
+  color: #93c5fd;
+}
+
+.admin-request-status.status-success,
+.admin-request-status.status-finished {
+  background: rgba(16, 185, 129, 0.14);
+  color: #6ee7b7;
+}
+
+.admin-request-status.status-failed {
+  background: rgba(239, 68, 68, 0.14);
+  color: #fca5a5;
+}
+
+.admin-request-meta {
+  color: var(--text-secondary);
+  font-size: 0.82rem;
+  line-height: 1.5;
+}
+
+@media (max-width: 980px) {
+  .admin-console-summary {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 720px) {
+  .admin-console-page {
+    padding-top: 16px;
+  }
+
+  .admin-console-hero {
+    flex-direction: column;
+  }
+
+  .admin-console-summary {
+    grid-template-columns: 1fr;
+  }
+}

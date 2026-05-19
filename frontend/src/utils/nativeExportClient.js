@@ -57,6 +57,7 @@ export async function runNativeExport({ inputFile, keptScenes, subtitles, frameS
 
   const framePreset = getFramePresetById(frameSettings?.presetId)
   const frameBackground = sanitizeFrameBackground(frameSettings?.backgroundColor)
+  const hideWatermark = Boolean(frameSettings?.hideWatermark)
   const source = await buildDesktopExportSourceDescriptor(inputFile)
   const subtitleOverlay = await buildSubtitleOverlayAssets(subtitles, framePreset, undefined, subtitleSettings)
   const jobId = createJobId()
@@ -77,6 +78,7 @@ export async function runNativeExport({ inputFile, keptScenes, subtitles, frameS
     frameBackground: describeFrameBackground(frameBackground),
     framePresetId: framePreset.id,
     framePresetSize: { width: framePreset.width, height: framePreset.height },
+    hideWatermark,
     hasVoiceoverTrack: Boolean(voiceover),
     jobId,
     keptSceneCount: keptScenes.length,
@@ -109,6 +111,7 @@ export async function runNativeExport({ inputFile, keptScenes, subtitles, frameS
         width: framePreset.width,
         height: framePreset.height,
         backgroundColor: frameBackground,
+        hideWatermark,
       },
       exportQualityProfileId: exportQualityProfileId || null,
       outputTarget: outputTarget || null,

@@ -30,7 +30,7 @@ export default function AuthDialog({ auth, open, onClose }) {
   const handleSubmit = async (event) => {
     event.preventDefault();
     if (!email.trim() || !password) {
-      setLocalError('Enter email and password.');
+      setLocalError('Enter your email or username and password.');
       return;
     }
 
@@ -122,16 +122,16 @@ export default function AuthDialog({ auth, open, onClose }) {
           )}
 
           <label className="auth-field">
-            <span>Email</span>
+            <span>{isRegisterMode ? 'Email' : 'Email or username'}</span>
             <input
-              type="email"
+              type={isRegisterMode ? 'email' : 'text'}
               value={email}
               onChange={(event) => {
                 setEmail(event.target.value);
                 setLocalError('');
               }}
               autoComplete="username"
-              placeholder="you@example.com"
+              placeholder={isRegisterMode ? 'you@example.com' : 'you@example.com or admin-name'}
               disabled={auth.isBusy}
             />
           </label>

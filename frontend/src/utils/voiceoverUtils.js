@@ -1,5 +1,5 @@
 import { apiFetch } from './runtimeConfig';
-import { getAuthRequestHeaders } from './authClient';
+import { getAuthRequestHeaders, updateStoredAuthCredits } from './authClient';
 import { jsonToSrt } from './subtitleUtils';
 
 function normalizeErrorMessage(message, fallbackMessage) {
@@ -168,6 +168,10 @@ export async function createVoiceoverFromSubtitles(subtitles, onProgress) {
   }
 
   const startData = await startResponse.json();
+  const nextCreditBalance = Number(startData.creditBalance);
+  if (Number.isFinite(nextCreditBalance)) {
+    updateStoredAuthCredits(nextCreditBalance);
+  }
   const requestId = startData.request_id || startData.requestId;
 
   if (!requestId) {

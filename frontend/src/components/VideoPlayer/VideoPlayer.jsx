@@ -79,6 +79,7 @@ export default function VideoPlayer({
   activeSidebarSection,
   onToggleSidebarSection,
   onCloseSidebarSection,
+  hideWatermark = false,
 }) {
   const [isPlaying, setIsPlaying] = useState(false);
   const [duration, setDuration] = useState(0);
@@ -338,6 +339,7 @@ export default function VideoPlayer({
             onPause={handlePause}
             onEnded={handleEnded}
             onTogglePlayback={handlePlayPause}
+            hideWatermark={hideWatermark}
           />
         </div>
       </div>

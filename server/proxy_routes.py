@@ -1,16 +1,25 @@
 from flask import Response, jsonify, request
 import io
-import json
-import os
 import requests
-import time
 from urllib.parse import urlparse
 
 try:
     from auth_routes import require_access_token
-    from request_store import RequestStoreError, get_request_record, save_request_record
+    from auth_store import AuthStoreError, InsufficientCreditsError, debit_user_credits, refund_user_credits
+    from proxy_route_helpers import (
+        build_json_success_response,
+        build_local_translation_response,
+        build_proxy_response,
+        build_vbee_router_url,
+        first_payload_value,
+        get_claim_user_id,
+        read_response_payload,
+        require_request_owner,
+        save_server_request,
+        should_use_local_translation_fallback,
+        sync_server_request_status,
+    )
     from translation_fallback import (
-        create_local_translation_job,
         get_local_translation_download,
         get_local_translation_status,
         is_local_translation_job,
@@ -18,9 +27,21 @@ try:
     )
 except ImportError:
     from .auth_routes import require_access_token
-    from .request_store import RequestStoreError, get_request_record, save_request_record
+    from .auth_store import AuthStoreError, InsufficientCreditsError, debit_user_credits, refund_user_credits
+    from .proxy_route_helpers import (
+        build_json_success_response,
+        build_local_translation_response,
+        build_proxy_response,
+        build_vbee_router_url,
+        first_payload_value,
+        get_claim_user_id,
+        read_response_payload,
+        require_request_owner,
+        save_server_request,
+        should_use_local_translation_fallback,
+        sync_server_request_status,
+    )
     from .translation_fallback import (
-        create_local_translation_job,
         get_local_translation_download,
         get_local_translation_status,
         is_local_translation_job,
@@ -29,143 +50,47 @@ except ImportError:
 
 WHISPER_API_URL = "http://localhost:8081/api/transcriptions"
 LLM_SUBTRANS_API_URL = "http://localhost:8090/api"
-VBEE_ROUTER_API_URL = os.environ.get('VBEE_ROUTER_API_URL', 'http://localhost:3020').rstrip('/')
+TRANSCRIPTION_CREDIT_COST = 20
+TRANSLATION_CREDIT_COST = 100
+VOICEOVER_CREDIT_COST = 200
 
 
-def build_vbee_router_url(path):
-    return f"{VBEE_ROUTER_API_URL}/public/{path.lstrip('/')}"
+def auth_store_error_response():
+    return jsonify({'error': 'Authentication database is unavailable'}), 503
 
 
-def build_proxy_response(response, fallback_message):
-    payload = response.content
-    if payload:
-        return Response(
-            payload,
-            status=response.status_code,
-            content_type=response.headers.get('Content-Type', 'application/json')
-        )
-
-    return jsonify({'error': fallback_message}), response.status_code
+def build_credit_error_response(error, action_label):
+    return jsonify({
+        'error': f'Not enough credits to {action_label}',
+        'availableCredits': error.available_credits,
+        'creditBalance': error.available_credits,
+        'requiredCredits': error.required_credits,
+    }), 402
 
 
-def should_use_local_translation_fallback(response=None, error=None):
-    if error is not None:
-        return True
-
-    if response is None:
-        return False
-
-    response_text = (response.text or '').lower()
-    return response.status_code >= 500 \
-        or response.status_code == 503 \
-        or 'managed worker' in response_text \
-        or 'api key' in response_text
-
-
-def get_claim_user_id(claims):
-    return str(claims.get('sub') or '').strip()
-
-
-def read_response_payload(response):
+def charge_user_credits_or_error(claims, credit_cost, action_label, change_type, details=None):
     try:
-        return response.json()
-    except (ValueError, json.JSONDecodeError):
-        return None
+        return debit_user_credits(
+            get_claim_user_id(claims),
+            credit_cost,
+            change_type=change_type,
+            note=action_label,
+            details=details,
+        ), None
+    except InsufficientCreditsError as error:
+        return None, build_credit_error_response(error, action_label)
+    except AuthStoreError:
+        return None, auth_store_error_response()
 
 
-def first_payload_value(payload, keys):
-    if not isinstance(payload, dict):
-        return ''
-    for key in keys:
-        if key not in payload:
-            continue
-        value = payload.get(key)
-        if value is not None and str(value).strip() != '':
-            return str(value)
-    return ''
-
-
-def save_server_request(request_id, user_id, request_type, provider, **metadata):
-    if not request_id:
-        return None
-    now = time.time()
-    try:
-        save_request_record({
-            'request_id': request_id,
-            'user_id': user_id,
-            'request_type': request_type,
-            'provider': provider,
-            'status': metadata.get('status') or 'running',
-            'source_file_name': metadata.get('source_file_name'),
-            'target_language': metadata.get('target_language'),
-            'output_file_name': metadata.get('output_file_name'),
-            'details': metadata.get('details') or {},
-            'created_at': now,
-            'updated_at': now,
-        })
-        return None
-    except RequestStoreError:
-        return jsonify({'error': 'Request database is unavailable'}), 503
-
-
-def normalize_server_request_status(raw_status, request_type):
-    status = str(raw_status or '').strip().lower()
-    if request_type == 'transcription' and status == '2':
-        return 'success'
-    if status in {'2', 'success', 'succeeded', 'complete', 'completed', 'finished', 'done'}:
-        return 'success'
-    if status in {'-1', 'failed', 'failure', 'error', 'errored', 'cancelled', 'canceled'}:
-        return 'failed'
-    return 'running'
-
-
-def sync_server_request_status(stored_request, response_payload, request_type):
-    raw_status = first_payload_value(response_payload, ('status', 'state', 'jobStatus', 'taskStatus'))
-    if not raw_status:
-        return None
-
-    details = dict(stored_request.get('details') or {})
-    details['providerStatus'] = raw_status
-    if isinstance(response_payload, dict):
-        details['hasDownloadUrl'] = bool(response_payload.get('download_url') or response_payload.get('downloadUrl'))
+def refund_credits_if_needed(user_id, credit_cost, change_type, note, details=None):
+    if not user_id or credit_cost <= 0:
+        return
 
     try:
-        save_request_record({
-            'request_id': stored_request['request_id'],
-            'user_id': stored_request['user_id'],
-            'request_type': stored_request.get('request_type') or request_type,
-            'provider': stored_request.get('provider') or '',
-            'status': normalize_server_request_status(raw_status, request_type),
-            'source_file_name': stored_request.get('source_file_name'),
-            'target_language': stored_request.get('target_language'),
-            'output_file_name': first_payload_value(response_payload, ('outputFileName', 'output_file_name', 'fileName'))
-                or stored_request.get('output_file_name'),
-            'details': details,
-            'created_at': stored_request.get('created_at') or time.time(),
-            'updated_at': time.time(),
-        })
-        return None
-    except RequestStoreError:
-        return jsonify({'error': 'Request database is unavailable'}), 503
-
-
-def require_request_owner(request_id, claims):
-    try:
-        stored_request = get_request_record(request_id)
-    except RequestStoreError:
-        return None, (jsonify({'error': 'Request database is unavailable'}), 503)
-
-    if not stored_request or stored_request.get('user_id') != get_claim_user_id(claims):
-        return None, (jsonify({'error': 'Request not found'}), 404)
-
-    return stored_request, None
-
-
-def build_local_translation_response(file_bytes, file_name, target_language, user_id):
-    try:
-        return jsonify(create_local_translation_job(file_bytes, file_name, target_language, user_id)), 202
-    except RequestStoreError:
-        return jsonify({'error': 'Translation request database is unavailable'}), 503
+        refund_user_credits(user_id, credit_cost, change_type=change_type, note=note, details=details)
+    except AuthStoreError as error:
+        print(f'Unable to refund credits after failed request: {error}')
 
 
 def register_proxy_routes(app):
@@ -185,15 +110,34 @@ def register_proxy_routes(app):
             'language': 'auto',
             'device': 'cpu'
         }
+        user_id = get_claim_user_id(claims)
+        charged_user, charge_error = charge_user_credits_or_error(
+            claims,
+            TRANSCRIPTION_CREDIT_COST,
+            'generate original subtitles',
+            'transcription_charge',
+            details={'feature': 'transcription'},
+        )
+        if charge_error:
+            return charge_error
 
         try:
             response = requests.post(WHISPER_API_URL, files=files, data=data)
             response_payload = read_response_payload(response)
             if response.ok:
                 request_id = first_payload_value(response_payload, ('id', 'jobId', 'requestId', 'request_id'))
+                if not request_id:
+                    refund_credits_if_needed(
+                        user_id,
+                        TRANSCRIPTION_CREDIT_COST,
+                        'transcription_refund',
+                        'Refunded subtitle generation credits',
+                        {'feature': 'transcription'},
+                    )
+                    return jsonify({'error': 'Whisper did not return a job ID'}), 502
                 request_error = save_server_request(
                     request_id,
-                    get_claim_user_id(claims),
+                    user_id,
                     'transcription',
                     'whisper',
                     source_file_name=file.filename,
@@ -201,8 +145,29 @@ def register_proxy_routes(app):
                 )
                 if request_error:
                     return request_error
+                return build_json_success_response(
+                    response_payload,
+                    response.status_code,
+                    creditBalance=charged_user.get('credits'),
+                    creditCost=TRANSCRIPTION_CREDIT_COST,
+                )
+
+            refund_credits_if_needed(
+                user_id,
+                TRANSCRIPTION_CREDIT_COST,
+                'transcription_refund',
+                'Refunded subtitle generation credits',
+                {'feature': 'transcription'},
+            )
             return build_proxy_response(response, 'Failed to communicate with Whisper API')
         except requests.RequestException as error:
+            refund_credits_if_needed(
+                user_id,
+                TRANSCRIPTION_CREDIT_COST,
+                'transcription_refund',
+                'Refunded subtitle generation credits',
+                {'feature': 'transcription'},
+            )
             print(f"Whisper API error: {error}")
             return jsonify({'error': 'Failed to communicate with Whisper API'}), 502
 
@@ -246,19 +211,54 @@ def register_proxy_routes(app):
 
         files = {'subtitle_file': (file.filename, io.BytesIO(file_bytes), file.mimetype or 'text/plain')}
         data = {'target_language': target_language}
+        user_id = get_claim_user_id(claims)
+        charged_user, charge_error = charge_user_credits_or_error(
+            claims,
+            TRANSLATION_CREDIT_COST,
+            'translate subtitles',
+            'translation_charge',
+            details={'feature': 'translation'},
+        )
+        if charge_error:
+            return charge_error
 
         try:
             response = requests.post(f"{LLM_SUBTRANS_API_URL}/translate", files=files, data=data)
             if should_use_local_translation_fallback(response=response):
-                return build_local_translation_response(file_bytes, file.filename, target_language, get_claim_user_id(claims))
+                local_response = build_local_translation_response(
+                    file_bytes,
+                    file.filename,
+                    target_language,
+                    user_id,
+                    creditBalance=charged_user.get('credits'),
+                    creditCost=TRANSLATION_CREDIT_COST,
+                )
+                if local_response[1] >= 400:
+                    refund_credits_if_needed(
+                        user_id,
+                        TRANSLATION_CREDIT_COST,
+                        'translation_refund',
+                        'Refunded translation credits',
+                        {'feature': 'translation'},
+                    )
+                return local_response
 
             response_payload = read_response_payload(response)
             if response.ok:
                 request_id = first_payload_value(response_payload, ('requestId', 'request_id', 'id', 'jobId'))
                 output_file_name = first_payload_value(response_payload, ('outputFileName', 'output_file_name', 'fileName'))
+                if not request_id:
+                    refund_credits_if_needed(
+                        user_id,
+                        TRANSLATION_CREDIT_COST,
+                        'translation_refund',
+                        'Refunded translation credits',
+                        {'feature': 'translation'},
+                    )
+                    return jsonify({'error': 'Translation service did not return a request ID'}), 502
                 request_error = save_server_request(
                     request_id,
-                    get_claim_user_id(claims),
+                    user_id,
                     'translation',
                     'llm-subtrans',
                     source_file_name=file.filename,
@@ -268,10 +268,40 @@ def register_proxy_routes(app):
                 )
                 if request_error:
                     return request_error
+                return build_json_success_response(
+                    response_payload,
+                    response.status_code,
+                    creditBalance=charged_user.get('credits'),
+                    creditCost=TRANSLATION_CREDIT_COST,
+                )
+
+            refund_credits_if_needed(
+                user_id,
+                TRANSLATION_CREDIT_COST,
+                'translation_refund',
+                'Refunded translation credits',
+                {'feature': 'translation'},
+            )
             return build_proxy_response(response, 'Failed to communicate with LLM-Subtrans API')
         except requests.RequestException as error:
             print(f"LLM-Subtrans API error: {error}")
-            return build_local_translation_response(file_bytes, file.filename, target_language, get_claim_user_id(claims))
+            local_response = build_local_translation_response(
+                file_bytes,
+                file.filename,
+                target_language,
+                user_id,
+                creditBalance=charged_user.get('credits'),
+                creditCost=TRANSLATION_CREDIT_COST,
+            )
+            if local_response[1] >= 400:
+                refund_credits_if_needed(
+                    user_id,
+                    TRANSLATION_CREDIT_COST,
+                    'translation_refund',
+                    'Refunded translation credits',
+                    {'feature': 'translation'},
+                )
+            return local_response
 
     @app.route('/api/translation/status/<string:job_id>', methods=['GET'])
     def get_translation_status(job_id):
@@ -363,6 +393,16 @@ def register_proxy_routes(app):
             return jsonify({'error': 'Subtitle file is empty'}), 400
 
         files = {'file': (file.filename, io.BytesIO(file_bytes), file.mimetype or 'text/plain')}
+        user_id = get_claim_user_id(claims)
+        charged_user, charge_error = charge_user_credits_or_error(
+            claims,
+            VOICEOVER_CREDIT_COST,
+            'generate voiceover',
+            'voiceover_charge',
+            details={'feature': 'voiceover'},
+        )
+        if charge_error:
+            return charge_error
 
         try:
             response = requests.post(
@@ -373,9 +413,18 @@ def register_proxy_routes(app):
             response_payload = read_response_payload(response)
             if response.ok:
                 request_id = first_payload_value(response_payload, ('request_id', 'requestId', 'id'))
+                if not request_id:
+                    refund_credits_if_needed(
+                        user_id,
+                        VOICEOVER_CREDIT_COST,
+                        'voiceover_refund',
+                        'Refunded voiceover credits',
+                        {'feature': 'voiceover'},
+                    )
+                    return jsonify({'error': 'Vbee router did not return a request_id'}), 502
                 request_error = save_server_request(
                     request_id,
-                    get_claim_user_id(claims),
+                    user_id,
                     'voiceover',
                     'vbee-router',
                     source_file_name=file.filename,
@@ -383,8 +432,29 @@ def register_proxy_routes(app):
                 )
                 if request_error:
                     return request_error
+                return build_json_success_response(
+                    response_payload,
+                    response.status_code,
+                    creditBalance=charged_user.get('credits'),
+                    creditCost=VOICEOVER_CREDIT_COST,
+                )
+
+            refund_credits_if_needed(
+                user_id,
+                VOICEOVER_CREDIT_COST,
+                'voiceover_refund',
+                'Refunded voiceover credits',
+                {'feature': 'voiceover'},
+            )
             return build_proxy_response(response, 'Failed to communicate with Vbee Router')
         except requests.RequestException as error:
+            refund_credits_if_needed(
+                user_id,
+                VOICEOVER_CREDIT_COST,
+                'voiceover_refund',
+                'Refunded voiceover credits',
+                {'feature': 'voiceover'},
+            )
             print(f"Vbee Router error: {error}")
             return jsonify({'error': 'Failed to communicate with Vbee Router'}), 502
 

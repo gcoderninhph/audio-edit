@@ -4,52 +4,36 @@ const WATERMARK_SPEED = 0.32
 const WATERMARK_INITIAL_POSITION = Object.freeze({ x: 0.16, y: 0.22 })
 const WATERMARK_INITIAL_ANGLE = 0.66
 const MAX_WATERMARK_SEGMENTS = 2000
-const MIN_BOUNCE_ANGLE = Math.PI / 9
 const EPSILON = 0.000001
 
 function clamp(value, min = 0, max = 1) {
   return Math.min(max, Math.max(min, Number(value) || 0))
 }
 
-function pseudoRandom(seed) {
-  const raw = Math.sin((seed + 1) * 12.9898) * 43758.5453
-  return raw - Math.floor(raw)
-}
-
 function lerp(start, end, progress) {
   return start + ((end - start) * progress)
 }
 
-function chooseBetween(startAngle, endAngle, seed) {
-  return startAngle + ((endAngle - startAngle) * pseudoRandom(seed))
+function normalizeAngle(angle) {
+  const fullTurn = Math.PI * 2
+  const normalized = angle % fullTurn
+  return normalized < 0 ? normalized + fullTurn : normalized
 }
 
-function chooseBounceAngle(edge, index) {
-  const seed = index + (edge.includes('right') ? 17 : 0) + (edge.includes('bottom') ? 31 : 0)
-  const min = MIN_BOUNCE_ANGLE
-  const max = (Math.PI / 2) - MIN_BOUNCE_ANGLE
+function reflectAngle(angle, hitX, hitY) {
+  const velocityX = Math.cos(angle)
+  const velocityY = Math.sin(angle)
+  const reflectedX = hitX ? -velocityX : velocityX
+  const reflectedY = hitY ? -velocityY : velocityY
 
-  if (edge === 'top-left') return chooseBetween(min, max, seed)
-  if (edge === 'top-right') return chooseBetween(Math.PI - max, Math.PI - min, seed)
-  if (edge === 'bottom-left') return chooseBetween(-max, -min, seed)
-  if (edge === 'bottom-right') return chooseBetween(Math.PI + min, Math.PI + max, seed)
-  if (edge === 'left') return chooseBetween(-max, max, seed)
-  if (edge === 'right') return chooseBetween(Math.PI - max, Math.PI + max, seed)
-  if (edge === 'top') return chooseBetween(min, Math.PI - min, seed)
-  return chooseBetween(Math.PI + min, (Math.PI * 2) - min, seed)
-}
-
-function getEdgeName(x, y, hitX, hitY) {
-  if (hitX && hitY) {
-    const horizontal = x <= EPSILON ? 'left' : 'right'
-    const vertical = y <= EPSILON ? 'top' : 'bottom'
-    return `${vertical}-${horizontal}`
+  if (Math.abs(reflectedX) < EPSILON && Math.abs(reflectedY) < EPSILON) {
+    return normalizeAngle(angle)
   }
-  if (hitX) return x <= EPSILON ? 'left' : 'right'
-  return y <= EPSILON ? 'top' : 'bottom'
+
+  return normalizeAngle(Math.atan2(reflectedY, reflectedX))
 }
 
-function getNextSegment(state, index) {
+function getNextSegment(state) {
   const vx = Math.cos(state.angle) * WATERMARK_SPEED
   const vy = Math.sin(state.angle) * WATERMARK_SPEED
   const timeToX = vx > EPSILON
@@ -81,7 +65,7 @@ function getNextSegment(state, index) {
       time: state.time + duration,
       x: nextX,
       y: nextY,
-      angle: chooseBounceAngle(getEdgeName(nextX, nextY, hitX, hitY), index),
+      angle: reflectAngle(state.angle, hitX, hitY),
     },
   }
 }
@@ -96,7 +80,7 @@ function buildSegmentsUntil(endTime) {
   }
 
   for (let index = 0; state.time < endTime && index < MAX_WATERMARK_SEGMENTS; index += 1) {
-    const result = getNextSegment(state, index)
+    const result = getNextSegment(state)
     segments.push(result.segment)
     state = result.nextState
   }

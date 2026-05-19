@@ -1,5 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { completeTemporaryAdminSetup } from '../utils/adminClient';
 import {
+  AUTH_SESSION_CHANGED_EVENT,
   clearAuthSession,
   getStoredAuthSession,
   isRefreshTokenExpired,
@@ -101,6 +103,19 @@ export function useAuthSession() {
     }
   }, [clearSession, persistSession]);
 
+  const completeAdminSetup = useCallback(async ({ username, password, displayName }) => {
+    setStatus('authenticating');
+    setError('');
+    try {
+      const nextSession = await completeTemporaryAdminSetup({ username, password, displayName });
+      persistSession(nextSession);
+      return nextSession;
+    } catch (setupError) {
+      setError(setupError.message || 'Admin setup failed.');
+      return null;
+    }
+  }, [persistSession]);
+
   const logout = useCallback(async () => {
     const refreshToken = session?.refreshToken;
     clearSession();
@@ -122,19 +137,37 @@ export function useAuthSession() {
     return () => window.clearTimeout(refreshTimer);
   }, [clearSession, refreshSession, session]);
 
+  useEffect(() => {
+    if (typeof window === 'undefined') return undefined;
+
+    const handleSessionChanged = (event) => {
+      const nextSession = event.detail || null;
+      setSession(nextSession);
+      setStatus(nextSession ? 'authenticated' : 'anonymous');
+    };
+
+    window.addEventListener(AUTH_SESSION_CHANGED_EVENT, handleSessionChanged);
+    return () => window.removeEventListener(AUTH_SESSION_CHANGED_EVENT, handleSessionChanged);
+  }, []);
+
   const value = useMemo(() => ({
     accessToken: session?.accessToken || '',
+    credits: session?.user?.credits ?? 0,
     error,
+    isAdmin: session?.user?.role === 'admin',
     isAuthenticated: Boolean(session?.accessToken && session?.user),
     isBusy: status === 'authenticating' || status === 'refreshing',
+    isTemporaryAdmin: Boolean(session?.user?.isTemporaryAdmin),
     login,
     logout,
+    completeAdminSetup,
+    requiresAdminSetup: Boolean(session?.user?.mustSetupAdmin),
     register,
     refreshSession,
     status,
     user: session?.user || null,
     clearError,
-  }), [clearError, error, login, logout, register, refreshSession, session, status]);
+  }), [clearError, completeAdminSetup, error, login, logout, register, refreshSession, session, status]);
 
   return value;
 }

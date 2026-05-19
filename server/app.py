@@ -3,16 +3,23 @@ from flask_cors import CORS
 import os
 
 try:
+    from admin_routes import register_admin_routes
+    from admin_web_routes import register_admin_web_routes
     from auth_routes import register_auth_routes
+    from logging_setup import configure_backend_logging
     from proxy_routes import register_proxy_routes
 except ImportError:
+    from .admin_routes import register_admin_routes
+    from .admin_web_routes import register_admin_web_routes
     from .auth_routes import register_auth_routes
+    from .logging_setup import configure_backend_logging
     from .proxy_routes import register_proxy_routes
 
 SERVER_PORT = int(os.environ.get('SERVER_PORT', '5000'))
 
 app = Flask(__name__)
 CORS(app)
+configure_backend_logging(app)
 
 
 @app.after_request
@@ -30,6 +37,8 @@ def healthcheck():
     return jsonify({'status': 'ok'})
 
 register_auth_routes(app)
+register_admin_routes(app)
+register_admin_web_routes(app)
 register_proxy_routes(app)
 
 

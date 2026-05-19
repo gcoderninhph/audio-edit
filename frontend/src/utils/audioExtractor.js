@@ -1,5 +1,5 @@
 import { apiFetch } from './runtimeConfig';
-import { getAuthRequestHeaders } from './authClient';
+import { getAuthRequestHeaders, updateStoredAuthCredits } from './authClient';
 import { materializeVideoFile } from './projectStorage';
 
 async function readApiErrorMessage(response, fallbackMessage) {
@@ -57,6 +57,10 @@ export async function transcribeVideo(ffmpeg, videoFile, duration, onProgress, o
 
     if (!startRes.ok) throw new Error(await readApiErrorMessage(startRes, 'Unable to start the Whisper job'));
     const startData = await startRes.json();
+    const nextCreditBalance = Number(startData.creditBalance);
+    if (Number.isFinite(nextCreditBalance)) {
+      updateStoredAuthCredits(nextCreditBalance);
+    }
     const jobId = startData.id;
 
     if (!jobId) throw new Error('Whisper did not return a job ID');
