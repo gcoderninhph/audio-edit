@@ -1,6 +1,6 @@
 import { apiFetch } from './runtimeConfig';
 
-const CREDIT_PACK_TYPES = new Set(['addCredit', 'creditsAndPremiumPack']);
+const CREDIT_PACK_TYPES = new Set(['addCredit']);
 const PREMIUM_PACK_TYPES = new Set(['premiumSubscribe', 'creditsAndPremiumPack']);
 
 function normalizeCurrency(value) {

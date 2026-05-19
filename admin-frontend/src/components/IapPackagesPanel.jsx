@@ -188,7 +188,7 @@ export default function IapPackagesPanel({ onHeaderActionsChange }) {
               <th>Pack</th>
               <th>Pack type</th>
               <th>Price</th>
-              <th>Recommend</th>
+              <th className="iap-center-cell">Recommend</th>
               <th>Status</th>
               <th>Updated</th>
               <th>Actions</th>
@@ -211,7 +211,7 @@ export default function IapPackagesPanel({ onHeaderActionsChange }) {
                   <strong>{formatCurrency(packageRecord.price, packageRecord.currency)}</strong>
                   <small>{packageRecord.currency}</small>
                 </td>
-                <td>
+                <td className="iap-center-cell">
                   {packageRecord.isRecommended ? <Check size={16} className="iap-boolean-indicator iap-boolean-indicator-true" /> : <span className="iap-boolean-indicator iap-boolean-indicator-false">-</span>}
                 </td>
                 <td>

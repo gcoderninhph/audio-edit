@@ -124,7 +124,7 @@ def register_iap_routes(app):
         try:
             api_key_record = validate_iap_hook_request(request.method, request.headers)
             history_record = record_iap_bank_hook_history(api_key_record, _extract_payment_hook_payload(request))
-            return jsonify({'ok': True, 'apiKeyId': api_key_record['id'], 'historyId': history_record['id'], 'received': True})
+            return jsonify({'historyId': history_record['id'], 'success': True})
         except IapApiKeyNotFoundError:
             return jsonify({'error': 'Invalid payment hook API key'}), 401
         except IapApiKeyValidationError as error:

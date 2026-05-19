@@ -212,6 +212,47 @@
   color: var(--text-secondary);
 }
 
+.iap-center-cell {
+  text-align: center !important;
+}
+
+.iap-pack-function-table {
+  table-layout: fixed;
+}
+
+.iap-pack-function-table th:nth-child(1),
+.iap-pack-function-table td:nth-child(1) {
+  width: 28%;
+}
+
+.iap-pack-function-table th:nth-child(2),
+.iap-pack-function-table td:nth-child(2) {
+  width: 20%;
+}
+
+.iap-pack-function-table th:nth-child(3),
+.iap-pack-function-table td:nth-child(3) {
+  width: 38%;
+}
+
+.iap-pack-function-table th:nth-child(4),
+.iap-pack-function-table td:nth-child(4) {
+  width: 14%;
+}
+
+.iap-pack-function-pack-cell strong {
+  display: block;
+}
+
+.iap-pack-function-pack-cell small,
+.iap-pack-function-benefits-cell {
+  overflow-wrap: anywhere;
+}
+
+.iap-pack-function-actions-cell {
+  text-align: right !important;
+}
+
 @media (max-width: 1100px) {
   .iap-tabs,
   .iap-config-grid,

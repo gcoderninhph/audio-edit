@@ -24,7 +24,7 @@ const NAVIGATION_ITEMS = [
 
 export default function AdminLayout({ routeName, title, user, children, headerActions, onNavigate, onLogout }) {
   const [isMenuOpen, setIsMenuOpen] = useState(false)
-  const hasSidebar = true
+  const hasSidebar = Boolean(user)
   const sidebarFooterLabel = user ? 'Signed in as admin' : 'Sign in to continue'
 
   const handleLogout = async () => {

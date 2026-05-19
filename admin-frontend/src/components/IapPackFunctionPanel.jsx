@@ -165,7 +165,7 @@ export default function IapPackFunctionPanel({ onHeaderActionsChange }) {
       {error && <div className="notice notice-error">{error}</div>}
 
       <div className="table-wrap">
-        <table className="admin-table">
+        <table className="admin-table iap-pack-function-table">
           <thead><tr><th>Pack</th><th>Pack type</th><th>Benefits</th><th>Actions</th></tr></thead>
           <tbody>
             {functions.map((functionRecord) => {
@@ -173,10 +173,10 @@ export default function IapPackFunctionPanel({ onHeaderActionsChange }) {
               const packType = normalizeIapPackType(packageRecord?.packType)
               return (
                 <tr key={functionRecord.id}>
-                  <td><strong>{packageRecord?.name || functionRecord.packIapId}</strong><small>{functionRecord.packIapId}</small></td>
+                  <td className="iap-pack-function-pack-cell"><strong>{packageRecord?.name || functionRecord.packIapId}</strong><small>{functionRecord.packIapId}</small></td>
                   <td>{getIapPackTypeLabel(packType)}</td>
-                  <td>{formatPackFunctionSummary(packType, functionRecord)}</td>
-                  <td>
+                  <td className="iap-pack-function-benefits-cell">{formatPackFunctionSummary(packType, functionRecord)}</td>
+                  <td className="iap-pack-function-actions-cell">
                     <div className="iap-action-group" role="group" aria-label={`Pack function actions for ${packageRecord?.name || functionRecord.packIapId}`}>
                       <button
                         type="button"
