@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { clearStoredSession, getStoredSession, resolveAdminDestination, syncCurrentUser } from './api/adminApi'
 import AdminLayout from './components/AdminLayout'
+import IapBankHookHistoryPage from './components/IapBankHookHistoryPage'
 import IapPage from './components/IapPage'
 import LoginPage from './components/LoginPage'
 import ManagePage from './components/ManagePage'
@@ -12,6 +13,7 @@ function parseAdminRoute(pathname = window.location.pathname) {
   const normalizedPath = pathname.replace(/\/+$/, '') || '/admin'
   if (normalizedPath === '/admin' || normalizedPath === '/admin/login') return { name: 'login' }
   if (normalizedPath === '/admin/setup') return { name: 'setup' }
+  if (normalizedPath === '/admin/iap/bank-hook-history') return { name: 'bank-hook-history' }
   if (normalizedPath === '/admin/iap') return { name: 'iap' }
   if (normalizedPath === '/admin/manage' || normalizedPath === '/console') return { name: 'manage' }
 
@@ -90,6 +92,7 @@ function App() {
 
   const layoutTitle = useMemo(() => {
     if (route.name === 'setup') return 'Admin setup'
+    if (route.name === 'bank-hook-history') return 'Bank hook history'
     if (route.name === 'iap') return 'IAP packages'
     if (route.name === 'user-detail') return 'User detail'
     if (route.name === 'manage') return 'User management'
@@ -117,7 +120,8 @@ function App() {
     <AdminLayout routeName={route.name} title={layoutTitle} user={signedInUser} headerActions={headerActions} onNavigate={navigate} onLogout={handleLogout}>
       {notice && <div className="notice notice-info">{notice}</div>}
       {route.name === 'setup' && <SetupPage onComplete={handleSessionUpdate} />}
-      {route.name === 'iap' && <IapPage onHeaderActionsChange={setHeaderActions} />}
+      {route.name === 'iap' && <IapPage onHeaderActionsChange={setHeaderActions} onNavigate={navigate} />}
+      {route.name === 'bank-hook-history' && <IapBankHookHistoryPage onHeaderActionsChange={setHeaderActions} onNavigate={navigate} />}
       {route.name === 'manage' && <ManagePage onNavigate={navigate} onHeaderActionsChange={setHeaderActions} />}
       {route.name === 'user-detail' && <UserDetailPage userId={route.userId} onNavigate={navigate} onHeaderActionsChange={setHeaderActions} />}
       {route.name === 'login' && <LoginPage onLogin={handleSessionUpdate} initialNotice={notice} />}

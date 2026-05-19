@@ -1,4 +1,4 @@
-import { Plus, RefreshCw, Trash2 } from 'lucide-react'
+import { History, Plus, RefreshCw, Trash2 } from 'lucide-react'
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { createAdminIapApiKey, deleteAdminIapApiKey, fetchAdminIapApiKeys } from '../api/adminApi'
 import { formatDateTime } from '../utils/format'
@@ -10,7 +10,7 @@ const DEFAULT_FORM_STATE = {
   name: '',
 }
 
-export default function IapApiKeyPanel({ onHeaderActionsChange }) {
+export default function IapApiKeyPanel({ onHeaderActionsChange, onNavigate }) {
   const [error, setError] = useState('')
   const [formState, setFormState] = useState(DEFAULT_FORM_STATE)
   const [isDialogOpen, setIsDialogOpen] = useState(false)
@@ -96,6 +96,9 @@ export default function IapApiKeyPanel({ onHeaderActionsChange }) {
       <div className="section-toolbar">
         <h2>API keys</h2>
         <div className="toolbar-actions">
+          <button type="button" className="ghost-button compact" onClick={() => onNavigate?.('/admin/iap/bank-hook-history')}>
+            <History size={17} /> History
+          </button>
           <button type="button" className="primary-button compact" onClick={openCreateDialog} disabled={isSaving}>
             <Plus size={17} /> Add new
           </button>

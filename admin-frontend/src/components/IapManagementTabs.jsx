@@ -13,7 +13,7 @@ const TABS = [
   { key: 'sale', label: 'Sale', meta: 'Promotions', icon: BadgePercent },
 ]
 
-export default function IapManagementTabs({ onHeaderActionsChange }) {
+export default function IapManagementTabs({ onHeaderActionsChange, onNavigate }) {
   const [activeTab, setActiveTab] = useState('packages')
 
   return (
@@ -33,7 +33,7 @@ export default function IapManagementTabs({ onHeaderActionsChange }) {
       </div>
       <div className="iap-tab-content">
         {activeTab === 'packages' && <IapPackagesPanel onHeaderActionsChange={onHeaderActionsChange} />}
-        {activeTab === 'api-key' && <IapApiKeyPanel onHeaderActionsChange={onHeaderActionsChange} />}
+        {activeTab === 'api-key' && <IapApiKeyPanel onHeaderActionsChange={onHeaderActionsChange} onNavigate={onNavigate} />}
         {activeTab === 'pack-function' && <IapPackFunctionPanel onHeaderActionsChange={onHeaderActionsChange} />}
         {activeTab === 'sale' && <IapSalesPanel onHeaderActionsChange={onHeaderActionsChange} />}
       </div>

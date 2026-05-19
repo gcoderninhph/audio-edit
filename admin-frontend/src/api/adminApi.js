@@ -187,6 +187,12 @@ export async function deleteAdminIapApiKey(keyId) {
   return response.data || {}
 }
 
+export async function fetchAdminIapBankHookHistory({ page = 1, pageSize = 20 } = {}) {
+  const response = await requestJson(`/api/admin/iap/bank-hook-history?page=${page}&pageSize=${pageSize}`)
+  if (!response.ok) throw new Error(response.data?.error || 'Unable to load bank hook history.')
+  return response.data || {}
+}
+
 export async function fetchAdminIapPackFunctions() {
   const response = await requestJson('/api/admin/iap/pack-functions')
   if (!response.ok) throw new Error(response.data?.error || 'Unable to load IAP pack functions.')

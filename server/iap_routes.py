@@ -2,6 +2,7 @@ from flask import jsonify, request
 
 try:
     from auth_routes import AuthStoreError, require_admin_access
+    from iap_bank_hook_history_store import list_iap_bank_hook_history_page, record_iap_bank_hook_history
     from iap_api_key_store import (
         IapApiKeyNotFoundError,
         IapApiKeyValidationError,
@@ -33,6 +34,7 @@ try:
     )
 except ImportError:
     from .auth_routes import AuthStoreError, require_admin_access
+    from .iap_bank_hook_history_store import list_iap_bank_hook_history_page, record_iap_bank_hook_history
     from .iap_api_key_store import (
         IapApiKeyNotFoundError,
         IapApiKeyValidationError,
@@ -87,12 +89,29 @@ def _iap_admin_store_error_response():
     return jsonify({'error': 'IAP admin storage is unavailable'}), 503
 
 
+def _extract_payment_hook_payload(current_request):
+    payload = current_request.get_json(silent=True)
+    if isinstance(payload, dict):
+        return payload
+    if isinstance(payload, list):
+        return {'items': payload}
+    if payload is not None:
+        return {'value': payload}
+    if current_request.form:
+        return current_request.form.to_dict(flat=True)
+    if current_request.args:
+        return current_request.args.to_dict(flat=True)
+    raw_body = (current_request.get_data(cache=True, as_text=True) or '').strip()
+    return {'rawBody': raw_body} if raw_body else {}
+
+
 def register_iap_routes(app):
     @app.route('/api/pay/info', methods=list(PAYMENT_HOOK_METHODS))
     def payment_info_hook_route():
         try:
             api_key_record = validate_iap_hook_request(request.method, request.headers)
-            return jsonify({'ok': True, 'apiKeyId': api_key_record['id'], 'received': True})
+            history_record = record_iap_bank_hook_history(api_key_record, _extract_payment_hook_payload(request))
+            return jsonify({'ok': True, 'apiKeyId': api_key_record['id'], 'historyId': history_record['id'], 'received': True})
         except IapApiKeyNotFoundError:
             return jsonify({'error': 'Invalid payment hook API key'}), 401
         except IapApiKeyValidationError as error:
@@ -211,6 +230,20 @@ def register_iap_routes(app):
             return jsonify({'apiKey': api_key}), 201
         except IapApiKeyValidationError as error:
             return jsonify({'error': str(error)}), 400
+        except AuthStoreError:
+            return _iap_admin_store_error_response()
+
+    @app.route('/api/admin/iap/bank-hook-history', methods=['GET'])
+    def admin_iap_bank_hook_history_route():
+        _claims, auth_error = require_admin_access()
+        if auth_error:
+            return auth_error
+        try:
+            history_page = list_iap_bank_hook_history_page(
+                page=request.args.get('page'),
+                page_size=request.args.get('pageSize'),
+            )
+            return jsonify(history_page)
         except AuthStoreError:
             return _iap_admin_store_error_response()
 
