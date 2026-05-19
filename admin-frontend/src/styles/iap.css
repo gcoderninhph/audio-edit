@@ -195,6 +195,23 @@
   color: #fecaca;
 }
 
+.iap-boolean-indicator {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 16px;
+  min-height: 16px;
+  font-weight: 800;
+}
+
+.iap-boolean-indicator-true {
+  color: #86efac;
+}
+
+.iap-boolean-indicator-false {
+  color: var(--text-secondary);
+}
+
 @media (max-width: 1100px) {
   .iap-tabs,
   .iap-config-grid,

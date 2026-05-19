@@ -5,6 +5,7 @@ import { useAuthSession } from './hooks/useAuthSession';
 import AuthDialog from './components/Auth/AuthDialog';
 import AppHeader from './components/AppShell/AppHeader';
 import AppEditorWorkspace from './components/AppShell/AppEditorWorkspace';
+import CreditPackagesDialog from './components/AppShell/CreditPackagesDialog';
 import PremiumPackagesDialog from './components/AppShell/PremiumPackagesDialog';
 import AdminBootstrapSetup from './components/Admin/AdminBootstrapSetup';
 import AdminConsole from './components/Admin/AdminConsole';
@@ -19,6 +20,8 @@ function App() {
   const [isAdminConsoleOpen, setIsAdminConsoleOpen] = useState(false);
   const [isProjectBrowserOpen, setIsProjectBrowserOpen] = useState(false);
   const [isAuthDialogOpen, setIsAuthDialogOpen] = useState(false);
+  const [creditDialogSourceCode, setCreditDialogSourceCode] = useState('header.dashboard');
+  const [isCreditDialogOpen, setIsCreditDialogOpen] = useState(false);
   const [premiumDialogSourceCode, setPremiumDialogSourceCode] = useState('header.dashboard');
   const [isPremiumDialogOpen, setIsPremiumDialogOpen] = useState(false);
   const { redo, setCurrentTime, undo, videoRef } = editor;
@@ -146,6 +149,11 @@ function App() {
     setIsAuthDialogOpen(true);
   }, [auth]);
 
+  const handleOpenCreditDialog = useCallback((sourceCode = 'header.dashboard') => {
+    setCreditDialogSourceCode(sourceCode);
+    setIsCreditDialogOpen(true);
+  }, []);
+
   const handleOpenPremiumDialog = useCallback((sourceCode = 'header.dashboard') => {
     setPremiumDialogSourceCode(sourceCode);
     setIsPremiumDialogOpen(true);
@@ -153,6 +161,10 @@ function App() {
 
   const handleCloseAuthDialog = useCallback(() => {
     setIsAuthDialogOpen(false);
+  }, []);
+
+  const handleCloseCreditDialog = useCallback(() => {
+    setIsCreditDialogOpen(false);
   }, []);
 
   const handleClosePremiumDialog = useCallback(() => {
@@ -175,6 +187,14 @@ function App() {
       onClose={handleCloseAuthDialog}
     />
   );
+  const creditDialog = (
+    <CreditPackagesDialog
+      auth={auth}
+      locatorCode={creditDialogSourceCode}
+      onClose={handleCloseCreditDialog}
+      open={isCreditDialogOpen}
+    />
+  );
   const premiumDialog = (
     <PremiumPackagesDialog
       auth={auth}
@@ -193,11 +213,13 @@ function App() {
           locatorCode="header.admin-bootstrap"
           locatorTitle="Admin Bootstrap Header"
           onOpenAuthDialog={handleOpenAuthDialog}
+          onOpenCreditDialog={handleOpenCreditDialog}
           onOpenPremiumDialog={handleOpenPremiumDialog}
           title="VideoForge Admin"
         />
         <AdminBootstrapSetup auth={auth} />
         {authDialog}
+        {creditDialog}
         {premiumDialog}
       </div>
     );
@@ -212,6 +234,7 @@ function App() {
           locatorTitle="Admin Console Header"
           onOpenAdminConsole={handleOpenAdminConsole}
           onOpenAuthDialog={handleOpenAuthDialog}
+          onOpenCreditDialog={handleOpenCreditDialog}
           onOpenPremiumDialog={handleOpenPremiumDialog}
           title="VideoForge Admin"
         >
@@ -223,6 +246,7 @@ function App() {
           <AdminConsole />
         </main>
         {authDialog}
+        {creditDialog}
         {premiumDialog}
       </div>
     );
@@ -238,6 +262,7 @@ function App() {
           locatorTitle="Dashboard Header"
           onOpenAdminConsole={handleOpenAdminConsole}
           onOpenAuthDialog={handleOpenAuthDialog}
+          onOpenCreditDialog={handleOpenCreditDialog}
           onOpenPremiumDialog={handleOpenPremiumDialog}
           showPremiumButton
           showClientBadge
@@ -251,6 +276,7 @@ function App() {
           </div>
         </main>
         {authDialog}
+        {creditDialog}
         {premiumDialog}
       </div>
     );
@@ -266,6 +292,7 @@ function App() {
           locatorTitle="Dashboard Header"
           onOpenAdminConsole={handleOpenAdminConsole}
           onOpenAuthDialog={handleOpenAuthDialog}
+          onOpenCreditDialog={handleOpenCreditDialog}
           onOpenPremiumDialog={handleOpenPremiumDialog}
           showPremiumButton
           showClientBadge
@@ -277,6 +304,7 @@ function App() {
           />
         </main>
         {authDialog}
+        {creditDialog}
         {premiumDialog}
       </div>
     );
@@ -291,6 +319,7 @@ function App() {
         locatorTitle="Editor Header"
         onOpenAdminConsole={handleOpenAdminConsole}
         onOpenAuthDialog={handleOpenAuthDialog}
+        onOpenCreditDialog={handleOpenCreditDialog}
         onOpenPremiumDialog={handleOpenPremiumDialog}
         showPremiumButton
       >
@@ -358,6 +387,7 @@ function App() {
         selectedSceneConfigIndex={selectedSceneConfigIndex}
       />
       {authDialog}
+      {creditDialog}
       {premiumDialog}
     </div>
   );

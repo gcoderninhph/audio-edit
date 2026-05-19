@@ -17,21 +17,20 @@ export default function AppHeader({
   locatorTitle,
   onOpenAdminConsole,
   onOpenAuthDialog,
+  onOpenCreditDialog,
   onOpenPremiumDialog,
   showPremiumButton = false,
   showClientBadge = false,
   title = 'VideoForge',
 }) {
   const isPremium = isPremiumActiveForUser(auth.user);
+  const shouldShowPremiumButton = showPremiumButton && auth.isAuthenticated;
   const canOpenPremiumDialog = typeof onOpenPremiumDialog === 'function';
-  const canPromptPremiumLogin = !auth.isAuthenticated && typeof onOpenAuthDialog === 'function';
   const premiumTitle = isPremium
     ? 'Premium active. Click to view premium plans.'
     : canOpenPremiumDialog
       ? 'View premium plans.'
-      : canPromptPremiumLogin
-        ? 'Log in to view premium account status.'
-        : 'Premium is enabled per account by an admin.';
+      : 'Premium is enabled per account by an admin.';
 
   return (
     <header className="app-header dev-locator-host">
@@ -43,11 +42,11 @@ export default function AppHeader({
       </div>
       <div className="header-status">
         {children}
-        {showPremiumButton && (
+        {shouldShowPremiumButton && (
           <button
             type="button"
-            className={`premium-header-button${isPremium ? ' premium-header-button-active' : ''}${canOpenPremiumDialog || canPromptPremiumLogin ? '' : ' premium-header-button-static'}`}
-            onClick={canOpenPremiumDialog ? () => onOpenPremiumDialog(locatorCode) : (canPromptPremiumLogin ? onOpenAuthDialog : undefined)}
+            className={`premium-header-button${isPremium ? ' premium-header-button-active' : ''}${canOpenPremiumDialog ? '' : ' premium-header-button-static'}`}
+            onClick={canOpenPremiumDialog ? () => onOpenPremiumDialog(locatorCode) : undefined}
             title={premiumTitle}
             aria-label={premiumTitle}
             aria-pressed={isPremium}
@@ -60,7 +59,9 @@ export default function AppHeader({
         )}
         <AuthHeaderActions
           auth={auth}
+          headerLocatorCode={locatorCode}
           onOpenAdminConsole={onOpenAdminConsole}
+          onOpenCreditsDialog={onOpenCreditDialog}
           onOpenLogin={onOpenAuthDialog}
         />
       </div>

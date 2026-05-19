@@ -27,6 +27,7 @@ try:
         delete_iap_sale,
         list_iap_pack_functions,
         list_iap_sales,
+        update_iap_pack_function,
     )
     from iap_store import (
         DuplicateIapPackageError,
@@ -64,6 +65,7 @@ except ImportError:
         delete_iap_sale,
         list_iap_pack_functions,
         list_iap_sales,
+        update_iap_pack_function,
     )
     from .iap_store import (
         DuplicateIapPackageError,
@@ -316,11 +318,34 @@ def register_iap_routes(app):
         except AuthStoreError:
             return _iap_admin_store_error_response()
 
-    @app.route('/api/admin/iap/pack-functions/<int:record_id>', methods=['DELETE'])
+    @app.route('/api/admin/iap/pack-functions/<int:record_id>', methods=['PATCH', 'DELETE'])
     def admin_iap_pack_function_detail_route(record_id):
         _claims, auth_error = require_admin_access()
         if auth_error:
             return auth_error
+
+        if request.method == 'PATCH':
+            payload = request.get_json(silent=True) or {}
+            if not any(field in payload for field in ('packIapId', 'functionType', 'credits', 'premiumMode', 'premiumDurationDays', 'isActive')):
+                return jsonify({'error': 'No IAP pack function changes were provided'}), 400
+            try:
+                pack_function = update_iap_pack_function(
+                    record_id,
+                    pack_iap_id=payload.get('packIapId') if 'packIapId' in payload else None,
+                    function_type=payload.get('functionType') if 'functionType' in payload else None,
+                    credits=payload.get('credits') if 'credits' in payload else None,
+                    premium_mode=payload.get('premiumMode') if 'premiumMode' in payload else None,
+                    premium_duration_days=payload.get('premiumDurationDays') if 'premiumDurationDays' in payload else None,
+                    is_active=payload.get('isActive') if 'isActive' in payload else None,
+                )
+                return jsonify({'packFunction': pack_function})
+            except IapAdminValidationError as error:
+                return jsonify({'error': str(error)}), 400
+            except IapAdminNotFoundError:
+                return jsonify({'error': 'IAP pack function not found'}), 404
+            except AuthStoreError:
+                return _iap_admin_store_error_response()
+
         try:
             return jsonify({'packFunction': delete_iap_pack_function(record_id)})
         except IapAdminNotFoundError:

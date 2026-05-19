@@ -22,7 +22,6 @@ class IapAdminNotFoundError(AuthStoreError):
 class IapAdminValidationError(ValueError):
     pass
 
-
 def _now():
     return int(time.time())
 
@@ -183,7 +182,6 @@ def ensure_iap_admin_schema():
 
     _schema_ready = True
 
-
 def list_iap_pack_functions():
     ensure_iap_admin_schema()
     driver = _require_driver()
@@ -197,7 +195,6 @@ def list_iap_pack_functions():
             connection.close()
     except driver.MySQLError as error:
         raise AuthStoreError('Unable to list IAP pack functions') from error
-
 
 def create_iap_pack_function(pack_iap_id, function_type, credits=0, premium_mode='none', premium_duration_days=0, is_active=True):
     ensure_iap_admin_schema()
@@ -250,7 +247,6 @@ def create_iap_pack_function(pack_iap_id, function_type, credits=0, premium_mode
         raise AuthStoreError('Unable to create IAP pack function') from error
     return get_iap_pack_function(record_id)
 
-
 def get_iap_pack_function(record_id):
     ensure_iap_admin_schema()
     driver = _require_driver()
@@ -270,6 +266,39 @@ def get_iap_pack_function(record_id):
     except (driver.MySQLError, ValueError) as error:
         raise AuthStoreError('Unable to load IAP pack function') from error
 
+def update_iap_pack_function(record_id, pack_iap_id=None, function_type=None, credits=None, premium_mode=None, premium_duration_days=None, is_active=None):
+    current_record = get_iap_pack_function(record_id)
+    if all(value is None for value in (pack_iap_id, function_type, credits, premium_mode, premium_duration_days, is_active)):
+        raise IapAdminValidationError('No IAP pack function changes were provided.')
+    normalized_function_type = str(function_type or current_record['functionType']).strip()
+    if normalized_function_type not in PACK_FUNCTION_TYPES:
+        raise IapAdminValidationError('Pack function must be addCredits, unlockPremium, or creditsAndPremium.')
+    uses_premium = normalized_function_type in {'unlockPremium', 'creditsAndPremium'}
+    normalized_premium_duration_days = _normalize_premium_duration_days(current_record['premiumDurationDays'] if premium_duration_days is None else premium_duration_days)
+    normalized_premium_mode = str((current_record['premiumMode'] if premium_mode is None else premium_mode) or ('timed' if uses_premium else 'none')).strip()
+    if normalized_premium_mode not in PREMIUM_MODES:
+        raise IapAdminValidationError('Premium mode must be none, timed, or lifetime.')
+    if not uses_premium:
+        normalized_premium_mode, normalized_premium_duration_days = 'none', 0
+    elif normalized_premium_mode == 'none' and normalized_premium_duration_days > 0:
+        normalized_premium_mode = 'timed'
+    if uses_premium and normalized_premium_mode == 'none':
+        raise IapAdminValidationError('Premium pack functions require a premium duration in days.')
+    if normalized_premium_mode == 'timed' and normalized_premium_duration_days <= 0:
+        raise IapAdminValidationError('Premium duration days must be greater than 0.')
+    if normalized_premium_mode == 'lifetime':
+        normalized_premium_duration_days = 0
+    driver = _require_driver()
+    try:
+        connection = _connect(MYSQL_DATABASE)
+        try:
+            with connection.cursor() as cursor:
+                cursor.execute('UPDATE iap_pack_functions SET pack_iap_id = %s, function_type = %s, credits = %s, premium_mode = %s, premium_duration_days = %s, is_active = %s, updated_at = %s WHERE id = %s', (_normalize_pack_id(pack_iap_id or current_record['packIapId'], 'packIapId'), normalized_function_type, _normalize_credits(current_record['credits'] if credits is None else credits), normalized_premium_mode, normalized_premium_duration_days, 1 if _normalize_bool(current_record['isActive'] if is_active is None else is_active) else 0, _now(), current_record['id']))
+        finally:
+            connection.close()
+    except driver.MySQLError as error:
+        raise AuthStoreError('Unable to update IAP pack function') from error
+    return get_iap_pack_function(current_record['id'])
 
 def delete_iap_pack_function(record_id):
     current_record = get_iap_pack_function(record_id)
@@ -285,7 +314,6 @@ def delete_iap_pack_function(record_id):
         raise AuthStoreError('Unable to delete IAP pack function') from error
     return current_record
 
-
 def list_iap_sales():
     ensure_iap_admin_schema()
     driver = _require_driver()
@@ -299,7 +327,6 @@ def list_iap_sales():
             connection.close()
     except driver.MySQLError as error:
         raise AuthStoreError('Unable to list IAP sales') from error
-
 
 def create_iap_sale(name, pack_id, discount_percent=0, start_at=0, end_at=0, first_pack_purchase=False, first_iap_purchase=False, is_active=True):
     ensure_iap_admin_schema()
@@ -339,7 +366,6 @@ def create_iap_sale(name, pack_id, discount_percent=0, start_at=0, end_at=0, fir
         raise AuthStoreError('Unable to create IAP sale') from error
     return get_iap_sale(sale_id)
 
-
 def get_iap_sale(sale_id):
     ensure_iap_admin_schema()
     driver = _require_driver()
@@ -358,7 +384,6 @@ def get_iap_sale(sale_id):
         raise
     except (driver.MySQLError, ValueError) as error:
         raise AuthStoreError('Unable to load IAP sale') from error
-
 
 def delete_iap_sale(sale_id):
     current_sale = get_iap_sale(sale_id)

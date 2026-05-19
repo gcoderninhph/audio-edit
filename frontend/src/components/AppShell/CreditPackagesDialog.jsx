@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import DeveloperLocator from '../DeveloperLocator/DeveloperLocator';
-import { fetchPublicPremiumPackages } from '../../utils/iapClient';
+import { fetchPublicCreditPackages } from '../../utils/iapClient';
 import './PremiumPackagesDialog.css';
 
 const MAX_PACKAGES_PER_PAGE = 3;
@@ -79,17 +79,17 @@ function parseDescriptionFeatures(description) {
 }
 
 function buildFeatureList(packageRecord) {
-  const features = [
-    'No G Studio watermark in preview',
-    'No G Studio watermark in export',
-  ];
+  const features = [];
 
-  if (packageRecord.packType === 'creditsAndPremiumPack' && packageRecord.credits > 0) {
+  if (packageRecord.credits > 0) {
     features.push(`${packageRecord.credits} credits included`);
   }
 
-  features.push(...parseDescriptionFeatures(packageRecord.description));
+  if (packageRecord.packType === 'creditsAndPremiumPack') {
+    features.push('Premium access included');
+  }
 
+  features.push(...parseDescriptionFeatures(packageRecord.description));
   return features.slice(0, 4);
 }
 
@@ -97,9 +97,6 @@ function resolveFallbackRecommendedIndex(packages) {
   const creditsAndPremiumIndex = packages.findIndex((record) => record.packType === 'creditsAndPremiumPack');
   if (creditsAndPremiumIndex >= 0) {
     return creditsAndPremiumIndex;
-  }
-  if (packages.length >= 3) {
-    return Math.floor(packages.length / 2);
   }
   return packages.length > 1 ? 1 : 0;
 }
@@ -126,13 +123,14 @@ function resolveInitialPageIndex(packages, cardsPerPage) {
   return Math.floor(recommendedIndex / Math.max(1, cardsPerPage));
 }
 
-export default function PremiumPackagesDialog({ auth, locatorCode, onClose, open }) {
+export default function CreditPackagesDialog({ auth, locatorCode, onClose, open }) {
   const carouselRef = useRef(null);
   const [error, setError] = useState('');
   const [isLoading, setIsLoading] = useState(false);
   const [packages, setPackages] = useState([]);
   const [cardsPerPage, setCardsPerPage] = useState(() => resolveCardsPerPage(getViewportWidth()));
   const [activePage, setActivePage] = useState(0);
+  const creditBalance = Math.max(0, Number(auth?.user?.credits) || 0);
 
   useEffect(() => {
     if (typeof window === 'undefined') {
@@ -164,7 +162,7 @@ export default function PremiumPackagesDialog({ auth, locatorCode, onClose, open
       setIsLoading(true);
       setError('');
 
-      return fetchPublicPremiumPackages()
+      return fetchPublicCreditPackages()
         .then((nextPackages) => {
           if (isCancelled) {
             return;
@@ -176,7 +174,7 @@ export default function PremiumPackagesDialog({ auth, locatorCode, onClose, open
           if (isCancelled) {
             return;
           }
-          setError(loadError.message || 'Unable to load premium plans.');
+          setError(loadError.message || 'Unable to load credit packages.');
         })
         .finally(() => {
           if (!isCancelled) {
@@ -193,10 +191,7 @@ export default function PremiumPackagesDialog({ auth, locatorCode, onClose, open
   const packagePages = useMemo(() => chunkPackages(packages, cardsPerPage), [cardsPerPage, packages]);
   const recommendedKeys = useMemo(() => resolveRecommendedKeys(packages), [packages]);
   const activePageIndex = packagePages.length ? Math.max(0, Math.min(activePage, packagePages.length - 1)) : 0;
-  const isPremium = Boolean(auth?.user?.isPremium);
-  const headerNote = isPremium
-    ? 'This account already has premium active. Plans below are still visible for later purchase flows.'
-    : 'Choose a premium plan from the server catalog. Buy buttons are placeholders for now.';
+  const headerNote = `Current balance: ${creditBalance} credits. Choose a credit package from the server catalog. Buy buttons are placeholders for now.`;
 
   useEffect(() => {
     if (!open || !packagePages.length) {
@@ -250,41 +245,41 @@ export default function PremiumPackagesDialog({ auth, locatorCode, onClose, open
         className="premium-dialog dev-locator-host"
         role="dialog"
         aria-modal="true"
-        aria-labelledby="premium-dialog-title"
+        aria-labelledby="credit-dialog-title"
         onMouseDown={(event) => event.stopPropagation()}
       >
-        <DeveloperLocator code={`${locatorCode}.premium-popup`} title="Premium Packages Popup" />
+        <DeveloperLocator code={`${locatorCode}.credit-popup`} title="Credit Packages Popup" />
         <div className="premium-dialog-header">
           <div>
-            <p className="premium-dialog-kicker">Premium access</p>
-            <h2 id="premium-dialog-title">Choose your plan</h2>
+            <p className="premium-dialog-kicker">Credits</p>
+            <h2 id="credit-dialog-title">Buy credits</h2>
             <p className="premium-dialog-note">{headerNote}</p>
           </div>
-          <button type="button" className="premium-dialog-close" onClick={onClose} aria-label="Close premium plans dialog">×</button>
+          <button type="button" className="premium-dialog-close" onClick={onClose} aria-label="Close credit packages dialog">×</button>
         </div>
 
         {error && <div className="premium-dialog-alert premium-dialog-alert-error">{error}</div>}
 
         {isLoading && (
           <div className="premium-dialog-state dev-locator-host">
-            <DeveloperLocator code={`${locatorCode}.premium-popup.loading`} title="Premium Popup Loading" />
-            Loading premium plans...
+            <DeveloperLocator code={`${locatorCode}.credit-popup.loading`} title="Credit Popup Loading" />
+            Loading credit packages...
           </div>
         )}
 
         {!isLoading && !error && !packages.length && (
           <div className="premium-dialog-state dev-locator-host">
-            <DeveloperLocator code={`${locatorCode}.premium-popup.empty`} title="Premium Popup Empty" />
-            No premium plans are available right now.
+            <DeveloperLocator code={`${locatorCode}.credit-popup.empty`} title="Credit Popup Empty" />
+            No credit packages are available right now.
           </div>
         )}
 
         {!isLoading && packages.length > 0 && (
           <div className="premium-packages-shell dev-locator-host">
-            <DeveloperLocator code={`${locatorCode}.premium-popup.list`} title="Premium Popup Package List" />
+            <DeveloperLocator code={`${locatorCode}.credit-popup.list`} title="Credit Popup Package List" />
             {packagePages.length > 1 && (
               <div className="premium-packages-toolbar">
-                <p className="premium-packages-hint">Swipe horizontally or use the arrows to browse more plans.</p>
+                <p className="premium-packages-hint">Swipe horizontally or use the arrows to browse more packages.</p>
                 <div className="premium-packages-controls">
                   <button
                     type="button"
@@ -294,14 +289,14 @@ export default function PremiumPackagesDialog({ auth, locatorCode, onClose, open
                   >
                     Previous
                   </button>
-                  <div className="premium-packages-pagination" aria-label="Premium plan pages">
+                  <div className="premium-packages-pagination" aria-label="Credit package pages">
                     {packagePages.map((pagePackages, pageIndex) => (
                       <button
-                        key={`premium-page-dot-${pagePackages.map((packageRecord) => buildPackageKey(packageRecord)).join('-')}`}
+                        key={`credit-page-dot-${pagePackages.map((packageRecord) => buildPackageKey(packageRecord)).join('-')}`}
                         type="button"
                         className={`premium-packages-dot${pageIndex === activePageIndex ? ' premium-packages-dot-active' : ''}`}
                         onClick={() => handlePageChange(pageIndex)}
-                        aria-label={`Go to premium plan page ${pageIndex + 1}`}
+                        aria-label={`Go to credit package page ${pageIndex + 1}`}
                       />
                     ))}
                   </div>
@@ -320,9 +315,9 @@ export default function PremiumPackagesDialog({ auth, locatorCode, onClose, open
             <div className="premium-packages-carousel" ref={carouselRef} onScroll={handleCarouselScroll}>
               {packagePages.map((pagePackages, pageIndex) => (
                 <div
-                  key={`premium-page-${pageIndex + 1}`}
+                  key={`credit-page-${pageIndex + 1}`}
                   className="premium-packages-page"
-                  aria-label={`Premium plan page ${pageIndex + 1} of ${packagePages.length}`}
+                  aria-label={`Credit package page ${pageIndex + 1} of ${packagePages.length}`}
                 >
                   {pagePackages.map((packageRecord, pageItemIndex) => {
                     const packageKey = buildPackageKey(packageRecord);
@@ -335,11 +330,11 @@ export default function PremiumPackagesDialog({ auth, locatorCode, onClose, open
                         className={`premium-package-card dev-locator-host${isRecommended ? ' premium-package-card-recommended' : ''}`}
                       >
                         <DeveloperLocator
-                          code={`${locatorCode}.premium-popup.card.${packageRecord.id || absoluteIndex}`}
-                          title="Premium Popup Package Card"
+                          code={`${locatorCode}.credit-popup.card.${packageRecord.id || absoluteIndex}`}
+                          title="Credit Popup Package Card"
                         />
                         <div className="premium-package-header-block">
-                          <div className="premium-package-type">{packageRecord.packType === 'creditsAndPremiumPack' ? 'Credits + premium' : 'Premium'}</div>
+                          <div className="premium-package-type">{packageRecord.packType === 'creditsAndPremiumPack' ? 'Credits + premium' : 'Credits'}</div>
                           <div className="premium-package-title-row">
                             <h3>{packageRecord.name}</h3>
                             {isRecommended && <span className="premium-package-badge">Recommended</span>}

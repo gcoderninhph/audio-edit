@@ -30,6 +30,72 @@
   white-space: nowrap;
 }
 
+.auth-credit-pill-button {
+  cursor: pointer;
+}
+
+.auth-credit-pill-static {
+  cursor: default;
+}
+
+.auth-user-menu {
+  position: relative;
+}
+
+.auth-user-menu-trigger {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  background: rgba(16, 185, 129, 0.1);
+  cursor: pointer;
+}
+
+.auth-user-pill-label {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.auth-user-menu-caret {
+  font-size: 0.7rem;
+  line-height: 1;
+  transition: transform 140ms ease;
+}
+
+.auth-user-menu-caret-open {
+  transform: rotate(180deg);
+}
+
+.auth-user-dropdown {
+  position: absolute;
+  top: calc(100% + 8px);
+  right: 0;
+  z-index: 40;
+  min-width: 150px;
+  padding: 8px;
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-sm);
+  background: rgba(11, 16, 27, 0.98);
+  box-shadow: 0 16px 48px rgba(0, 0, 0, 0.32);
+}
+
+.auth-user-dropdown-item {
+  width: 100%;
+  min-height: 36px;
+  border: 0;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--text-secondary);
+  text-align: left;
+  cursor: pointer;
+  padding: 0 10px;
+}
+
+.auth-user-dropdown-item:hover {
+  background: rgba(255, 255, 255, 0.06);
+  color: var(--text-primary);
+}
+
 .auth-dialog-backdrop {
   position: fixed;
   inset: 0;

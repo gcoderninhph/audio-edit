@@ -1,10 +1,11 @@
-import { Plus, RefreshCw, Trash2 } from 'lucide-react'
+import { Pencil, Plus, RefreshCw, Trash2 } from 'lucide-react'
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import {
   createAdminIapPackFunction,
   deleteAdminIapPackFunction,
   fetchAdminIapPackFunctions,
   fetchAdminIapPackages,
+  updateAdminIapPackFunction,
 } from '../api/adminApi'
 import {
   buildPackFunctionPayload,
@@ -21,6 +22,14 @@ const DEFAULT_FORM_STATE = {
   premiumDurationDays: '30',
 }
 
+function buildFormState(functionRecord) {
+  return {
+    credits: String(functionRecord?.credits ?? DEFAULT_FORM_STATE.credits),
+    packIapId: functionRecord?.packIapId || '',
+    premiumDurationDays: String(functionRecord?.premiumDurationDays ?? DEFAULT_FORM_STATE.premiumDurationDays),
+  }
+}
+
 export default function IapPackFunctionPanel({ onHeaderActionsChange }) {
   const [error, setError] = useState('')
   const [formState, setFormState] = useState(DEFAULT_FORM_STATE)
@@ -29,6 +38,7 @@ export default function IapPackFunctionPanel({ onHeaderActionsChange }) {
   const [isLoading, setIsLoading] = useState(true)
   const [isSaving, setIsSaving] = useState(false)
   const [packages, setPackages] = useState([])
+  const [selectedFunctionId, setSelectedFunctionId] = useState(0)
 
   const loadPackages = useCallback(async () => {
     const payload = await fetchAdminIapPackages()
@@ -73,12 +83,21 @@ export default function IapPackFunctionPanel({ onHeaderActionsChange }) {
 
   const openCreateDialog = () => {
     const firstPackageId = packages[0]?.id || ''
+    setSelectedFunctionId(0)
     setFormState({ ...DEFAULT_FORM_STATE, packIapId: firstPackageId })
     setIsDialogOpen(true)
     setError('')
   }
 
+  const openEditDialog = (functionRecord) => {
+    setSelectedFunctionId(functionRecord.id)
+    setFormState(buildFormState(functionRecord))
+    setIsDialogOpen(true)
+    setError('')
+  }
+
   const closeDialog = () => {
+    setSelectedFunctionId(0)
     setFormState(DEFAULT_FORM_STATE)
     setIsDialogOpen(false)
   }
@@ -102,14 +121,19 @@ export default function IapPackFunctionPanel({ onHeaderActionsChange }) {
     setIsSaving(true)
     setError('')
     try {
-      await createAdminIapPackFunction({
+      const payload = {
         ...buildPackFunctionPayload(selectedPackType, formState),
         packIapId: selectedPackage.id,
-      })
+      }
+      if (selectedFunctionId) {
+        await updateAdminIapPackFunction(selectedFunctionId, payload)
+      } else {
+        await createAdminIapPackFunction(payload)
+      }
       closeDialog()
       await loadFunctions()
     } catch (saveError) {
-      setError(saveError.message || 'Unable to create pack function.')
+      setError(saveError.message || `Unable to ${selectedFunctionId ? 'update' : 'create'} pack function.`)
     } finally {
       setIsSaving(false)
     }
@@ -152,7 +176,28 @@ export default function IapPackFunctionPanel({ onHeaderActionsChange }) {
                   <td><strong>{packageRecord?.name || functionRecord.packIapId}</strong><small>{functionRecord.packIapId}</small></td>
                   <td>{getIapPackTypeLabel(packType)}</td>
                   <td>{formatPackFunctionSummary(packType, functionRecord)}</td>
-                  <td><button type="button" className="ghost-button compact danger-text" onClick={() => void removeFunction(functionRecord)}><Trash2 size={16} /> Delete</button></td>
+                  <td>
+                    <div className="iap-action-group" role="group" aria-label={`Pack function actions for ${packageRecord?.name || functionRecord.packIapId}`}>
+                      <button
+                        type="button"
+                        className="iap-action-button"
+                        onClick={() => openEditDialog(functionRecord)}
+                        aria-label={`Edit pack function ${functionRecord.id}`}
+                        title="Edit pack function"
+                      >
+                        <Pencil size={15} />
+                      </button>
+                      <button
+                        type="button"
+                        className="iap-action-button iap-action-button-danger"
+                        onClick={() => void removeFunction(functionRecord)}
+                        aria-label={`Delete pack function ${functionRecord.id}`}
+                        title="Delete pack function"
+                      >
+                        <Trash2 size={15} />
+                      </button>
+                    </div>
+                  </td>
                 </tr>
               )
             })}
@@ -167,7 +212,7 @@ export default function IapPackFunctionPanel({ onHeaderActionsChange }) {
             <DeveloperMarker code="admin.react.manage.iap.pack-function-dialog" title="Admin React IAP Pack Function Dialog" />
             <div className="section-heading compact">
               <p>Pack function</p>
-              <h2>Add new pack function</h2>
+              <h2>{selectedFunctionId ? 'Edit pack function' : 'Add new pack function'}</h2>
             </div>
             <div className="package-form-grid">
               <label className="field">
@@ -197,7 +242,7 @@ export default function IapPackFunctionPanel({ onHeaderActionsChange }) {
             </div>
             <div className="dialog-actions">
               <button type="button" className="ghost-button" onClick={closeDialog} disabled={isSaving}>Cancel</button>
-              <button type="submit" className="primary-button compact" disabled={isSaving}><Plus size={17} /> {isSaving ? 'Saving...' : 'Create function'}</button>
+              <button type="submit" className="primary-button compact" disabled={isSaving}><Plus size={17} /> {isSaving ? 'Saving...' : selectedFunctionId ? 'Save changes' : 'Create function'}</button>
             </div>
           </form>
         </div>

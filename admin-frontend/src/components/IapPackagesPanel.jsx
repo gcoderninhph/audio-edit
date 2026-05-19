@@ -1,4 +1,4 @@
-import { Package, Pencil, Plus, RefreshCw, Trash2 } from 'lucide-react'
+import { Check, Package, Pencil, Plus, RefreshCw, Trash2 } from 'lucide-react'
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import {
   createAdminIapPackage,
@@ -212,9 +212,7 @@ export default function IapPackagesPanel({ onHeaderActionsChange }) {
                   <small>{packageRecord.currency}</small>
                 </td>
                 <td>
-                  <span className={packageRecord.isRecommended ? 'status-pill status-success' : 'plan-pill'}>
-                    {packageRecord.isRecommended ? 'Recommended' : '-'}
-                  </span>
+                  {packageRecord.isRecommended ? <Check size={16} className="iap-boolean-indicator iap-boolean-indicator-true" /> : <span className="iap-boolean-indicator iap-boolean-indicator-false">-</span>}
                 </td>
                 <td>
                   <span className={packageRecord.isActive ? 'status-pill status-success' : 'plan-pill'}>

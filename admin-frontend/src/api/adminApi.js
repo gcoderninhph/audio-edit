@@ -218,6 +218,15 @@ export async function createAdminIapPackFunction(payload) {
   return response.data || {}
 }
 
+export async function updateAdminIapPackFunction(recordId, payload) {
+  const response = await requestJson(`/api/admin/iap/pack-functions/${encodeURIComponent(recordId)}`, {
+    method: 'PATCH',
+    body: JSON.stringify(payload),
+  })
+  if (!response.ok) throw new Error(response.data?.error || 'Unable to update IAP pack function.')
+  return response.data || {}
+}
+
 export async function deleteAdminIapPackFunction(recordId) {
   const response = await requestJson(`/api/admin/iap/pack-functions/${encodeURIComponent(recordId)}`, {
     method: 'DELETE',

@@ -1,4 +1,4 @@
-import { History, Plus, RefreshCw, Trash2 } from 'lucide-react'
+import { Check, Copy, History, Plus, RefreshCw, Trash2 } from 'lucide-react'
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { createAdminIapApiKey, deleteAdminIapApiKey, fetchAdminIapApiKeys } from '../api/adminApi'
 import { formatDateTime } from '../utils/format'
@@ -11,12 +11,8 @@ const DEFAULT_FORM_STATE = {
   name: '',
 }
 
-function buildKeyFormatPreview(headerFormat, apiKey) {
-  const normalizedFormat = String(headerFormat || '<API_KEY>').trim() || '<API_KEY>'
-  return normalizedFormat.replace('<API_KEY>', String(apiKey || '<API_KEY>').trim() || '<API_KEY>')
-}
-
 export default function IapApiKeyPanel({ onHeaderActionsChange, onNavigate }) {
+  const [copiedKeyId, setCopiedKeyId] = useState(0)
   const [error, setError] = useState('')
   const [formState, setFormState] = useState(DEFAULT_FORM_STATE)
   const [isDialogOpen, setIsDialogOpen] = useState(false)
@@ -51,6 +47,20 @@ export default function IapApiKeyPanel({ onHeaderActionsChange, onNavigate }) {
     onHeaderActionsChange?.(headerActions)
     return () => onHeaderActionsChange?.(null)
   }, [headerActions, onHeaderActionsChange])
+
+  useEffect(() => {
+    if (!copiedKeyId) {
+      return undefined
+    }
+
+    const timeoutId = window.setTimeout(() => {
+      setCopiedKeyId(0)
+    }, 1600)
+
+    return () => {
+      window.clearTimeout(timeoutId)
+    }
+  }, [copiedKeyId])
 
   const openCreateDialog = () => {
     setFormState(DEFAULT_FORM_STATE)
@@ -97,6 +107,15 @@ export default function IapApiKeyPanel({ onHeaderActionsChange, onNavigate }) {
     }
   }
 
+  const handleCopyKey = async (keyRecord) => {
+    try {
+      await navigator.clipboard.writeText(keyRecord.apiKey)
+      setCopiedKeyId(keyRecord.id)
+    } catch {
+      setError('Unable to copy API key.')
+    }
+  }
+
   return (
     <div className="iap-tab-panel dev-host">
       <DeveloperMarker code="admin.react.manage.iap.api-key" title="Admin React IAP API Key" />
@@ -128,8 +147,18 @@ export default function IapApiKeyPanel({ onHeaderActionsChange, onNavigate }) {
                 </td>
                 <td>/api/pay/info</td>
                 <td>
-                  <code className="inline-code">{keyRecord.apiKey}</code>
-                  <small>Example: {buildKeyFormatPreview(keyRecord.headerFormat, keyRecord.apiKey)}</small>
+                  <div className="iap-action-group" role="group" aria-label={`API key actions for ${keyRecord.name}`}>
+                    <button
+                      type="button"
+                      className="iap-action-button"
+                      onClick={() => void handleCopyKey(keyRecord)}
+                      aria-label={`Copy API key for ${keyRecord.name}`}
+                      title={copiedKeyId === keyRecord.id ? 'Copied' : 'Copy API key'}
+                    >
+                      {copiedKeyId === keyRecord.id ? <Check size={15} className="iap-boolean-indicator iap-boolean-indicator-true" /> : <Copy size={15} />}
+                    </button>
+                  </div>
+                  <small>Send as: {keyRecord.headerFormat || '<API_KEY>'}</small>
                 </td>
                 <td>{keyRecord.lastUsedAt ? formatDateTime(keyRecord.lastUsedAt) : '-'}</td>
                 <td><span className={keyRecord.isActive ? 'status-pill status-success' : 'plan-pill'}>{keyRecord.isActive ? 'Active' : 'Inactive'}</span></td>
