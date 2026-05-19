@@ -1,4 +1,3 @@
-import secrets
 import time
 from decimal import Decimal, InvalidOperation, ROUND_HALF_UP
 
@@ -10,7 +9,7 @@ except ImportError:
 
 MAX_IAP_ADMIN_NAME_LENGTH = 120
 MAX_PACK_ID_LENGTH = 80
-PACK_FUNCTION_TYPES = {'addCredits', 'unlockPremium'}
+PACK_FUNCTION_TYPES = {'addCredits', 'unlockPremium', 'creditsAndPremium'}
 PREMIUM_MODES = {'none', 'lifetime'}
 
 _schema_ready = False
@@ -84,18 +83,6 @@ def _normalize_timestamp(value):
     return normalized_value
 
 
-def _row_to_api_key(row):
-    return {
-        'id': int(row.get('id') or 0),
-        'name': row.get('name') or '',
-        'apiKey': row.get('api_key') or '',
-        'isActive': bool(row.get('is_active') or 0),
-        'lastUsedAt': int(row.get('last_used_at') or 0),
-        'createdAt': int(row.get('created_at') or 0),
-        'updatedAt': int(row.get('updated_at') or 0),
-    }
-
-
 def _row_to_pack_function(row):
     return {
         'id': int(row.get('id') or 0),
@@ -136,20 +123,6 @@ def ensure_iap_admin_schema():
         connection = _connect(MYSQL_DATABASE)
         try:
             with connection.cursor() as cursor:
-                cursor.execute(
-                    """
-                    CREATE TABLE IF NOT EXISTS iap_api_keys (
-                        id BIGINT NOT NULL AUTO_INCREMENT PRIMARY KEY,
-                        name VARCHAR(120) NOT NULL,
-                        api_key VARCHAR(160) NOT NULL UNIQUE,
-                        is_active TINYINT(1) NOT NULL DEFAULT 1,
-                        last_used_at BIGINT NOT NULL DEFAULT 0,
-                        created_at BIGINT NOT NULL,
-                        updated_at BIGINT NOT NULL,
-                        INDEX idx_iap_api_keys_active (is_active)
-                    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
-                    """
-                )
                 cursor.execute(
                     """
                     CREATE TABLE IF NOT EXISTS iap_pack_functions (
@@ -193,101 +166,6 @@ def ensure_iap_admin_schema():
     _schema_ready = True
 
 
-def list_iap_api_keys():
-    ensure_iap_admin_schema()
-    driver = _require_driver()
-    try:
-        connection = _connect(MYSQL_DATABASE)
-        try:
-            with connection.cursor() as cursor:
-                cursor.execute('SELECT * FROM iap_api_keys ORDER BY is_active DESC, updated_at DESC')
-                return [_row_to_api_key(row) for row in cursor.fetchall() or []]
-        finally:
-            connection.close()
-    except driver.MySQLError as error:
-        raise AuthStoreError('Unable to list IAP API keys') from error
-
-
-def create_iap_api_key(name, is_active=True):
-    ensure_iap_admin_schema()
-    driver = _require_driver()
-    now = _now()
-    api_key = f'audio_editor_{secrets.token_urlsafe(24)}'
-    try:
-        connection = _connect(MYSQL_DATABASE)
-        try:
-            with connection.cursor() as cursor:
-                cursor.execute(
-                    'INSERT INTO iap_api_keys (name, api_key, is_active, created_at, updated_at) VALUES (%s, %s, %s, %s, %s)',
-                    (_normalize_name(name, 'API key name'), api_key, 1 if _normalize_bool(is_active) else 0, now, now),
-                )
-                key_id = cursor.lastrowid
-        finally:
-            connection.close()
-    except driver.MySQLError as error:
-        raise AuthStoreError('Unable to create IAP API key') from error
-    return get_iap_api_key(key_id)
-
-
-def get_iap_api_key(key_id):
-    ensure_iap_admin_schema()
-    driver = _require_driver()
-    try:
-        connection = _connect(MYSQL_DATABASE)
-        try:
-            with connection.cursor() as cursor:
-                cursor.execute('SELECT * FROM iap_api_keys WHERE id = %s LIMIT 1', (int(key_id),))
-                row = cursor.fetchone()
-                if not row:
-                    raise IapAdminNotFoundError('IAP API key not found')
-                return _row_to_api_key(row)
-        finally:
-            connection.close()
-    except IapAdminNotFoundError:
-        raise
-    except (driver.MySQLError, ValueError) as error:
-        raise AuthStoreError('Unable to load IAP API key') from error
-
-
-def delete_iap_api_key(key_id):
-    current_key = get_iap_api_key(key_id)
-    driver = _require_driver()
-    try:
-        connection = _connect(MYSQL_DATABASE)
-        try:
-            with connection.cursor() as cursor:
-                cursor.execute('DELETE FROM iap_api_keys WHERE id = %s', (current_key['id'],))
-        finally:
-            connection.close()
-    except driver.MySQLError as error:
-        raise AuthStoreError('Unable to delete IAP API key') from error
-    return current_key
-
-
-def validate_iap_api_key(api_key):
-    ensure_iap_admin_schema()
-    driver = _require_driver()
-    normalized_key = str(api_key or '').strip()
-    if not normalized_key:
-        raise IapAdminNotFoundError('IAP API key not found')
-    try:
-        connection = _connect(MYSQL_DATABASE)
-        try:
-            with connection.cursor() as cursor:
-                cursor.execute('SELECT * FROM iap_api_keys WHERE api_key = %s AND is_active = 1 LIMIT 1', (normalized_key,))
-                row = cursor.fetchone()
-                if not row:
-                    raise IapAdminNotFoundError('IAP API key not found')
-                cursor.execute('UPDATE iap_api_keys SET last_used_at = %s WHERE id = %s', (_now(), row['id']))
-                return _row_to_api_key(row)
-        finally:
-            connection.close()
-    except IapAdminNotFoundError:
-        raise
-    except driver.MySQLError as error:
-        raise AuthStoreError('Unable to validate IAP API key') from error
-
-
 def list_iap_pack_functions():
     ensure_iap_admin_schema()
     driver = _require_driver()
@@ -308,7 +186,7 @@ def create_iap_pack_function(pack_iap_id, function_type, credits=0, premium_mode
     normalized_function_type = str(function_type or '').strip()
     normalized_premium_mode = str(premium_mode or 'none').strip()
     if normalized_function_type not in PACK_FUNCTION_TYPES:
-        raise IapAdminValidationError('Pack function must be addCredits or unlockPremium.')
+        raise IapAdminValidationError('Pack function must be addCredits, unlockPremium, or creditsAndPremium.')
     if normalized_premium_mode not in PREMIUM_MODES:
         raise IapAdminValidationError('Premium mode must be none or lifetime.')
     driver = _require_driver()

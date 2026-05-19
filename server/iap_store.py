@@ -3,12 +3,14 @@ import time
 from decimal import Decimal, InvalidOperation, ROUND_HALF_UP
 
 try:
-    from auth_store import AuthStoreError, MYSQL_DATABASE, _connect, _require_driver, ensure_auth_schema
+    from auth_store import AuthStoreError, MYSQL_DATABASE, _connect, _ensure_column, _require_driver, ensure_auth_schema
 except ImportError:
-    from .auth_store import AuthStoreError, MYSQL_DATABASE, _connect, _require_driver, ensure_auth_schema
+    from .auth_store import AuthStoreError, MYSQL_DATABASE, _connect, _ensure_column, _require_driver, ensure_auth_schema
 
 
 DEFAULT_IAP_CURRENCY = 'VND'
+DEFAULT_IAP_PACK_TYPE = 'addCredit'
+IAP_PACK_TYPES = {'addCredit', 'premiumSubscribe', 'creditsAndPremiumPack'}
 MAX_IAP_DESCRIPTION_LENGTH = 500
 MAX_IAP_NAME_LENGTH = 120
 PACKAGE_ID_PATTERN = re.compile(r'^[a-z0-9][a-z0-9._-]{2,79}$')
@@ -69,6 +71,13 @@ def _normalize_credits(value):
     return normalized_value
 
 
+def _normalize_pack_type(value):
+    normalized_value = str(value or DEFAULT_IAP_PACK_TYPE).strip()
+    if normalized_value not in IAP_PACK_TYPES:
+        raise IapPackageValidationError('Pack type must be addCredit, premiumSubscribe, or creditsAndPremiumPack.')
+    return normalized_value
+
+
 def _normalize_description(value):
     normalized_value = str(value or '').strip()
     if len(normalized_value) > MAX_IAP_DESCRIPTION_LENGTH:
@@ -88,6 +97,7 @@ def _row_to_iap_package(row):
     return {
         'id': row.get('id') or '',
         'name': row.get('name') or '',
+        'packType': _normalize_pack_type(row.get('pack_type') or DEFAULT_IAP_PACK_TYPE),
         'price': float(row.get('price') or 0),
         'currency': row.get('currency') or DEFAULT_IAP_CURRENCY,
         'credits': int(row.get('credits') or 0),
@@ -114,6 +124,7 @@ def ensure_iap_package_schema():
                     CREATE TABLE IF NOT EXISTS iap_packages (
                         id VARCHAR(80) NOT NULL PRIMARY KEY,
                         name VARCHAR(120) NOT NULL,
+                        pack_type VARCHAR(64) NOT NULL DEFAULT 'addCredit',
                         price DECIMAL(12, 2) NOT NULL,
                         currency VARCHAR(3) NOT NULL DEFAULT 'VND',
                         credits INT NOT NULL DEFAULT 0,
@@ -126,6 +137,7 @@ def ensure_iap_package_schema():
                     ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
                     """
                 )
+                _ensure_column(cursor, 'iap_packages', 'pack_type', "VARCHAR(64) NOT NULL DEFAULT 'addCredit' AFTER name")
         finally:
             connection.close()
     except driver.MySQLError as error:
@@ -173,12 +185,13 @@ def get_iap_package(package_id):
         raise AuthStoreError('Unable to load IAP package') from error
 
 
-def create_iap_package(package_id, name, price, currency=None, credits=0, description='', is_active=True):
+def create_iap_package(package_id, name, price, currency=None, credits=0, description='', is_active=True, pack_type=None):
     ensure_iap_package_schema()
     driver = _require_driver()
     normalized_package = {
         'id': _normalize_package_id(package_id),
         'name': _normalize_name(name),
+        'pack_type': _normalize_pack_type(pack_type),
         'price': _normalize_price(price),
         'currency': _normalize_currency(currency),
         'credits': _normalize_credits(credits),
@@ -193,12 +206,13 @@ def create_iap_package(package_id, name, price, currency=None, credits=0, descri
                 cursor.execute(
                     """
                     INSERT INTO iap_packages
-                        (id, name, price, currency, credits, description, is_active, created_at, updated_at)
-                    VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s)
+                        (id, name, pack_type, price, currency, credits, description, is_active, created_at, updated_at)
+                    VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
                     """,
                     (
                         normalized_package['id'],
                         normalized_package['name'],
+                        normalized_package['pack_type'],
                         str(normalized_package['price']),
                         normalized_package['currency'],
                         normalized_package['credits'],
@@ -218,13 +232,15 @@ def create_iap_package(package_id, name, price, currency=None, credits=0, descri
     return get_iap_package(normalized_package['id'])
 
 
-def update_iap_package(package_id, name=None, price=None, currency=None, credits=None, description=None, is_active=None):
+def update_iap_package(package_id, name=None, price=None, currency=None, credits=None, description=None, is_active=None, pack_type=None):
     ensure_iap_package_schema()
     driver = _require_driver()
     current_package = get_iap_package(package_id)
     updates = {}
     if name is not None:
         updates['name'] = _normalize_name(name)
+    if pack_type is not None:
+        updates['pack_type'] = _normalize_pack_type(pack_type)
     if price is not None:
         updates['price'] = _normalize_price(price)
     if currency is not None:

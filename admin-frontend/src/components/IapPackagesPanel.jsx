@@ -6,27 +6,28 @@ import {
   fetchAdminIapPackages,
   updateAdminIapPackage,
 } from '../api/adminApi'
-import { formatCurrency, formatDateTime, formatNumber } from '../utils/format'
+import { formatCurrency, formatDateTime } from '../utils/format'
+import { DEFAULT_IAP_PACK_TYPE, getIapPackTypeLabel, IAP_PACK_TYPE_OPTIONS, normalizeIapPackType } from '../utils/iapPackages'
 import DeveloperMarker from './DeveloperMarker'
 
 const DEFAULT_FORM_STATE = {
-  credits: '0',
   currency: 'VND',
   description: '',
   id: '',
   isActive: true,
   name: '',
+  packType: DEFAULT_IAP_PACK_TYPE,
   price: '',
 }
 
 function buildPayload(formState) {
   return {
-    credits: Number(formState.credits || 0),
     currency: String(formState.currency || 'VND').trim().toUpperCase(),
     description: String(formState.description || '').trim(),
     id: String(formState.id || '').trim(),
     isActive: Boolean(formState.isActive),
     name: String(formState.name || '').trim(),
+    packType: normalizeIapPackType(formState.packType),
     price: Number(formState.price || 0),
   }
 }
@@ -34,17 +35,18 @@ function buildPayload(formState) {
 function buildFormState(packageRecord) {
   if (!packageRecord) return DEFAULT_FORM_STATE
   return {
-    credits: String(packageRecord.credits ?? 0),
     currency: packageRecord.currency || 'VND',
     description: packageRecord.description || '',
     id: packageRecord.id || '',
     isActive: Boolean(packageRecord.isActive),
     name: packageRecord.name || '',
+    packType: normalizeIapPackType(packageRecord.packType),
     price: String(packageRecord.price ?? ''),
   }
 }
 
 export default function IapPackagesPanel({ onHeaderActionsChange }) {
+  const [dialogError, setDialogError] = useState('')
   const [packages, setPackages] = useState([])
   const [error, setError] = useState('')
   const [formState, setFormState] = useState(DEFAULT_FORM_STATE)
@@ -86,6 +88,7 @@ export default function IapPackagesPanel({ onHeaderActionsChange }) {
     setFormState(DEFAULT_FORM_STATE)
     setIsDialogOpen(true)
     setError('')
+    setDialogError('')
   }
 
   const openEditDialog = (packageRecord) => {
@@ -93,27 +96,30 @@ export default function IapPackagesPanel({ onHeaderActionsChange }) {
     setFormState(buildFormState(packageRecord))
     setIsDialogOpen(true)
     setError('')
+    setDialogError('')
   }
 
   const closeDialog = () => {
     setIsDialogOpen(false)
     setSelectedPackageId('')
     setFormState(DEFAULT_FORM_STATE)
+    setDialogError('')
   }
 
   const handleSubmit = async (event) => {
     event.preventDefault()
     setIsSaving(true)
     setError('')
+    setDialogError('')
     try {
       const payload = buildPayload(formState)
       if (selectedPackageId) {
         await updateAdminIapPackage(selectedPackageId, {
-          credits: payload.credits,
           currency: payload.currency,
           description: payload.description,
           isActive: payload.isActive,
           name: payload.name,
+          packType: payload.packType,
           price: payload.price,
         })
       } else {
@@ -122,7 +128,8 @@ export default function IapPackagesPanel({ onHeaderActionsChange }) {
       closeDialog()
       await loadPackages()
     } catch (saveError) {
-      setError(saveError.message || 'Unable to save IAP package.')
+      const nextError = saveError.message || 'Unable to save IAP package.'
+      setDialogError(nextError)
     } finally {
       setIsSaving(false)
     }
@@ -157,9 +164,9 @@ export default function IapPackagesPanel({ onHeaderActionsChange }) {
         <table className="admin-table">
           <thead>
             <tr>
-              <th>Package</th>
+              <th>Pack</th>
+              <th>Pack type</th>
               <th>Price</th>
-              <th>Credits</th>
               <th>Status</th>
               <th>Updated</th>
               <th>Actions</th>
@@ -177,11 +184,11 @@ export default function IapPackagesPanel({ onHeaderActionsChange }) {
                     </span>
                   </div>
                 </td>
+                <td>{getIapPackTypeLabel(packageRecord.packType)}</td>
                 <td>
                   <strong>{formatCurrency(packageRecord.price, packageRecord.currency)}</strong>
                   <small>{packageRecord.currency}</small>
                 </td>
-                <td>{formatNumber(packageRecord.credits)}</td>
                 <td>
                   <span className={packageRecord.isActive ? 'status-pill status-success' : 'plan-pill'}>
                     {packageRecord.isActive ? 'Active' : 'Hidden'}
@@ -217,6 +224,7 @@ export default function IapPackagesPanel({ onHeaderActionsChange }) {
               <p>IAP package</p>
               <h2>{selectedPackageId ? 'Edit package' : 'Create package'}</h2>
             </div>
+            {dialogError && <div className="notice notice-error">{dialogError}</div>}
             <div className="package-form-grid">
               <label className="field">
                 <span>Package id</span>
@@ -229,14 +237,26 @@ export default function IapPackagesPanel({ onHeaderActionsChange }) {
                 />
               </label>
               <label className="field">
-                <span>Name</span>
+                <span>Pack name</span>
                 <input
                   value={formState.name}
                   onChange={(event) => setFormState((current) => ({ ...current, name: event.target.value }))}
-                  placeholder="1,000 credits"
+                  placeholder="1,000 credit pack"
                   required
                   disabled={isSaving}
                 />
+              </label>
+              <label className="field">
+                <span>Pack type</span>
+                <select
+                  value={formState.packType}
+                  onChange={(event) => setFormState((current) => ({ ...current, packType: event.target.value }))}
+                  disabled={isSaving}
+                >
+                  {IAP_PACK_TYPE_OPTIONS.map((option) => (
+                    <option key={option.value} value={option.value}>{option.label}</option>
+                  ))}
+                </select>
               </label>
               <label className="field">
                 <span>Price</span>
@@ -257,17 +277,6 @@ export default function IapPackagesPanel({ onHeaderActionsChange }) {
                   onChange={(event) => setFormState((current) => ({ ...current, currency: event.target.value.toUpperCase() }))}
                   maxLength={3}
                   required
-                  disabled={isSaving}
-                />
-              </label>
-              <label className="field">
-                <span>Credits</span>
-                <input
-                  type="number"
-                  min="0"
-                  step="1"
-                  value={formState.credits}
-                  onChange={(event) => setFormState((current) => ({ ...current, credits: event.target.value }))}
                   disabled={isSaving}
                 />
               </label>
