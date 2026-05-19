@@ -17,7 +17,7 @@ const NAVIGATION_ITEMS = [
     icon: Package,
     key: 'iap',
     label: 'IAP',
-    matches: ['iap', 'bank-hook-history'],
+    matches: ['iap', 'bank-hook-history', 'bank-hook-history-detail'],
     path: '/admin/iap',
   },
 ]

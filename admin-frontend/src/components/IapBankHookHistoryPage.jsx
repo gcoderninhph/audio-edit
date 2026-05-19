@@ -1,4 +1,4 @@
-import { ArrowLeft, RefreshCw } from 'lucide-react'
+import { ArrowLeft, RefreshCw, Search, X } from 'lucide-react'
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { fetchAdminIapBankHookHistory } from '../api/adminApi'
 import { formatDateTime, formatNumber } from '../utils/format'
@@ -23,12 +23,22 @@ export default function IapBankHookHistoryPage({ onHeaderActionsChange, onNaviga
   const [isLoading, setIsLoading] = useState(true)
   const [page, setPage] = useState(1)
   const [pagination, setPagination] = useState(null)
+  const [draftEndDate, setDraftEndDate] = useState('')
+  const [draftSearch, setDraftSearch] = useState('')
+  const [draftStartDate, setDraftStartDate] = useState('')
+  const [filters, setFilters] = useState({ endDate: '', search: '', startDate: '' })
 
   const loadHistory = useCallback(async () => {
     setIsLoading(true)
     setError('')
     try {
-      const payload = await fetchAdminIapBankHookHistory({ page, pageSize: PAGE_SIZE })
+      const payload = await fetchAdminIapBankHookHistory({
+        endDate: filters.endDate,
+        page,
+        pageSize: PAGE_SIZE,
+        search: filters.search,
+        startDate: filters.startDate,
+      })
       setHistory(payload.history || [])
       setPagination(payload.pagination || null)
     } catch (loadError) {
@@ -36,7 +46,7 @@ export default function IapBankHookHistoryPage({ onHeaderActionsChange, onNaviga
     } finally {
       setIsLoading(false)
     }
-  }, [page])
+  }, [filters.endDate, filters.search, filters.startDate, page])
 
   useEffect(() => {
     void loadHistory()
@@ -56,6 +66,24 @@ export default function IapBankHookHistoryPage({ onHeaderActionsChange, onNaviga
     return () => onHeaderActionsChange?.(null)
   }, [headerActions, onHeaderActionsChange])
 
+  const handleFilterSubmit = (event) => {
+    event.preventDefault()
+    setPage(1)
+    setFilters({
+      endDate: draftEndDate,
+      search: draftSearch.trim(),
+      startDate: draftStartDate,
+    })
+  }
+
+  const handleFilterReset = () => {
+    setDraftEndDate('')
+    setDraftSearch('')
+    setDraftStartDate('')
+    setPage(1)
+    setFilters({ endDate: '', search: '', startDate: '' })
+  }
+
   return (
     <div className="page-stack dev-host">
       <DeveloperMarker code="admin.react.manage.iap.bank-hook-history" title="Admin React IAP Bank Hook History" />
@@ -65,6 +93,34 @@ export default function IapBankHookHistoryPage({ onHeaderActionsChange, onNaviga
           <p>Bank hook</p>
           <h2>History</h2>
         </div>
+
+        <form className="iap-history-filter-grid dev-host" onSubmit={handleFilterSubmit}>
+          <DeveloperMarker code="admin.react.manage.iap.bank-hook-history.filters" title="Admin React IAP Bank Hook History Filters" />
+          <label className="field field-wide">
+            <span>Search transaction</span>
+            <input
+              value={draftSearch}
+              onChange={(event) => setDraftSearch(event.target.value)}
+              placeholder="Search content, code, reference code, account number"
+            />
+          </label>
+          <label className="field">
+            <span>From date</span>
+            <input type="date" value={draftStartDate} onChange={(event) => setDraftStartDate(event.target.value)} />
+          </label>
+          <label className="field">
+            <span>To date</span>
+            <input type="date" value={draftEndDate} onChange={(event) => setDraftEndDate(event.target.value)} />
+          </label>
+          <div className="iap-history-filter-actions">
+            <button type="submit" className="primary-button compact" disabled={isLoading}>
+              <Search size={17} /> Search
+            </button>
+            <button type="button" className="ghost-button compact" onClick={handleFilterReset} disabled={isLoading}>
+              <X size={17} /> Reset
+            </button>
+          </div>
+        </form>
 
         {error && <div className="notice notice-error">{error}</div>}
 
@@ -82,7 +138,7 @@ export default function IapBankHookHistoryPage({ onHeaderActionsChange, onNaviga
             </thead>
             <tbody>
               {history.map((record) => (
-                <tr key={record.id}>
+                <tr key={record.id} className="clickable-row" onClick={() => onNavigate(`/admin/iap/bank-hook-history/${record.id}`)}>
                   <td>
                     <strong>{formatDateTime(record.receivedAt)}</strong>
                     <small>Bank time: {getBankTimeLabel(record)}</small>
@@ -109,7 +165,7 @@ export default function IapBankHookHistoryPage({ onHeaderActionsChange, onNaviga
                   </td>
                 </tr>
               ))}
-              {!history.length && <tr><td colSpan="6" className="empty-cell">{isLoading ? 'Loading bank hook history...' : 'No bank hook transactions received yet.'}</td></tr>}
+              {!history.length && <tr><td colSpan="6" className="empty-cell">{isLoading ? 'Loading bank hook history...' : 'No bank hook transactions matched the current filters.'}</td></tr>}
             </tbody>
           </table>
         </div>

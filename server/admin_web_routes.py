@@ -53,6 +53,11 @@ def register_admin_web_routes(app):
     def admin_web_iap_bank_hook_history_page():
         return _send_admin_app()
 
+    @app.route('/admin/iap/bank-hook-history/<int:history_id>', methods=['GET'])
+    @app.route('/admin/iap/bank-hook-history/<int:history_id>/', methods=['GET'])
+    def admin_web_iap_bank_hook_history_detail_page(history_id):
+        return _send_admin_app()
+
     @app.route('/admin/users/<path:user_id>', methods=['GET'])
     @app.route('/admin/users/<path:user_id>/', methods=['GET'])
     def admin_web_user_detail_page(user_id):

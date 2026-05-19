@@ -187,9 +187,19 @@ export async function deleteAdminIapApiKey(keyId) {
   return response.data || {}
 }
 
-export async function fetchAdminIapBankHookHistory({ page = 1, pageSize = 20 } = {}) {
-  const response = await requestJson(`/api/admin/iap/bank-hook-history?page=${page}&pageSize=${pageSize}`)
+export async function fetchAdminIapBankHookHistory({ page = 1, pageSize = 20, search = '', startDate = '', endDate = '' } = {}) {
+  const searchParams = new URLSearchParams({ page: String(page), pageSize: String(pageSize) })
+  if (search) searchParams.set('search', search)
+  if (startDate) searchParams.set('startDate', startDate)
+  if (endDate) searchParams.set('endDate', endDate)
+  const response = await requestJson(`/api/admin/iap/bank-hook-history?${searchParams.toString()}`)
   if (!response.ok) throw new Error(response.data?.error || 'Unable to load bank hook history.')
+  return response.data || {}
+}
+
+export async function fetchAdminIapBankHookHistoryDetail(historyId) {
+  const response = await requestJson(`/api/admin/iap/bank-hook-history/${encodeURIComponent(historyId)}`)
+  if (!response.ok) throw new Error(response.data?.error || 'Unable to load bank hook transaction detail.')
   return response.data || {}
 }
 

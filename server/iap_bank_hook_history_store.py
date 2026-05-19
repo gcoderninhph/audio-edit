@@ -11,6 +11,10 @@ except ImportError:
 _history_schema_ready = False
 
 
+class IapBankHookHistoryNotFoundError(AuthStoreError):
+    pass
+
+
 def _now():
     return int(time.time())
 
@@ -19,6 +23,10 @@ def _normalize_pagination(page, page_size, default_page_size=20, max_page_size=1
     safe_page = max(1, int(page or 1))
     safe_page_size = max(1, min(max_page_size, int(page_size or default_page_size)))
     return safe_page, safe_page_size
+
+
+def _normalize_search_term(value):
+    return ' '.join(str(value or '').strip().split())
 
 
 def _build_pagination(page, page_size, total_items):
@@ -103,6 +111,49 @@ def _parse_transaction_at(value):
         return 0
 
 
+def _parse_date_boundary(value, *, end_of_day=False):
+    normalized_value = str(value or '').strip()
+    if not normalized_value:
+        return 0
+
+    try:
+        parsed_date = datetime.strptime(normalized_value, '%Y-%m-%d')
+    except ValueError:
+        return 0
+
+    timestamp = int(parsed_date.timestamp())
+    return timestamp + 86_399 if end_of_day else timestamp
+
+
+def _effective_timestamp_sql():
+    return 'CASE WHEN transaction_at > 0 THEN transaction_at ELSE created_at END'
+
+
+def _build_history_filters(search_term='', start_date='', end_date=''):
+    clauses = []
+    params = []
+
+    safe_search_term = _normalize_search_term(search_term)
+    safe_start_at = _parse_date_boundary(start_date)
+    safe_end_at = _parse_date_boundary(end_date, end_of_day=True)
+
+    if safe_search_term:
+        like_value = f'%{safe_search_term}%'
+        clauses.append('(content LIKE %s OR code LIKE %s OR reference_code LIKE %s OR account_number LIKE %s)')
+        params.extend((like_value, like_value, like_value, like_value))
+
+    if safe_start_at:
+        clauses.append(f'({_effective_timestamp_sql()}) >= %s')
+        params.append(safe_start_at)
+
+    if safe_end_at:
+        clauses.append(f'({_effective_timestamp_sql()}) <= %s')
+        params.append(safe_end_at)
+
+    where_clause = f" WHERE {' AND '.join(clauses)}" if clauses else ''
+    return where_clause, tuple(params), safe_search_term, safe_start_at, safe_end_at
+
+
 def _row_to_bank_hook_history(row):
     if not row:
         return None
@@ -132,6 +183,26 @@ def _row_to_bank_hook_history(row):
         'payload': payload,
         'receivedAt': int(row.get('created_at') or 0),
     }
+
+
+def get_iap_bank_hook_history(history_id):
+    ensure_iap_bank_hook_history_schema()
+    driver = _require_driver()
+    try:
+        connection = _connect(MYSQL_DATABASE)
+        try:
+            with connection.cursor() as cursor:
+                cursor.execute('SELECT * FROM iap_bank_hook_history WHERE id = %s LIMIT 1', (int(history_id),))
+                row = cursor.fetchone()
+                if not row:
+                    raise IapBankHookHistoryNotFoundError('IAP bank hook history record not found')
+                return _row_to_bank_hook_history(row)
+        finally:
+            connection.close()
+    except IapBankHookHistoryNotFoundError:
+        raise
+    except (driver.MySQLError, ValueError) as error:
+        raise AuthStoreError('Unable to load IAP bank hook history') from error
 
 
 def ensure_iap_bank_hook_history_schema():
@@ -238,29 +309,37 @@ def record_iap_bank_hook_history(api_key_record, payload):
         raise AuthStoreError('Unable to record IAP bank hook history') from error
 
 
-def list_iap_bank_hook_history_page(page=1, page_size=20):
+def list_iap_bank_hook_history_page(page=1, page_size=20, search_term='', start_date='', end_date=''):
     ensure_iap_bank_hook_history_schema()
     driver = _require_driver()
     safe_page, safe_page_size = _normalize_pagination(page, page_size)
+    where_clause, where_params, safe_search_term, safe_start_at, safe_end_at = _build_history_filters(
+        search_term=search_term,
+        start_date=start_date,
+        end_date=end_date,
+    )
     try:
         connection = _connect(MYSQL_DATABASE)
         try:
             with connection.cursor() as cursor:
-                cursor.execute('SELECT COUNT(*) AS total_items FROM iap_bank_hook_history')
+                cursor.execute(f'SELECT COUNT(*) AS total_items FROM iap_bank_hook_history{where_clause}', where_params)
                 total_items = int((cursor.fetchone() or {}).get('total_items') or 0)
                 pagination = _build_pagination(safe_page, safe_page_size, total_items)
                 cursor.execute(
-                    """
+                    f"""
                     SELECT *
-                    FROM iap_bank_hook_history
+                    FROM iap_bank_hook_history{where_clause}
                     ORDER BY created_at DESC, id DESC
                     LIMIT %s OFFSET %s
                     """,
-                    (pagination['pageSize'], (pagination['page'] - 1) * pagination['pageSize']),
+                    (*where_params, pagination['pageSize'], (pagination['page'] - 1) * pagination['pageSize']),
                 )
                 return {
                     'history': [_row_to_bank_hook_history(row) for row in cursor.fetchall() or []],
                     'pagination': pagination,
+                    'search': safe_search_term,
+                    'startDate': start_date if safe_start_at else '',
+                    'endDate': end_date if safe_end_at else '',
                 }
         finally:
             connection.close()

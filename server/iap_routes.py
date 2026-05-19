@@ -2,7 +2,12 @@ from flask import jsonify, request
 
 try:
     from auth_routes import AuthStoreError, require_admin_access
-    from iap_bank_hook_history_store import list_iap_bank_hook_history_page, record_iap_bank_hook_history
+    from iap_bank_hook_history_store import (
+        IapBankHookHistoryNotFoundError,
+        get_iap_bank_hook_history,
+        list_iap_bank_hook_history_page,
+        record_iap_bank_hook_history,
+    )
     from iap_api_key_store import (
         IapApiKeyNotFoundError,
         IapApiKeyValidationError,
@@ -34,7 +39,12 @@ try:
     )
 except ImportError:
     from .auth_routes import AuthStoreError, require_admin_access
-    from .iap_bank_hook_history_store import list_iap_bank_hook_history_page, record_iap_bank_hook_history
+    from .iap_bank_hook_history_store import (
+        IapBankHookHistoryNotFoundError,
+        get_iap_bank_hook_history,
+        list_iap_bank_hook_history_page,
+        record_iap_bank_hook_history,
+    )
     from .iap_api_key_store import (
         IapApiKeyNotFoundError,
         IapApiKeyValidationError,
@@ -242,8 +252,23 @@ def register_iap_routes(app):
             history_page = list_iap_bank_hook_history_page(
                 page=request.args.get('page'),
                 page_size=request.args.get('pageSize'),
+                search_term=request.args.get('search'),
+                start_date=request.args.get('startDate'),
+                end_date=request.args.get('endDate'),
             )
             return jsonify(history_page)
+        except AuthStoreError:
+            return _iap_admin_store_error_response()
+
+    @app.route('/api/admin/iap/bank-hook-history/<int:history_id>', methods=['GET'])
+    def admin_iap_bank_hook_history_detail_route(history_id):
+        _claims, auth_error = require_admin_access()
+        if auth_error:
+            return auth_error
+        try:
+            return jsonify({'historyRecord': get_iap_bank_hook_history(history_id)})
+        except IapBankHookHistoryNotFoundError:
+            return jsonify({'error': 'Bank hook history record not found'}), 404
         except AuthStoreError:
             return _iap_admin_store_error_response()
 
