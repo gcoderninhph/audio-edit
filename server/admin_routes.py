@@ -2,7 +2,7 @@ from flask import jsonify, request
 
 try:
     from admin_bootstrap import clear_temporary_admin_state, is_temporary_admin_claims
-    from admin_store import LastAdminRemovalError, UserNotFoundError, get_auth_user, get_auth_user_summary, has_admin_account, list_auth_users_page, update_auth_user_admin_fields
+    from admin_store import AdminAccountLockError, LastAdminRemovalError, UserNotFoundError, get_auth_user, get_auth_user_summary, has_admin_account, list_auth_users_page, update_auth_user_admin_fields
     from auth_credit_store import add_user_credits, list_user_credit_history_page
     from auth_routes import (
         ADMIN_USER_ROLE,
@@ -22,7 +22,7 @@ try:
     from request_store import RequestStoreError, list_recent_request_records, list_user_request_records_page
 except ImportError:
     from .admin_bootstrap import clear_temporary_admin_state, is_temporary_admin_claims
-    from .admin_store import LastAdminRemovalError, UserNotFoundError, get_auth_user, get_auth_user_summary, has_admin_account, list_auth_users_page, update_auth_user_admin_fields
+    from .admin_store import AdminAccountLockError, LastAdminRemovalError, UserNotFoundError, get_auth_user, get_auth_user_summary, has_admin_account, list_auth_users_page, update_auth_user_admin_fields
     from .auth_credit_store import add_user_credits, list_user_credit_history_page
     from .auth_routes import (
         ADMIN_USER_ROLE,
@@ -226,7 +226,8 @@ def register_admin_routes(app):
         next_role = payload.get('role') if 'role' in payload else None
         next_credits = payload.get('credits') if 'credits' in payload else None
         next_is_premium = payload.get('isPremium') if 'isPremium' in payload else None
-        if next_role is None and next_credits is None and next_is_premium is None:
+        next_is_locked = payload.get('isLocked') if 'isLocked' in payload else None
+        if next_role is None and next_credits is None and next_is_premium is None and next_is_locked is None:
             return jsonify({'error': 'No admin changes were provided'}), 400
         if claims.get('sub') == user_id and next_role == 'user':
             return jsonify({'error': 'You cannot remove your own admin role from the active session'}), 400
@@ -237,11 +238,14 @@ def register_admin_routes(app):
                 role=next_role,
                 credits=next_credits,
                 is_premium=next_is_premium,
+                is_locked=next_is_locked,
                 actor_user_id=claims.get('sub'),
             )
             return jsonify({'user': _serialize_admin_user(updated_user)})
         except UserNotFoundError:
             return jsonify({'error': 'User not found'}), 404
+        except AdminAccountLockError:
+            return jsonify({'error': 'Admin accounts cannot be locked'}), 400
         except LastAdminRemovalError:
             return jsonify({'error': 'At least one admin account is required'}), 400
         except AuthStoreError:

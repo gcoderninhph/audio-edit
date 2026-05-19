@@ -75,18 +75,19 @@ export default function ManagePage({ onNavigate, onHeaderActionsChange }) {
         </form>
         <div className="table-wrap">
           <table className="admin-table">
-            <thead><tr><th>User</th><th>Role</th><th>Plan</th><th>Credits</th><th>Created</th></tr></thead>
+            <thead><tr><th>User</th><th>Role</th><th>Plan</th><th>Status</th><th>Credits</th><th>Created</th></tr></thead>
             <tbody>
               {users.map((user) => (
                 <tr key={user.id} className="clickable-row" onClick={() => onNavigate(`/admin/users/${encodeURIComponent(user.id)}`)}>
                   <td><div className="user-cell"><UserRound size={18} /><span><strong>{user.displayName || user.username || user.email || user.id}</strong><small>{[user.username, user.email].filter(Boolean).join(' · ') || user.id}</small></span></div></td>
                   <td><span className="role-pill">{user.role || 'user'}</span></td>
                   <td><span className={user.isPremium ? 'premium-pill' : 'plan-pill'}>{user.isPremium ? 'Premium' : 'Standard'}</span></td>
+                  <td><span className="status-pill">{user.isLocked ? 'Locked' : 'Active'}</span></td>
                   <td>{formatNumber(user.credits)}</td>
                   <td>{formatDateTime(user.createdAt)}</td>
                 </tr>
               ))}
-              {!users.length && <tr><td colSpan="5" className="empty-cell">{isLoading ? 'Loading users...' : 'No users found.'}</td></tr>}
+              {!users.length && <tr><td colSpan="6" className="empty-cell">{isLoading ? 'Loading users...' : 'No users found.'}</td></tr>}
             </tbody>
           </table>
         </div>

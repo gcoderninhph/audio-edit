@@ -53,6 +53,11 @@ AUTH_PASSWORD = os.environ.get('AUTH_PASSWORD', 'demo123')
 AUTH_DISPLAY_NAME = os.environ.get('AUTH_DISPLAY_NAME', 'Local Editor')
 PASSWORD_HASH_ITERATIONS = int(os.environ.get('AUTH_PASSWORD_HASH_ITERATIONS', '200000'))
 MIN_PASSWORD_LENGTH = 6
+LOCKED_ACCOUNT_ERROR = 'This account has been locked'
+
+
+class LockedAccountError(ValueError):
+    pass
 
 
 def base64url_encode(raw_bytes):
@@ -81,6 +86,7 @@ def get_local_user():
         'id': AUTH_USER_ID,
         'credits': DEFAULT_INITIAL_CREDITS,
         'email': AUTH_USERNAME.lower(),
+        'isLocked': False,
         'isPremium': False,
         'role': DEFAULT_USER_ROLE,
         'username': normalize_username(AUTH_USERNAME.split('@', 1)[0]),
@@ -125,11 +131,31 @@ def verify_password(password, user_record):
     return hmac.compare_digest(base64url_encode(password_hash), expected_hash)
 
 
+def ensure_user_is_unlocked(user):
+    if user and bool(user.get('isLocked')) and not bool(user.get('isTemporaryAdmin')):
+        raise LockedAccountError(LOCKED_ACCOUNT_ERROR)
+    return user
+
+
+def get_current_user_from_claims(claims):
+    return get_current_user_state(
+        claims.get('sub') or AUTH_USER_ID,
+        claims.get('email') or AUTH_USERNAME.lower(),
+        claims.get('displayName') or AUTH_DISPLAY_NAME,
+        claims.get('credits') or DEFAULT_INITIAL_CREDITS,
+        bool(claims.get('isPremium')),
+        claims.get('role') or DEFAULT_USER_ROLE,
+        claims.get('username') or '',
+        is_temporary_admin=is_temporary_admin_claims(claims),
+        must_setup_admin=bool(claims.get('mustSetupAdmin')),
+    )
+
+
 def get_user_for_credentials(email, password):
     normalized_identifier = normalize_email(email)
     if hmac.compare_digest(normalized_identifier, normalize_email(AUTH_USERNAME)) \
             and hmac.compare_digest(str(password or ''), AUTH_PASSWORD):
-        return get_local_user()
+        return ensure_user_is_unlocked(get_local_user())
 
     temporary_admin_user = get_temporary_admin_user(normalized_identifier, password)
     if temporary_admin_user:
@@ -137,7 +163,7 @@ def get_user_for_credentials(email, password):
 
     registered_user = find_registered_user(normalized_identifier)
     if registered_user and verify_password(password, registered_user):
-        return public_user_from_record(registered_user)
+        return ensure_user_is_unlocked(public_user_from_record(registered_user))
 
     return None
 
@@ -191,6 +217,7 @@ def build_token_pair(user):
         'sub': user['id'],
         'credits': max(0, int(user.get('credits') or 0)),
         'email': user['email'],
+        'isLocked': bool(user.get('isLocked')),
         'isPremium': bool(user.get('isPremium')),
         'role': user.get('role') or DEFAULT_USER_ROLE,
         'username': user.get('username') or '',
@@ -205,6 +232,7 @@ def build_token_pair(user):
         'sub': user['id'],
         'credits': max(0, int(user.get('credits') or 0)),
         'email': user['email'],
+        'isLocked': bool(user.get('isLocked')),
         'isPremium': bool(user.get('isPremium')),
         'role': user.get('role') or DEFAULT_USER_ROLE,
         'username': user.get('username') or '',
@@ -242,7 +270,13 @@ def get_access_token_claims():
 
 def require_access_token():
     try:
-        return get_access_token_claims(), None
+        claims = get_access_token_claims()
+        ensure_user_is_unlocked(get_current_user_from_claims(claims))
+        return claims, None
+    except LockedAccountError as error:
+        return None, (jsonify({'error': str(error)}), 403)
+    except AuthStoreError:
+        return None, auth_store_error_response()
     except ValueError:
         return None, (jsonify({'error': 'Login is required to use this feature'}), 401)
 
@@ -268,7 +302,7 @@ def get_json_payload():
 def is_valid_login(email, password):
     try:
         return get_user_for_credentials(email, password) is not None
-    except AuthStoreError:
+    except (AuthStoreError, LockedAccountError):
         return False
 
 
@@ -291,6 +325,8 @@ def register_auth_routes(app):
                 return jsonify({'error': 'Invalid email or password'}), 401
 
             return jsonify(build_token_pair(user))
+        except LockedAccountError as error:
+            return jsonify({'error': str(error)}), 403
         except AuthStoreError:
             return auth_store_error_response()
 
@@ -355,18 +391,10 @@ def register_auth_routes(app):
                 return jsonify({'error': 'Refresh token was revoked'}), 401
 
             revoke_refresh_token(token_id)
-            current_user = get_current_user_state(
-                claims.get('sub') or AUTH_USER_ID,
-                claims.get('email') or AUTH_USERNAME.lower(),
-                claims.get('displayName') or AUTH_DISPLAY_NAME,
-                claims.get('credits') or DEFAULT_INITIAL_CREDITS,
-                bool(claims.get('isPremium')),
-                claims.get('role') or DEFAULT_USER_ROLE,
-                claims.get('username') or '',
-                is_temporary_admin=is_temporary_admin_claims(claims),
-                must_setup_admin=bool(claims.get('mustSetupAdmin')),
-            )
+            current_user = ensure_user_is_unlocked(get_current_user_from_claims(claims))
             return jsonify(build_token_pair(current_user))
+        except LockedAccountError as error:
+            return jsonify({'error': str(error)}), 403
         except AuthStoreError:
             return auth_store_error_response()
 
@@ -381,17 +409,9 @@ def register_auth_routes(app):
             return jsonify({'error': 'Invalid access token'}), 401
 
         try:
-            current_user = get_current_user_state(
-                claims.get('sub') or AUTH_USER_ID,
-                claims.get('email') or AUTH_USERNAME.lower(),
-                claims.get('displayName') or AUTH_DISPLAY_NAME,
-                claims.get('credits') or DEFAULT_INITIAL_CREDITS,
-                bool(claims.get('isPremium')),
-                claims.get('role') or DEFAULT_USER_ROLE,
-                claims.get('username') or '',
-                is_temporary_admin=is_temporary_admin_claims(claims),
-                must_setup_admin=bool(claims.get('mustSetupAdmin')),
-            )
+            current_user = ensure_user_is_unlocked(get_current_user_from_claims(claims))
+        except LockedAccountError as error:
+            return jsonify({'error': str(error)}), 403
         except AuthStoreError:
             return auth_store_error_response()
 

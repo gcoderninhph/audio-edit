@@ -1,4 +1,4 @@
-import { ArrowLeft, Coins, Plus, RefreshCw, Star } from 'lucide-react'
+import { ArrowLeft, Coins, Lock, LockOpen, Plus, RefreshCw, Star } from 'lucide-react'
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { addUserCredits, fetchAdminUser, fetchCreditHistory, fetchUserRequests, updateAdminUser } from '../api/adminApi'
 import { formatDateTime, formatNumber, getRequestSource } from '../utils/format'
@@ -21,6 +21,7 @@ export default function UserDetailPage({ userId, onNavigate, onHeaderActionsChan
   const [error, setError] = useState('')
   const [isLoading, setIsLoading] = useState(true)
   const [isSavingCredits, setIsSavingCredits] = useState(false)
+  const [isSavingLock, setIsSavingLock] = useState(false)
   const [isSavingPremium, setIsSavingPremium] = useState(false)
 
   const loadDetail = useCallback(async () => {
@@ -57,11 +58,11 @@ export default function UserDetailPage({ userId, onNavigate, onHeaderActionsChan
       type="button"
       className="ghost-button compact"
       onClick={() => void loadDetail()}
-      disabled={isLoading || isSavingCredits || isSavingPremium}
+      disabled={isLoading || isSavingCredits || isSavingLock || isSavingPremium}
     >
       <RefreshCw size={17} /> Refresh
     </button>,
-  ]), [isLoading, isSavingCredits, isSavingPremium, loadDetail, onNavigate])
+  ]), [isLoading, isSavingCredits, isSavingLock, isSavingPremium, loadDetail, onNavigate])
 
   useEffect(() => {
     onHeaderActionsChange?.(headerActions)
@@ -106,6 +107,21 @@ export default function UserDetailPage({ userId, onNavigate, onHeaderActionsChan
     }
   }
 
+  const handleLockToggle = async () => {
+    if (!user || user.role === 'admin') return
+
+    setIsSavingLock(true)
+    setError('')
+    try {
+      const payload = await updateAdminUser(userId, { isLocked: !user.isLocked })
+      setUser(payload.user || null)
+    } catch (saveError) {
+      setError(saveError.message || 'Unable to update lock state.')
+    } finally {
+      setIsSavingLock(false)
+    }
+  }
+
   return (
     <div className="page-stack dev-host">
       <DeveloperMarker code="admin.react.detail.page" title="Admin React Detail Page" />
@@ -120,6 +136,7 @@ export default function UserDetailPage({ userId, onNavigate, onHeaderActionsChan
           <div className="detail-user-tags">
             <span className="role-pill">{user?.role || 'user'}</span>
             <span className={user?.isPremium ? 'premium-pill' : 'plan-pill'}>{user?.isPremium ? 'Premium' : 'Standard'}</span>
+            <span className="status-pill">{user?.isLocked ? 'Locked' : 'Active'}</span>
             <span className="plan-pill">Credits {formatNumber(user?.credits)}</span>
           </div>
           <div className="toolbar-actions">
@@ -131,6 +148,15 @@ export default function UserDetailPage({ userId, onNavigate, onHeaderActionsChan
           >
             <Star size={17} />
             {isSavingPremium ? 'Saving...' : user?.isPremium ? 'Disable premium' : 'Enable premium'}
+          </button>
+          <button
+            type="button"
+            className="ghost-button compact"
+            onClick={() => void handleLockToggle()}
+            disabled={isLoading || isSavingLock || !user || user.role === 'admin'}
+          >
+            {user?.isLocked ? <LockOpen size={17} /> : <Lock size={17} />}
+            {isSavingLock ? 'Saving...' : user?.role === 'admin' ? 'Admin cannot be locked' : user?.isLocked ? 'Unlock account' : 'Lock account'}
           </button>
           <button type="button" className="primary-button compact" onClick={() => setIsDialogOpen(true)}><Coins size={17} /> Add credits</button>
           </div>

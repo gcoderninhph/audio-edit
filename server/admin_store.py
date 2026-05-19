@@ -6,12 +6,14 @@ try:
         AuthStoreError,
         MYSQL_DATABASE,
         _connect,
+        _normalize_is_locked,
         _normalize_is_premium,
         _normalize_role,
         _require_driver,
         _row_to_user_record,
         ensure_auth_schema,
         find_user_by_id,
+        revoke_refresh_tokens_for_user,
     )
 except ImportError:
     from .auth_credit_store import set_user_credit_balance
@@ -21,12 +23,14 @@ except ImportError:
         AuthStoreError,
         MYSQL_DATABASE,
         _connect,
+        _normalize_is_locked,
         _normalize_is_premium,
         _normalize_role,
         _require_driver,
         _row_to_user_record,
         ensure_auth_schema,
         find_user_by_id,
+        revoke_refresh_tokens_for_user,
     )
 
 
@@ -35,6 +39,10 @@ class UserNotFoundError(AuthStoreError):
 
 
 class LastAdminRemovalError(AuthStoreError):
+    pass
+
+
+class AdminAccountLockError(AuthStoreError):
     pass
 
 
@@ -158,18 +166,24 @@ def get_auth_user_summary():
 
 
 
-def update_auth_user_admin_fields(user_id, role=None, credits=None, is_premium=None, actor_user_id=None):
+def update_auth_user_admin_fields(user_id, role=None, credits=None, is_premium=None, is_locked=None, actor_user_id=None):
     ensure_auth_schema()
     driver = _require_driver()
     next_role = _normalize_role(role) if role is not None else None
     next_credits = max(0, int(credits or 0)) if credits is not None else None
     next_is_premium = _normalize_is_premium(is_premium) if is_premium is not None else None
+    next_is_locked = _normalize_is_locked(is_locked) if is_locked is not None else None
 
-    if next_role is None and next_credits is None and next_is_premium is None:
+    if next_role is None and next_credits is None and next_is_premium is None and next_is_locked is None:
         raise AuthStoreError('No admin fields were provided to update')
 
     try:
         current_user = get_auth_user(user_id)
+        final_role = next_role if next_role is not None else current_user.get('role')
+        final_is_locked = next_is_locked if next_is_locked is not None else bool(current_user.get('isLocked'))
+
+        if final_role == ADMIN_USER_ROLE and final_is_locked:
+            raise AdminAccountLockError('Admin accounts cannot be locked')
 
         if current_user.get('role') == ADMIN_USER_ROLE and next_role == DEFAULT_USER_ROLE:
             connection = _connect(MYSQL_DATABASE)
@@ -212,6 +226,20 @@ def update_auth_user_admin_fields(user_id, role=None, credits=None, is_premium=N
                     )
             finally:
                 connection.close()
+
+        if next_is_locked is not None and next_is_locked != bool(current_user.get('isLocked')):
+            connection = _connect(MYSQL_DATABASE)
+            try:
+                with connection.cursor() as cursor:
+                    cursor.execute(
+                        'UPDATE auth_users SET is_locked = %s, updated_at = UNIX_TIMESTAMP() WHERE id = %s',
+                        (1 if next_is_locked else 0, user_id),
+                    )
+            finally:
+                connection.close()
+
+            if next_is_locked:
+                revoke_refresh_tokens_for_user(user_id)
 
         return get_auth_user(user_id)
     except driver.MySQLError as error:
