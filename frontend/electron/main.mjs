@@ -30,14 +30,16 @@ const workspaceDir = path.resolve(frontendDir, '..')
 const serverDir = path.join(workspaceDir, 'server')
 const distDir = path.join(frontendDir, 'dist')
 const isDeveloper = true
+const defaultRemoteServerUrl = 'https://audio-test.accstore.pro.vn'
 
 process.env.ELECTRON_IS_DEVELOPER = isDeveloper ? '1' : '0'
 app.commandLine.appendSwitch('enable-experimental-web-platform-features')
 
 const serverPort = Number(process.env.ELECTRON_SERVER_PORT || 5000)
-const serverUrl = process.env.ELECTRON_SERVER_URL || `http://127.0.0.1:${serverPort}`
+const localServerUrl = `http://127.0.0.1:${serverPort}`
 const rendererDevUrl = process.env.ELECTRON_RENDERER_URL
-const shouldSpawnBackend = process.env.ELECTRON_SKIP_BACKEND !== '1'
+const shouldSpawnBackend = process.env.ELECTRON_SPAWN_BACKEND === '1'
+const serverUrl = process.env.ELECTRON_SERVER_URL || (shouldSpawnBackend ? localServerUrl : defaultRemoteServerUrl)
 
 const mimeTypes = new Map([
   ['.css', 'text/css; charset=utf-8'],
@@ -115,6 +117,7 @@ function startBackendProcess() {
   logDesktopEvent('backend', 'Spawned Flask backend process', {
     serverDir,
     serverPort,
+    serverUrl,
   })
 
   backendProcess.stdout.on('data', (data) => logBackendOutput('[flask]', data))

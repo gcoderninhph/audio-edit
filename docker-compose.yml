@@ -1,0 +1,66 @@
+services:
+  web:
+    build:
+      context: .
+      dockerfile: server/Dockerfile
+    restart: unless-stopped
+    depends_on:
+      - mysql
+      - redis
+    environment:
+      SERVER_PORT: 5000
+      AUTH_JWT_SECRET: ${AUTH_JWT_SECRET}
+      AUTH_MYSQL_HOST: mysql
+      AUTH_MYSQL_PORT: 3306
+      AUTH_MYSQL_USER: root
+      AUTH_MYSQL_PASSWORD: ${MYSQL_ROOT_PASSWORD}
+      AUTH_MYSQL_DATABASE: ${MYSQL_DATABASE}
+      REQUEST_MYSQL_HOST: mysql
+      REQUEST_MYSQL_PORT: 3306
+      REQUEST_MYSQL_USER: root
+      REQUEST_MYSQL_PASSWORD: ${MYSQL_ROOT_PASSWORD}
+      REQUEST_MYSQL_DATABASE: ${MYSQL_DATABASE}
+      IAP_REDIS_HOST: redis
+      IAP_REDIS_PORT: 6379
+      IAP_REDIS_DB: 0
+      IAP_REDIS_PREFIX: audio_editor
+      BACKEND_LOG_LEVEL: INFO
+    volumes:
+      - ./backend_logs:/app/logs
+      - ./backend_uploads:/app/server/uploads
+
+  mysql:
+    image: mysql:8.4
+    restart: unless-stopped
+    environment:
+      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD}
+      MYSQL_DATABASE: ${MYSQL_DATABASE}
+    volumes:
+      - ./mysql_data:/var/lib/mysql
+
+  redis:
+    image: redis:7-alpine
+    restart: unless-stopped
+    volumes:
+      - ./redis_data:/data
+
+  phpmyadmin:
+    image: phpmyadmin:5-apache
+    restart: unless-stopped
+    depends_on:
+      - mysql
+    environment:
+      PMA_HOST: mysql
+      PMA_PORT: 3306
+      PMA_USER: root
+      PMA_PASSWORD: ${MYSQL_ROOT_PASSWORD}
+      UPLOAD_LIMIT: 256M
+
+  cloudflared:
+    image: cloudflare/cloudflared:latest
+    restart: unless-stopped
+    depends_on:
+      - web
+    environment:
+      TUNNEL_TOKEN: ${CLOUDFLARE_TUNNEL_TOKEN}
+    command: tunnel --no-autoupdate run

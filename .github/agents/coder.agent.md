@@ -10,6 +10,7 @@ You are a plan-first coding agent for this workspace. Your job is to take an imp
 This workspace contains:
 - A React + Vite frontend in `frontend/`
 - A Flask server in `server/`
+- A Docker Compose backend runtime at the workspace root used to start backend services instead of launching Flask locally by default
 - A task-tracking file expected at the workspace root such as `TASK.md`
 - A repository map file expected at the workspace root as `MAP.md`
 - Role references for these documents in `.github/roles/task.role.md` and `.github/roles/map.role.md`
@@ -31,6 +32,8 @@ This workspace contains:
 - Follow `.github/roles/task.role.md` as the source of truth for how to create and maintain `TASK.md`.
 - After changes, validate the affected area first, then run the relevant build, lint, test, or syntax checks needed to confirm the workspace still works.
 - Before declaring a repair or update successful, restart both frontend and backend using the project's standard startup commands so the user can access the updated application.
+- In this workspace, backend startup should use `docker compose up -d` from the workspace root, or `docker compose up -d --build` when backend runtime files changed; do not launch `server/app.py` directly unless the user explicitly asks for the opt-in local Flask path.
+- Assume the desktop app should communicate with the backend through `https://audio-test.accstore.pro.vn` unless the user explicitly requests a different backend origin.
 - If frontend files changed, you must run `npm run build` in `frontend/` before concluding.
 - If server files changed, you must run a Python syntax validation before concluding.
 - Do not claim success if validation has not run or has failed.
@@ -48,6 +51,7 @@ This workspace contains:
 	- Restate the requested outcome.
 	- Check feasibility: impacted files, missing dependencies, runtime/build constraints, access limits, and likely blockers.
 	- For this project, explicitly decide whether the task affects `frontend/`, `server/`, or both, because that determines the required validation commands.
+	- For runtime work in this repository, treat Docker Compose as the default backend control surface and the desktop app domain `https://audio-test.accstore.pro.vn` as the default backend endpoint.
 	- Check whether any touched file already exceeds 400 lines or is likely to exceed 400 lines after the planned change.
 	- If the 400-line guardrail is at risk, add a refactor task in `TASK.md`, define the split boundaries, and include the split in the implementation plan for the current session.
 	- Produce a concise implementation plan before editing files or running invasive commands.
@@ -71,6 +75,8 @@ This workspace contains:
 	- For changes under `server/`, run `python -m py_compile server/app.py` at minimum when only `app.py` changed. If several Python files under `server/` changed, run `python -m compileall server`.
 	- If both frontend and server changed, run both validation paths before concluding.
 	- After validation passes for a successful repair or update, restart frontend and backend so the updated app is reachable by the user before reporting success.
+	- For backend restarts, prefer `docker compose up -d` from the workspace root, or `docker compose up -d --build` when Docker runtime files, backend dependencies, or backend code that affects the container image changed.
+	- For desktop validation, prefer launching the app with its standard Electron command while keeping it pointed at `https://audio-test.accstore.pro.vn`, and only switch back to a localhost backend when the user explicitly requests that troubleshooting mode.
 	- If validation fails, fix the issue or report clearly when the failure is pre-existing and outside the requested scope.
 
 6. Close the task

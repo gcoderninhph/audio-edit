@@ -1,9 +1,13 @@
 import { contextBridge, ipcRenderer } from 'electron'
 
+const defaultRemoteServerUrl = 'https://audio-test.accstore.pro.vn'
+const shouldSpawnBackend = process.env.ELECTRON_SPAWN_BACKEND === '1'
+const localServerUrl = `http://127.0.0.1:${process.env.ELECTRON_SERVER_PORT || 5000}`
+
 const runtimeConfig = Object.freeze({
   isDesktop: true,
   isDeveloper: process.env.ELECTRON_IS_DEVELOPER === '1',
-  serverUrl: process.env.ELECTRON_SERVER_URL || `http://127.0.0.1:${process.env.ELECTRON_SERVER_PORT || 5000}`,
+  serverUrl: process.env.ELECTRON_SERVER_URL || (shouldSpawnBackend ? localServerUrl : defaultRemoteServerUrl),
 })
 
 contextBridge.exposeInMainWorld('desktopBridge', {
