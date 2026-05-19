@@ -14,9 +14,7 @@ This frontend now uses Electron as the primary runtime for real project work.
 
 Electron now stores project metadata and source videos in the desktop app data directory. Flask is only used for transcription and translation proxy requests.
 
-Electron reads the backend base URL from runtime config and now defaults to `https://audio-test.accstore.pro.vn`.
+Electron reads the backend base URL from runtime config and is pinned to `https://audio-test.accstore.pro.vn` for desktop runtime.
 
-- Start the backend stack with `docker compose up -d` from the workspace root instead of launching `server/app.py` directly.
-- Set `ELECTRON_SERVER_URL` to point the desktop client at a different Flask host when needed.
-- Set `ELECTRON_SPAWN_BACKEND=1` only if you explicitly want Electron to spawn the local Flask server for troubleshooting.
-- Set `PYTHON_BIN` if Electron needs a specific Python executable when it launches that opt-in local server path.
+- Start the backend stack with `docker compose up -d` from the workspace root only when you are working on the backend itself.
+- The desktop app no longer exposes a localhost override or an Electron-managed local Flask startup path.

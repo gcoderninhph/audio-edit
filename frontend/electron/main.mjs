@@ -1,5 +1,4 @@
 import { app, BrowserWindow, dialog, ipcMain, protocol } from 'electron'
-import { spawn } from 'node:child_process'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { appendDebugLog, getDebugLogFilePath, registerDebugLogIpc } from './debugLog.mjs'
@@ -26,20 +25,14 @@ const __filename = fileURLToPath(import.meta.url)
 const __dirname = path.dirname(__filename)
 
 const frontendDir = path.resolve(__dirname, '..')
-const workspaceDir = path.resolve(frontendDir, '..')
-const serverDir = path.join(workspaceDir, 'server')
 const distDir = path.join(frontendDir, 'dist')
 const isDeveloper = true
-const defaultRemoteServerUrl = 'https://audio-test.accstore.pro.vn'
+const serverUrl = 'https://audio-test.accstore.pro.vn'
 
 process.env.ELECTRON_IS_DEVELOPER = isDeveloper ? '1' : '0'
 app.commandLine.appendSwitch('enable-experimental-web-platform-features')
 
-const serverPort = Number(process.env.ELECTRON_SERVER_PORT || 5000)
-const localServerUrl = `http://127.0.0.1:${serverPort}`
 const rendererDevUrl = process.env.ELECTRON_RENDERER_URL
-const shouldSpawnBackend = process.env.ELECTRON_SPAWN_BACKEND === '1'
-const serverUrl = process.env.ELECTRON_SERVER_URL || (shouldSpawnBackend ? localServerUrl : defaultRemoteServerUrl)
 
 const mimeTypes = new Map([
   ['.css', 'text/css; charset=utf-8'],
@@ -62,10 +55,8 @@ const mimeTypes = new Map([
   ['.woff2', 'font/woff2'],
 ])
 
-let backendProcess = null
 let mainWindow = null
 let rendererStartUrl = null
-let isQuitting = false
 
 registerProjectStoreIpc(ipcMain)
 registerDebugLogIpc(ipcMain)
@@ -81,62 +72,8 @@ function delay(ms) {
   return new Promise((resolve) => setTimeout(resolve, ms))
 }
 
-function getPythonCommand() {
-  return process.env.PYTHON_BIN || 'python'
-}
-
 function getContentType(filePath) {
   return mimeTypes.get(path.extname(filePath).toLowerCase()) || 'application/octet-stream'
-}
-
-function logBackendOutput(prefix, data) {
-  const output = data.toString().trim()
-  if (output) {
-    console.log(`${prefix} ${output}`)
-    logDesktopEvent('backend', output, { prefix })
-  }
-}
-
-function startBackendProcess() {
-  if (!shouldSpawnBackend || backendProcess) {
-    return
-  }
-
-  backendProcess = spawn(getPythonCommand(), ['app.py'], {
-    cwd: serverDir,
-    env: {
-      ...process.env,
-      FLASK_DEBUG: '0',
-      FLASK_USE_RELOADER: '0',
-      PYTHONUNBUFFERED: '1',
-      SERVER_PORT: String(serverPort),
-    },
-    stdio: ['ignore', 'pipe', 'pipe'],
-  })
-
-  logDesktopEvent('backend', 'Spawned Flask backend process', {
-    serverDir,
-    serverPort,
-    serverUrl,
-  })
-
-  backendProcess.stdout.on('data', (data) => logBackendOutput('[flask]', data))
-  backendProcess.stderr.on('data', (data) => logBackendOutput('[flask:error]', data))
-  backendProcess.on('error', (error) => {
-    logDesktopEvent('backend', 'Backend startup failed', error, 'error')
-    dialog.showErrorBox('Backend startup failed', error.message)
-  })
-  backendProcess.on('exit', (code, signal) => {
-    backendProcess = null
-    if (isQuitting) {
-      return
-    }
-
-    const reason = signal ? `signal ${signal}` : `code ${code}`
-    logDesktopEvent('backend', 'Backend stopped unexpectedly', { code, signal, reason }, 'error')
-    dialog.showErrorBox('Backend stopped unexpectedly', `The Flask server exited with ${reason}.`)
-    app.quit()
-  })
 }
 
 async function waitForBackendReady() {
@@ -207,20 +144,13 @@ async function bootstrapDesktopApp() {
   })
   registerDesktopAppProtocol({ distDir, getContentType })
   rendererStartUrl = rendererDevUrl || 'desktop://app/index.html'
-  startBackendProcess()
   await waitForBackendReady()
   logDesktopEvent('desktop-main', 'Backend became ready', { serverUrl })
   await createMainWindow()
 }
 
 function cleanupRuntime() {
-  isQuitting = true
   logDesktopEvent('desktop-main', 'Cleaning up desktop runtime')
-
-  if (backendProcess) {
-    backendProcess.kill()
-    backendProcess = null
-  }
 }
 
 app.on('before-quit', cleanupRuntime)
