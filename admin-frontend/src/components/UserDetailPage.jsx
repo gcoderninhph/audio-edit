@@ -1,5 +1,5 @@
-import { ArrowLeft, Coins, Plus, Star } from 'lucide-react'
-import { useCallback, useEffect, useState } from 'react'
+import { ArrowLeft, Coins, Plus, RefreshCw, Star } from 'lucide-react'
+import { useCallback, useEffect, useMemo, useState } from 'react'
 import { addUserCredits, fetchAdminUser, fetchCreditHistory, fetchUserRequests, updateAdminUser } from '../api/adminApi'
 import { formatDateTime, formatNumber, getRequestSource } from '../utils/format'
 import DeveloperMarker from './DeveloperMarker'
@@ -7,7 +7,7 @@ import Pagination from './Pagination'
 
 const PAGE_SIZE = 10
 
-export default function UserDetailPage({ userId, onNavigate }) {
+export default function UserDetailPage({ userId, onNavigate, onHeaderActionsChange }) {
   const [user, setUser] = useState(null)
   const [requests, setRequests] = useState([])
   const [history, setHistory] = useState([])
@@ -48,6 +48,26 @@ export default function UserDetailPage({ userId, onNavigate }) {
     void loadDetail()
   }, [loadDetail])
 
+  const headerActions = useMemo(() => ([
+    <button key="back" type="button" className="ghost-button compact" onClick={() => onNavigate('/admin/manage')}>
+      <ArrowLeft size={17} /> Back
+    </button>,
+    <button
+      key="refresh"
+      type="button"
+      className="ghost-button compact"
+      onClick={() => void loadDetail()}
+      disabled={isLoading || isSavingCredits || isSavingPremium}
+    >
+      <RefreshCw size={17} /> Refresh
+    </button>,
+  ]), [isLoading, isSavingCredits, isSavingPremium, loadDetail, onNavigate])
+
+  useEffect(() => {
+    onHeaderActionsChange?.(headerActions)
+    return () => onHeaderActionsChange?.(null)
+  }, [headerActions, onHeaderActionsChange])
+
   const handleAddCredits = async (event) => {
     event.preventDefault()
     const amount = Number(creditAmount)
@@ -86,32 +106,23 @@ export default function UserDetailPage({ userId, onNavigate }) {
     }
   }
 
-  const summaryCards = [
-    ['Credits', user?.credits],
-    ['Role', user?.role || 'user'],
-    ['Plan', user?.isPremium ? 'Premium' : 'Standard'],
-    ['Requests', requestPagination?.totalItems],
-    ['Credit events', historyPagination?.totalItems],
-    ['Created', formatDateTime(user?.createdAt)],
-    ['Updated', formatDateTime(user?.updatedAt)],
-  ]
-
   return (
     <div className="page-stack dev-host">
       <DeveloperMarker code="admin.react.detail.page" title="Admin React Detail Page" />
-      <section className="panel hero-panel detail-hero dev-host">
+      <section className="section-toolbar detail-page-toolbar dev-host">
         <DeveloperMarker code="admin.react.detail.summary" title="Admin React Detail Summary" />
-        <button type="button" className="ghost-button" onClick={() => onNavigate('/admin/manage')}><ArrowLeft size={17} /> Back</button>
         <div className="section-heading">
           <p>User detail</p>
           <h1>{user?.displayName || user?.username || user?.email || userId}</h1>
           <span>{[user?.username, user?.email, user?.id].filter(Boolean).join(' · ')}</span>
+        </div>
+        <div className="detail-page-actions">
           <div className="detail-user-tags">
             <span className="role-pill">{user?.role || 'user'}</span>
             <span className={user?.isPremium ? 'premium-pill' : 'plan-pill'}>{user?.isPremium ? 'Premium' : 'Standard'}</span>
+            <span className="plan-pill">Credits {formatNumber(user?.credits)}</span>
           </div>
-        </div>
-        <div className="detail-hero-actions">
+          <div className="toolbar-actions">
           <button
             type="button"
             className={`${user?.isPremium ? 'ghost-button' : 'primary-button'} compact`}
@@ -122,17 +133,12 @@ export default function UserDetailPage({ userId, onNavigate }) {
             {isSavingPremium ? 'Saving...' : user?.isPremium ? 'Disable premium' : 'Enable premium'}
           </button>
           <button type="button" className="primary-button compact" onClick={() => setIsDialogOpen(true)}><Coins size={17} /> Add credits</button>
+          </div>
         </div>
       </section>
 
       {error && <div className="notice notice-error">{error}</div>}
       {isLoading && <div className="notice notice-info">Loading user detail...</div>}
-
-      <section className="summary-grid">
-        {summaryCards.map(([label, value]) => (
-          <article key={label} className="summary-card"><span>{label}</span><strong>{value}</strong></article>
-        ))}
-      </section>
 
       <section className="detail-grid">
         <article className="panel dev-host">

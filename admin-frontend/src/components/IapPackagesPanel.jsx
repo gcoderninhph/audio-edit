@@ -1,0 +1,305 @@
+import { Package, Pencil, Plus, RefreshCw, Trash2 } from 'lucide-react'
+import { useCallback, useEffect, useMemo, useState } from 'react'
+import {
+  createAdminIapPackage,
+  deleteAdminIapPackage,
+  fetchAdminIapPackages,
+  updateAdminIapPackage,
+} from '../api/adminApi'
+import { formatCurrency, formatDateTime, formatNumber } from '../utils/format'
+import DeveloperMarker from './DeveloperMarker'
+
+const DEFAULT_FORM_STATE = {
+  credits: '0',
+  currency: 'VND',
+  description: '',
+  id: '',
+  isActive: true,
+  name: '',
+  price: '',
+}
+
+function buildPayload(formState) {
+  return {
+    credits: Number(formState.credits || 0),
+    currency: String(formState.currency || 'VND').trim().toUpperCase(),
+    description: String(formState.description || '').trim(),
+    id: String(formState.id || '').trim(),
+    isActive: Boolean(formState.isActive),
+    name: String(formState.name || '').trim(),
+    price: Number(formState.price || 0),
+  }
+}
+
+function buildFormState(packageRecord) {
+  if (!packageRecord) return DEFAULT_FORM_STATE
+  return {
+    credits: String(packageRecord.credits ?? 0),
+    currency: packageRecord.currency || 'VND',
+    description: packageRecord.description || '',
+    id: packageRecord.id || '',
+    isActive: Boolean(packageRecord.isActive),
+    name: packageRecord.name || '',
+    price: String(packageRecord.price ?? ''),
+  }
+}
+
+export default function IapPackagesPanel({ onHeaderActionsChange }) {
+  const [packages, setPackages] = useState([])
+  const [error, setError] = useState('')
+  const [formState, setFormState] = useState(DEFAULT_FORM_STATE)
+  const [isDialogOpen, setIsDialogOpen] = useState(false)
+  const [isLoading, setIsLoading] = useState(true)
+  const [isSaving, setIsSaving] = useState(false)
+  const [selectedPackageId, setSelectedPackageId] = useState('')
+
+  const loadPackages = useCallback(async () => {
+    setIsLoading(true)
+    setError('')
+    try {
+      const payload = await fetchAdminIapPackages()
+      setPackages(payload.packages || [])
+    } catch (loadError) {
+      setError(loadError.message || 'Unable to load IAP packages.')
+    } finally {
+      setIsLoading(false)
+    }
+  }, [])
+
+  useEffect(() => {
+    void loadPackages()
+  }, [loadPackages])
+
+  const headerActions = useMemo(() => (
+    <button type="button" className="ghost-button compact" onClick={() => void loadPackages()} disabled={isLoading || isSaving}>
+      <RefreshCw size={17} /> Refresh
+    </button>
+  ), [isLoading, isSaving, loadPackages])
+
+  useEffect(() => {
+    onHeaderActionsChange?.(headerActions)
+    return () => onHeaderActionsChange?.(null)
+  }, [headerActions, onHeaderActionsChange])
+
+  const openCreateDialog = () => {
+    setSelectedPackageId('')
+    setFormState(DEFAULT_FORM_STATE)
+    setIsDialogOpen(true)
+    setError('')
+  }
+
+  const openEditDialog = (packageRecord) => {
+    setSelectedPackageId(packageRecord.id)
+    setFormState(buildFormState(packageRecord))
+    setIsDialogOpen(true)
+    setError('')
+  }
+
+  const closeDialog = () => {
+    setIsDialogOpen(false)
+    setSelectedPackageId('')
+    setFormState(DEFAULT_FORM_STATE)
+  }
+
+  const handleSubmit = async (event) => {
+    event.preventDefault()
+    setIsSaving(true)
+    setError('')
+    try {
+      const payload = buildPayload(formState)
+      if (selectedPackageId) {
+        await updateAdminIapPackage(selectedPackageId, {
+          credits: payload.credits,
+          currency: payload.currency,
+          description: payload.description,
+          isActive: payload.isActive,
+          name: payload.name,
+          price: payload.price,
+        })
+      } else {
+        await createAdminIapPackage(payload)
+      }
+      closeDialog()
+      await loadPackages()
+    } catch (saveError) {
+      setError(saveError.message || 'Unable to save IAP package.')
+    } finally {
+      setIsSaving(false)
+    }
+  }
+
+  const handleDelete = async (packageRecord) => {
+    if (!window.confirm(`Delete IAP package "${packageRecord.name}"?`)) return
+    setError('')
+    try {
+      await deleteAdminIapPackage(packageRecord.id)
+      await loadPackages()
+    } catch (deleteError) {
+      setError(deleteError.message || 'Unable to delete IAP package.')
+    }
+  }
+
+  return (
+    <div className="iap-tab-panel dev-host">
+      <DeveloperMarker code="admin.react.manage.iap.package" title="Admin React IAP Packages" />
+      <div className="section-toolbar">
+        <h2>IAP packages</h2>
+        <div className="toolbar-actions">
+          <button type="button" className="primary-button compact" onClick={openCreateDialog} disabled={isSaving}>
+            <Plus size={17} /> New package
+          </button>
+        </div>
+      </div>
+
+      {error && <div className="notice notice-error">{error}</div>}
+
+      <div className="table-wrap">
+        <table className="admin-table">
+          <thead>
+            <tr>
+              <th>Package</th>
+              <th>Price</th>
+              <th>Credits</th>
+              <th>Status</th>
+              <th>Updated</th>
+              <th>Actions</th>
+            </tr>
+          </thead>
+          <tbody>
+            {packages.map((packageRecord) => (
+              <tr key={packageRecord.id}>
+                <td>
+                  <div className="user-cell">
+                    <Package size={18} />
+                    <span>
+                      <strong>{packageRecord.name}</strong>
+                      <small>{packageRecord.id}{packageRecord.description ? ` · ${packageRecord.description}` : ''}</small>
+                    </span>
+                  </div>
+                </td>
+                <td>
+                  <strong>{formatCurrency(packageRecord.price, packageRecord.currency)}</strong>
+                  <small>{packageRecord.currency}</small>
+                </td>
+                <td>{formatNumber(packageRecord.credits)}</td>
+                <td>
+                  <span className={packageRecord.isActive ? 'status-pill status-success' : 'plan-pill'}>
+                    {packageRecord.isActive ? 'Active' : 'Hidden'}
+                  </span>
+                </td>
+                <td>{formatDateTime(packageRecord.updatedAt)}</td>
+                <td>
+                  <div className="table-actions">
+                    <button type="button" className="ghost-button compact" onClick={() => openEditDialog(packageRecord)}>
+                      <Pencil size={16} /> Edit
+                    </button>
+                    <button type="button" className="ghost-button compact danger-text" onClick={() => void handleDelete(packageRecord)}>
+                      <Trash2 size={16} /> Delete
+                    </button>
+                  </div>
+                </td>
+              </tr>
+            ))}
+            {!packages.length && (
+              <tr>
+                <td colSpan="6" className="empty-cell">{isLoading ? 'Loading IAP packages...' : 'No IAP packages created yet.'}</td>
+              </tr>
+            )}
+          </tbody>
+        </table>
+      </div>
+
+      {isDialogOpen && (
+        <div className="dialog-backdrop" role="presentation">
+          <form className="credit-dialog package-dialog dev-host" onSubmit={handleSubmit}>
+            <DeveloperMarker code="admin.react.manage.iap-dialog" title="Admin React IAP Package Dialog" />
+            <div className="section-heading compact">
+              <p>IAP package</p>
+              <h2>{selectedPackageId ? 'Edit package' : 'Create package'}</h2>
+            </div>
+            <div className="package-form-grid">
+              <label className="field">
+                <span>Package id</span>
+                <input
+                  value={formState.id}
+                  onChange={(event) => setFormState((current) => ({ ...current, id: event.target.value }))}
+                  placeholder="coin-pack-1000"
+                  required
+                  disabled={Boolean(selectedPackageId) || isSaving}
+                />
+              </label>
+              <label className="field">
+                <span>Name</span>
+                <input
+                  value={formState.name}
+                  onChange={(event) => setFormState((current) => ({ ...current, name: event.target.value }))}
+                  placeholder="1,000 credits"
+                  required
+                  disabled={isSaving}
+                />
+              </label>
+              <label className="field">
+                <span>Price</span>
+                <input
+                  type="number"
+                  min="0.01"
+                  step="0.01"
+                  value={formState.price}
+                  onChange={(event) => setFormState((current) => ({ ...current, price: event.target.value }))}
+                  required
+                  disabled={isSaving}
+                />
+              </label>
+              <label className="field">
+                <span>Currency</span>
+                <input
+                  value={formState.currency}
+                  onChange={(event) => setFormState((current) => ({ ...current, currency: event.target.value.toUpperCase() }))}
+                  maxLength={3}
+                  required
+                  disabled={isSaving}
+                />
+              </label>
+              <label className="field">
+                <span>Credits</span>
+                <input
+                  type="number"
+                  min="0"
+                  step="1"
+                  value={formState.credits}
+                  onChange={(event) => setFormState((current) => ({ ...current, credits: event.target.value }))}
+                  disabled={isSaving}
+                />
+              </label>
+              <label className="checkbox-field">
+                <input
+                  type="checkbox"
+                  checked={formState.isActive}
+                  onChange={(event) => setFormState((current) => ({ ...current, isActive: event.target.checked }))}
+                  disabled={isSaving}
+                />
+                <span>Expose this package in the public client API</span>
+              </label>
+              <label className="field package-description-field">
+                <span>Description</span>
+                <textarea
+                  rows="4"
+                  value={formState.description}
+                  onChange={(event) => setFormState((current) => ({ ...current, description: event.target.value }))}
+                  maxLength={500}
+                  disabled={isSaving}
+                />
+              </label>
+            </div>
+            <div className="dialog-actions">
+              <button type="button" className="ghost-button" onClick={closeDialog} disabled={isSaving}>Cancel</button>
+              <button type="submit" className="primary-button compact" disabled={isSaving}>
+                <Plus size={17} /> {isSaving ? 'Saving...' : selectedPackageId ? 'Save changes' : 'Create package'}
+              </button>
+            </div>
+          </form>
+        </div>
+      )}
+    </div>
+  )
+}

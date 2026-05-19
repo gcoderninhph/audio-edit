@@ -132,6 +132,107 @@ export async function fetchAdminUsers({ page = 1, pageSize = 10, search = '' } =
   return response.data || {}
 }
 
+export async function fetchAdminIapPackages() {
+  const response = await requestJson('/api/admin/iap/packages')
+  if (!response.ok) throw new Error(response.data?.error || 'Unable to load IAP packages.')
+  return response.data || {}
+}
+
+export async function createAdminIapPackage(payload) {
+  const response = await requestJson('/api/admin/iap/packages', {
+    method: 'POST',
+    body: JSON.stringify(payload),
+  })
+  if (!response.ok) throw new Error(response.data?.error || 'Unable to create IAP package.')
+  return response.data || {}
+}
+
+export async function updateAdminIapPackage(packageId, payload) {
+  const response = await requestJson(`/api/admin/iap/packages/${encodeURIComponent(packageId)}`, {
+    method: 'PATCH',
+    body: JSON.stringify(payload),
+  })
+  if (!response.ok) throw new Error(response.data?.error || 'Unable to update IAP package.')
+  return response.data || {}
+}
+
+export async function deleteAdminIapPackage(packageId) {
+  const response = await requestJson(`/api/admin/iap/packages/${encodeURIComponent(packageId)}`, {
+    method: 'DELETE',
+  })
+  if (!response.ok) throw new Error(response.data?.error || 'Unable to delete IAP package.')
+  return response.data || {}
+}
+
+export async function fetchAdminIapApiKeys() {
+  const response = await requestJson('/api/admin/iap/api-keys')
+  if (!response.ok) throw new Error(response.data?.error || 'Unable to load IAP API keys.')
+  return response.data || {}
+}
+
+export async function createAdminIapApiKey(payload) {
+  const response = await requestJson('/api/admin/iap/api-keys', {
+    method: 'POST',
+    body: JSON.stringify(payload),
+  })
+  if (!response.ok) throw new Error(response.data?.error || 'Unable to create IAP API key.')
+  return response.data || {}
+}
+
+export async function deleteAdminIapApiKey(keyId) {
+  const response = await requestJson(`/api/admin/iap/api-keys/${encodeURIComponent(keyId)}`, {
+    method: 'DELETE',
+  })
+  if (!response.ok) throw new Error(response.data?.error || 'Unable to delete IAP API key.')
+  return response.data || {}
+}
+
+export async function fetchAdminIapPackFunctions() {
+  const response = await requestJson('/api/admin/iap/pack-functions')
+  if (!response.ok) throw new Error(response.data?.error || 'Unable to load IAP pack functions.')
+  return response.data || {}
+}
+
+export async function createAdminIapPackFunction(payload) {
+  const response = await requestJson('/api/admin/iap/pack-functions', {
+    method: 'POST',
+    body: JSON.stringify(payload),
+  })
+  if (!response.ok) throw new Error(response.data?.error || 'Unable to create IAP pack function.')
+  return response.data || {}
+}
+
+export async function deleteAdminIapPackFunction(recordId) {
+  const response = await requestJson(`/api/admin/iap/pack-functions/${encodeURIComponent(recordId)}`, {
+    method: 'DELETE',
+  })
+  if (!response.ok) throw new Error(response.data?.error || 'Unable to delete IAP pack function.')
+  return response.data || {}
+}
+
+export async function fetchAdminIapSales() {
+  const response = await requestJson('/api/admin/iap/sales')
+  if (!response.ok) throw new Error(response.data?.error || 'Unable to load IAP sales.')
+  return response.data || {}
+}
+
+export async function createAdminIapSale(payload) {
+  const response = await requestJson('/api/admin/iap/sales', {
+    method: 'POST',
+    body: JSON.stringify(payload),
+  })
+  if (!response.ok) throw new Error(response.data?.error || 'Unable to create IAP sale.')
+  return response.data || {}
+}
+
+export async function deleteAdminIapSale(saleId) {
+  const response = await requestJson(`/api/admin/iap/sales/${encodeURIComponent(saleId)}`, {
+    method: 'DELETE',
+  })
+  if (!response.ok) throw new Error(response.data?.error || 'Unable to delete IAP sale.')
+  return response.data || {}
+}
+
 export async function fetchAdminUser(userId) {
   const response = await requestJson(`/api/admin/users/${encodeURIComponent(userId)}`)
   if (!response.ok) throw new Error(response.data?.error || 'Unable to load user.')

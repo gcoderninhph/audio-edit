@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { clearStoredSession, getStoredSession, resolveAdminDestination, syncCurrentUser } from './api/adminApi'
 import AdminLayout from './components/AdminLayout'
+import IapPage from './components/IapPage'
 import LoginPage from './components/LoginPage'
 import ManagePage from './components/ManagePage'
 import SetupPage from './components/SetupPage'
@@ -11,6 +12,7 @@ function parseAdminRoute(pathname = window.location.pathname) {
   const normalizedPath = pathname.replace(/\/+$/, '') || '/admin'
   if (normalizedPath === '/admin' || normalizedPath === '/admin/login') return { name: 'login' }
   if (normalizedPath === '/admin/setup') return { name: 'setup' }
+  if (normalizedPath === '/admin/iap') return { name: 'iap' }
   if (normalizedPath === '/admin/manage' || normalizedPath === '/console') return { name: 'manage' }
 
   const userMatch = normalizedPath.match(/^\/admin\/users\/(.+)$/)
@@ -24,6 +26,7 @@ function App() {
   const [route, setRoute] = useState(() => parseAdminRoute())
   const [session, setSession] = useState(() => getStoredSession())
   const [sessionStatus, setSessionStatus] = useState('checking')
+  const [headerActions, setHeaderActions] = useState(null)
   const [notice, setNotice] = useState('')
 
   const navigate = useCallback((path) => {
@@ -60,6 +63,10 @@ function App() {
   }, [])
 
   useEffect(() => {
+    setHeaderActions(null)
+  }, [route.name])
+
+  useEffect(() => {
     if (sessionStatus !== 'ready') return
     if (!session && route.name !== 'login') {
       navigate('/admin/login')
@@ -83,6 +90,7 @@ function App() {
 
   const layoutTitle = useMemo(() => {
     if (route.name === 'setup') return 'Admin setup'
+    if (route.name === 'iap') return 'IAP packages'
     if (route.name === 'user-detail') return 'User detail'
     if (route.name === 'manage') return 'User management'
     return 'Admin login'
@@ -106,11 +114,12 @@ function App() {
   }
 
   return (
-    <AdminLayout title={layoutTitle} user={signedInUser} onNavigate={navigate} onLogout={handleLogout}>
+    <AdminLayout routeName={route.name} title={layoutTitle} user={signedInUser} headerActions={headerActions} onNavigate={navigate} onLogout={handleLogout}>
       {notice && <div className="notice notice-info">{notice}</div>}
       {route.name === 'setup' && <SetupPage onComplete={handleSessionUpdate} />}
-      {route.name === 'manage' && <ManagePage onNavigate={navigate} />}
-      {route.name === 'user-detail' && <UserDetailPage userId={route.userId} onNavigate={navigate} />}
+      {route.name === 'iap' && <IapPage onHeaderActionsChange={setHeaderActions} />}
+      {route.name === 'manage' && <ManagePage onNavigate={navigate} onHeaderActionsChange={setHeaderActions} />}
+      {route.name === 'user-detail' && <UserDetailPage userId={route.userId} onNavigate={navigate} onHeaderActionsChange={setHeaderActions} />}
       {route.name === 'login' && <LoginPage onLogin={handleSessionUpdate} initialNotice={notice} />}
     </AdminLayout>
   )

@@ -1,12 +1,11 @@
 import { RefreshCw, Search, UserRound } from 'lucide-react'
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useEffect, useMemo, useState } from 'react'
 import { fetchAdminUsers } from '../api/adminApi'
 import { formatDateTime, formatNumber } from '../utils/format'
 import DeveloperMarker from './DeveloperMarker'
 import Pagination from './Pagination'
 
-export default function ManagePage({ onNavigate }) {
-  const [summary, setSummary] = useState(null)
+export default function ManagePage({ onNavigate, onHeaderActionsChange }) {
   const [users, setUsers] = useState([])
   const [pagination, setPagination] = useState(null)
   const [page, setPage] = useState(1)
@@ -21,7 +20,6 @@ export default function ManagePage({ onNavigate }) {
     setError('')
     try {
       const payload = await fetchAdminUsers({ page, pageSize, search: submittedSearch })
-      setSummary(payload.summary || {})
       setUsers(payload.users || [])
       setPagination(payload.pagination || null)
     } catch (loadError) {
@@ -35,44 +33,27 @@ export default function ManagePage({ onNavigate }) {
     void loadUsers()
   }, [loadUsers])
 
+  const headerActions = useMemo(() => (
+    <button type="button" className="ghost-button compact" onClick={() => void loadUsers()} disabled={isLoading}>
+      <RefreshCw size={17} /> Refresh
+    </button>
+  ), [isLoading, loadUsers])
+
+  useEffect(() => {
+    onHeaderActionsChange?.(headerActions)
+    return () => onHeaderActionsChange?.(null)
+  }, [headerActions, onHeaderActionsChange])
+
   const submitSearch = (event) => {
     event.preventDefault()
     setPage(1)
     setSubmittedSearch(search.trim())
   }
 
-  const cards = [
-    ['Total users', summary?.totalUsers],
-    ['Admins', summary?.adminUsers],
-    ['Standard users', summary?.standardUsers],
-    ['Total credits', summary?.totalCredits],
-  ]
-
   return (
     <div className="page-stack dev-host">
       <DeveloperMarker code="admin.react.manage.page" title="Admin React Manage Page" />
-      <section className="panel hero-panel dev-host">
-        <DeveloperMarker code="admin.react.manage.summary" title="Admin React Manage Summary" />
-        <div className="section-heading">
-          <p>Backend Admin</p>
-          <h1>User management</h1>
-        </div>
-        <button type="button" className="ghost-button" onClick={() => void loadUsers()} disabled={isLoading}>
-          <RefreshCw size={17} /> Refresh
-        </button>
-      </section>
-
       {error && <div className="notice notice-error">{error}</div>}
-
-      <section className="summary-grid dev-host">
-        <DeveloperMarker code="admin.react.manage.cards" title="Admin React Manage Cards" />
-        {cards.map(([label, value]) => (
-          <article key={label} className="summary-card">
-            <span>{label}</span>
-            <strong>{formatNumber(value)}</strong>
-          </article>
-        ))}
-      </section>
 
       <section className="panel dev-host">
         <DeveloperMarker code="admin.react.manage.users" title="Admin React Users Table" />

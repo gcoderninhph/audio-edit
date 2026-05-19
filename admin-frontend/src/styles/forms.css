@@ -20,6 +20,8 @@
 }
 
 .field input,
+.field select,
+.field textarea,
 .inline-control select,
 .search-bar input {
   width: 100%;
@@ -33,10 +35,18 @@
 }
 
 .field input:focus,
+.field select:focus,
+.field textarea:focus,
 .inline-control select:focus,
 .search-bar input:focus {
   border-color: var(--border-active);
   box-shadow: 0 0 0 3px rgba(124, 58, 237, 0.12);
+}
+
+.field textarea {
+  min-height: 110px;
+  padding: 12px 13px;
+  resize: vertical;
 }
 
 .primary-button,
@@ -160,4 +170,38 @@ button:disabled {
   padding: 18px;
   background: rgba(0, 0, 0, 0.48);
   backdrop-filter: blur(8px);
+}
+
+.package-dialog {
+  width: min(640px, 100%);
+}
+
+.package-form-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 14px;
+}
+
+.package-description-field {
+  grid-column: 1 / -1;
+}
+
+.checkbox-field {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  color: var(--text-secondary);
+  font-size: 0.86rem;
+}
+
+.checkbox-field input {
+  width: 18px;
+  height: 18px;
+  accent-color: #8b5cf6;
+}
+
+@media (max-width: 720px) {
+  .package-form-grid {
+    grid-template-columns: 1fr;
+  }
 }

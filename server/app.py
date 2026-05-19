@@ -6,12 +6,14 @@ try:
     from admin_routes import register_admin_routes
     from admin_web_routes import register_admin_web_routes
     from auth_routes import register_auth_routes
+    from iap_routes import register_iap_routes
     from logging_setup import configure_backend_logging
     from proxy_routes import register_proxy_routes
 except ImportError:
     from .admin_routes import register_admin_routes
     from .admin_web_routes import register_admin_web_routes
     from .auth_routes import register_auth_routes
+    from .iap_routes import register_iap_routes
     from .logging_setup import configure_backend_logging
     from .proxy_routes import register_proxy_routes
 
@@ -38,6 +40,7 @@ def healthcheck():
 
 register_auth_routes(app)
 register_admin_routes(app)
+register_iap_routes(app)
 register_admin_web_routes(app)
 register_proxy_routes(app)
 
