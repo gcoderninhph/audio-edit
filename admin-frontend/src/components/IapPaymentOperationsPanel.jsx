@@ -1,6 +1,7 @@
 import { CreditCard, History, Landmark, RotateCcw } from 'lucide-react'
 import DeveloperMarker from './DeveloperMarker'
 import IapBeneficiaryAccountsDialog from './IapBeneficiaryAccountsDialog'
+import IapBankHookHistoryDetailPage from './IapBankHookHistoryDetailPage'
 import IapBankHookHistoryPage from './IapBankHookHistoryPage'
 import IapPaymentTransactionDetailPanel from './IapPaymentTransactionDetailPanel'
 import IapPaymentTransactionsDialog from './IapPaymentTransactionsDialog'
@@ -21,7 +22,7 @@ function getPaymentTransactionDetailPath(transactionId) {
   return `/admin/iap/payment-tools/transactions/${encodeURIComponent(transactionId)}`
 }
 
-function renderSection(sectionKey, paymentTransactionId, onNavigate) {
+function renderSection(sectionKey, historyDetailId, paymentTransactionId, onNavigate) {
   if (sectionKey === 'beneficiaries') {
     return <IapBeneficiaryAccountsDialog />
   }
@@ -29,6 +30,9 @@ function renderSection(sectionKey, paymentTransactionId, onNavigate) {
     return <IapRefundPendingDialog />
   }
   if (sectionKey === 'history') {
+    if (historyDetailId) {
+      return <IapBankHookHistoryDetailPage embedded historyId={historyDetailId} onBack={() => onNavigate?.(getPaymentToolPath('history'))} onNavigate={onNavigate} />
+    }
     return <IapBankHookHistoryPage embedded onNavigate={onNavigate} />
   }
   if (paymentTransactionId) {
@@ -42,7 +46,7 @@ function renderSection(sectionKey, paymentTransactionId, onNavigate) {
   return <IapPaymentTransactionsDialog onTransactionSelect={(transactionId) => onNavigate?.(getPaymentTransactionDetailPath(transactionId))} />
 }
 
-export default function IapPaymentOperationsPanel({ activeSection = 'transactions', onNavigate, paymentTransactionId }) {
+export default function IapPaymentOperationsPanel({ activeSection = 'transactions', historyDetailId, onNavigate, paymentTransactionId }) {
   const currentSection = SECTIONS.find((section) => section.key === activeSection) || SECTIONS[0]
 
   return (
@@ -75,7 +79,7 @@ export default function IapPaymentOperationsPanel({ activeSection = 'transaction
 
         <div className="iap-operations-content dev-host">
           <DeveloperMarker code={`admin.react.manage.iap.payment-tools.${currentSection.key}`} title="Admin React IAP Payment Tools Content" />
-          {renderSection(currentSection.key, paymentTransactionId, onNavigate)}
+          {renderSection(currentSection.key, historyDetailId, paymentTransactionId, onNavigate)}
         </div>
       </div>
     </div>

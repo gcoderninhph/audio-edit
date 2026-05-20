@@ -42,7 +42,7 @@ export default function IapManagementTabs({ onHeaderActionsChange, onNavigate, r
       <div className="iap-tab-content">
         {activeTab === 'packages' && <IapPackagesPanel onHeaderActionsChange={onHeaderActionsChange} />}
         {activeTab === 'api-key' && <IapApiKeyPanel onHeaderActionsChange={onHeaderActionsChange} />}
-        {activeTab === 'payment-tools' && <IapPaymentOperationsPanel activeSection={route?.paymentToolSection} onNavigate={onNavigate} paymentTransactionId={route?.paymentTransactionId} />}
+        {activeTab === 'payment-tools' && <IapPaymentOperationsPanel activeSection={route?.paymentToolSection} historyDetailId={route?.paymentToolHistoryId} onNavigate={onNavigate} paymentTransactionId={route?.paymentTransactionId} />}
         {activeTab === 'pack-function' && <IapPackFunctionPanel onHeaderActionsChange={onHeaderActionsChange} />}
         {activeTab === 'sale' && <IapSalesPanel onHeaderActionsChange={onHeaderActionsChange} />}
       </div>

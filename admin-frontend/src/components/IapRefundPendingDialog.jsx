@@ -1,13 +1,15 @@
 import { RefreshCw, X } from 'lucide-react'
 import { useCallback, useEffect, useState } from 'react'
 import { fetchAdminIapRefundPending } from '../api/adminApi'
-import { formatCurrency, formatDateTime } from '../utils/format'
+import { formatCurrency } from '../utils/format'
 import DeveloperMarker from './DeveloperMarker'
+import IapRefundPendingDetailPanel from './IapRefundPendingDetailPanel'
 
 export default function IapRefundPendingDialog({ onClose }) {
   const [error, setError] = useState('')
   const [isLoading, setIsLoading] = useState(true)
   const [refunds, setRefunds] = useState([])
+  const [selectedRefundId, setSelectedRefundId] = useState(0)
 
   const loadRefunds = useCallback(async () => {
     setIsLoading(true)
@@ -25,6 +27,26 @@ export default function IapRefundPendingDialog({ onClose }) {
   useEffect(() => {
     void loadRefunds()
   }, [loadRefunds])
+
+  const selectedRefund = refunds.find((refund) => refund.id === selectedRefundId) || null
+
+  useEffect(() => {
+    if (!selectedRefundId || selectedRefund || isLoading) {
+      return
+    }
+    setSelectedRefundId(0)
+  }, [isLoading, selectedRefund, selectedRefundId])
+
+  if (selectedRefund) {
+    return (
+      <IapRefundPendingDetailPanel
+        isRefreshing={isLoading}
+        onBack={() => setSelectedRefundId(0)}
+        onRefresh={() => void loadRefunds()}
+        refund={selectedRefund}
+      />
+    )
+  }
 
   return (
     <section className="panel iap-inline-detail-panel dev-host">
@@ -44,20 +66,16 @@ export default function IapRefundPendingDialog({ onClose }) {
 
       <div className="table-wrap">
         <table className="admin-table compact-table">
-          <thead><tr><th>Record</th><th>Transaction</th><th>Amount</th><th>Account</th><th>Status</th><th>Reason</th><th>Created</th></tr></thead>
+          <thead><tr><th>Transaction</th><th>Amount</th><th>Status</th></tr></thead>
           <tbody>
             {refunds.map((refund) => (
-              <tr key={refund.id}>
-                <td><strong>{refund.id}</strong><small>History {refund.historyId || '-'}</small></td>
-                <td><strong>{refund.transactionCode || '-'}</strong><small>Ticket {refund.ticketId || '-'}</small></td>
+              <tr key={refund.id} className="clickable-row" onClick={() => setSelectedRefundId(refund.id)}>
+                <td><strong>{refund.transactionCode || '-'}</strong><small>Ticket {refund.ticketId || '-'} · History {refund.historyId || '-'}</small></td>
                 <td>{formatCurrency(refund.amount, 'VND')}</td>
-                <td>{refund.accountNumber || '-'}</td>
                 <td><span className="status-pill status-processing">{refund.status}</span></td>
-                <td>{refund.reason}</td>
-                <td>{formatDateTime(refund.createdAt)}</td>
               </tr>
             ))}
-            {!refunds.length && <tr><td colSpan="7" className="empty-cell">{isLoading ? 'Loading refund pending records...' : 'No refund pending records.'}</td></tr>}
+            {!refunds.length && <tr><td colSpan="3" className="empty-cell">{isLoading ? 'Loading refund pending records...' : 'No refund pending records.'}</td></tr>}
           </tbody>
         </table>
       </div>

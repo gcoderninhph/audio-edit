@@ -6,6 +6,7 @@ import {
   fetchAdminIapBeneficiaryAccounts,
   updateAdminIapBeneficiaryAccount,
 } from '../api/adminApi'
+import IapBeneficiaryAccountDetailPanel from './IapBeneficiaryAccountDetailPanel'
 import DeveloperMarker from './DeveloperMarker'
 
 const DEFAULT_FORM_STATE = {
@@ -34,6 +35,7 @@ export default function IapBeneficiaryAccountsDialog({ onClose }) {
   const [isFormOpen, setIsFormOpen] = useState(false)
   const [isLoading, setIsLoading] = useState(true)
   const [isSaving, setIsSaving] = useState(false)
+  const [selectedAccountId, setSelectedAccountId] = useState(0)
 
   const loadAccounts = useCallback(async () => {
     setIsLoading(true)
@@ -63,6 +65,15 @@ export default function IapBeneficiaryAccountsDialog({ onClose }) {
       setFormState((current) => ({ ...current, bankId: bankOptions[0].id }))
     }
   }, [bankOptions, formState.bankId])
+
+  const selectedAccount = accounts.find((account) => account.id === selectedAccountId) || null
+
+  useEffect(() => {
+    if (!selectedAccountId || selectedAccount || isLoading) {
+      return
+    }
+    setSelectedAccountId(0)
+  }, [isLoading, selectedAccount, selectedAccountId])
 
   const handleSubmit = async (event) => {
     event.preventDefault()
@@ -113,6 +124,17 @@ export default function IapBeneficiaryAccountsDialog({ onClose }) {
     setIsFormOpen(false)
   }
 
+  if (selectedAccount) {
+    return (
+      <IapBeneficiaryAccountDetailPanel
+        account={selectedAccount}
+        isRefreshing={isLoading}
+        onBack={() => setSelectedAccountId(0)}
+        onRefresh={() => void loadAccounts()}
+      />
+    )
+  }
+
   return (
     <>
       <section className="panel iap-inline-detail-panel dev-host">
@@ -136,13 +158,16 @@ export default function IapBeneficiaryAccountsDialog({ onClose }) {
             <thead><tr><th>Current</th><th>Name</th><th>Bank id</th><th>Bank account</th><th>Actions</th></tr></thead>
             <tbody>
               {accounts.map((account) => (
-                <tr key={account.id}>
-                  <td><input type="checkbox" checked={account.isCurrent} onChange={() => void handleCurrentChange(account)} aria-label={`Set ${account.name} as current beneficiary`} /></td>
+                <tr key={account.id} className="clickable-row" onClick={() => setSelectedAccountId(account.id)}>
+                  <td onClick={(event) => event.stopPropagation()}><input type="checkbox" checked={account.isCurrent} onChange={() => void handleCurrentChange(account)} aria-label={`Set ${account.name} as current beneficiary`} /></td>
                   <td><strong>{account.name}</strong><small>{account.id}</small></td>
                   <td>{account.bankId}</td>
                   <td>{account.bankAccount}</td>
                   <td>
-                    <button type="button" className="ghost-button compact danger-text" onClick={() => void handleDelete(account)}><Trash2 size={16} /> Delete</button>
+                    <button type="button" className="ghost-button compact danger-text" onClick={(event) => {
+                      event.stopPropagation()
+                      void handleDelete(account)
+                    }}><Trash2 size={16} /> Delete</button>
                   </td>
                 </tr>
               ))}

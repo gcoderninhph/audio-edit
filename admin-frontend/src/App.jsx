@@ -1,7 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { clearStoredSession, getStoredSession, resolveAdminDestination, syncCurrentUser } from './api/adminApi'
 import AdminLayout from './components/AdminLayout'
-import IapBankHookHistoryDetailPage from './components/IapBankHookHistoryDetailPage'
 import IapPage from './components/IapPage'
 import LoginPage from './components/LoginPage'
 import ManagePage from './components/ManagePage'
@@ -12,6 +11,16 @@ import './App.css'
 const IAP_TABS = new Set(['packages', 'api-key', 'payment-tools', 'pack-function', 'sale'])
 
 function parseIapRoute(normalizedPath) {
+  const historyDetailMatch = normalizedPath.match(/^\/admin\/iap\/payment-tools\/history\/(\d+)$/)
+  if (historyDetailMatch) {
+    return {
+      name: 'iap',
+      iapTab: 'payment-tools',
+      paymentToolHistoryId: Number(historyDetailMatch[1]),
+      paymentToolSection: 'history',
+    }
+  }
+
   const transactionDetailMatch = normalizedPath.match(/^\/admin\/iap\/payment-tools\/transactions\/(\d+)$/)
   if (transactionDetailMatch) {
     return {
@@ -24,6 +33,16 @@ function parseIapRoute(normalizedPath) {
 
   if (normalizedPath === '/admin/iap/bank-hook-history') {
     return { name: 'iap', iapTab: 'payment-tools', paymentToolSection: 'history' }
+  }
+
+  const legacyBankHookHistoryDetailMatch = normalizedPath.match(/^\/admin\/iap\/bank-hook-history\/(\d+)$/)
+  if (legacyBankHookHistoryDetailMatch) {
+    return {
+      name: 'iap',
+      iapTab: 'payment-tools',
+      paymentToolHistoryId: Number(legacyBankHookHistoryDetailMatch[1]),
+      paymentToolSection: 'history',
+    }
   }
 
   const paymentToolSectionMatch = normalizedPath.match(/^\/admin\/iap\/payment-tools\/(transactions|beneficiaries|refunds|history)$/)
@@ -51,9 +70,6 @@ function parseAdminRoute(pathname = window.location.pathname) {
   const normalizedPath = pathname.replace(/\/+$/, '') || '/admin'
   if (normalizedPath === '/admin' || normalizedPath === '/admin/login') return { name: 'login' }
   if (normalizedPath === '/admin/setup') return { name: 'setup' }
-
-  const bankHookHistoryMatch = normalizedPath.match(/^\/admin\/iap\/bank-hook-history\/(\d+)$/)
-  if (bankHookHistoryMatch) return { name: 'bank-hook-history-detail', historyId: Number(bankHookHistoryMatch[1]) }
 
   const iapRoute = parseIapRoute(normalizedPath)
   if (iapRoute) return iapRoute
@@ -135,9 +151,9 @@ function App() {
 
   const layoutTitle = useMemo(() => {
     if (route.name === 'setup') return 'Admin setup'
-    if (route.name === 'bank-hook-history-detail') return 'Bank hook transaction'
     if (route.name === 'iap') {
       if (route.iapTab === 'api-key') return 'IAP API keys'
+      if (route.iapTab === 'payment-tools' && route.paymentToolHistoryId) return 'Bank hook transaction'
       if (route.iapTab === 'payment-tools' && route.paymentTransactionId) return 'Payment transaction'
       if (route.iapTab === 'payment-tools') return 'IAP payment tools'
       if (route.iapTab === 'pack-function') return 'IAP pack functions'
@@ -147,7 +163,7 @@ function App() {
     if (route.name === 'user-detail') return 'User detail'
     if (route.name === 'manage') return 'User management'
     return 'Admin login'
-  }, [route.iapTab, route.name, route.paymentTransactionId])
+  }, [route.iapTab, route.name, route.paymentToolHistoryId, route.paymentTransactionId])
 
   const handleSessionUpdate = (nextSession) => {
     setSession(nextSession)
@@ -171,7 +187,6 @@ function App() {
       {notice && <div className="notice notice-info">{notice}</div>}
       {route.name === 'setup' && <SetupPage onComplete={handleSessionUpdate} />}
       {route.name === 'iap' && <IapPage route={route} onHeaderActionsChange={setHeaderActions} onNavigate={navigate} />}
-      {route.name === 'bank-hook-history-detail' && <IapBankHookHistoryDetailPage historyId={route.historyId} onHeaderActionsChange={setHeaderActions} onNavigate={navigate} />}
       {route.name === 'manage' && <ManagePage onNavigate={navigate} onHeaderActionsChange={setHeaderActions} />}
       {route.name === 'user-detail' && <UserDetailPage userId={route.userId} onNavigate={navigate} onHeaderActionsChange={setHeaderActions} />}
       {route.name === 'login' && <LoginPage onLogin={handleSessionUpdate} initialNotice={notice} />}

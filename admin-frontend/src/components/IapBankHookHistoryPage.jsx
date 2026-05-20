@@ -88,6 +88,12 @@ export default function IapBankHookHistoryPage({ embedded = false, onHeaderActio
   }
 
   const canOpenDetail = typeof onNavigate === 'function'
+  const getHistoryDetailPath = useCallback((recordId) => {
+    if (embedded) {
+      return `/admin/iap/payment-tools/history/${recordId}`
+    }
+    return `/admin/iap/bank-hook-history/${recordId}`
+  }, [embedded])
   const historyPanel = (
     <section className={`panel dev-host${embedded ? ' iap-inline-detail-panel iap-history-embedded-panel' : ''}`}>
       <DeveloperMarker code="admin.react.manage.iap.bank-hook-history" title="Admin React IAP Bank Hook History" />
@@ -143,7 +149,7 @@ export default function IapBankHookHistoryPage({ embedded = false, onHeaderActio
             </thead>
             <tbody>
               {history.map((record) => (
-                <tr key={record.id} className={canOpenDetail ? 'clickable-row' : ''} onClick={canOpenDetail ? () => onNavigate(`/admin/iap/bank-hook-history/${record.id}`) : undefined}>
+                <tr key={record.id} className={canOpenDetail ? 'clickable-row' : ''} onClick={canOpenDetail ? () => onNavigate(getHistoryDetailPath(record.id)) : undefined}>
                   <td>
                     <strong>{formatDateTime(record.receivedAt)}</strong>
                     <small>Bank time: {getBankTimeLabel(record)}</small>
