@@ -1,4 +1,4 @@
-import { Check, Package, Pencil, Plus, RefreshCw, Trash2 } from 'lucide-react'
+import { Check, Package, Pencil, Plus, RefreshCw, Settings2, Trash2 } from 'lucide-react'
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import {
   createAdminIapPackage,
@@ -9,6 +9,7 @@ import {
 import { formatCurrency, formatDateTime } from '../utils/format'
 import { DEFAULT_IAP_PACK_TYPE, getIapPackTypeLabel, IAP_PACK_TYPE_OPTIONS, normalizeIapPackType } from '../utils/iapPackages'
 import DeveloperMarker from './DeveloperMarker'
+import IapPackageFunctionDialog from './IapPackageFunctionDialog'
 
 const MAX_PACKAGE_DETAIL_LENGTH = 30
 
@@ -70,6 +71,7 @@ export default function IapPackagesPanel({ onHeaderActionsChange }) {
   const [packages, setPackages] = useState([])
   const [error, setError] = useState('')
   const [formState, setFormState] = useState(DEFAULT_FORM_STATE)
+  const [functionPackage, setFunctionPackage] = useState(null)
   const [isDialogOpen, setIsDialogOpen] = useState(false)
   const [isLoading, setIsLoading] = useState(true)
   const [isSaving, setIsSaving] = useState(false)
@@ -225,6 +227,15 @@ export default function IapPackagesPanel({ onHeaderActionsChange }) {
                     <button
                       type="button"
                       className="iap-action-button"
+                      onClick={() => setFunctionPackage(packageRecord)}
+                      aria-label={`Edit function for package ${packageRecord.name}`}
+                      title="Edit function"
+                    >
+                      <Settings2 size={15} />
+                    </button>
+                    <button
+                      type="button"
+                      className="iap-action-button"
                       onClick={() => openEditDialog(packageRecord)}
                       aria-label={`Edit package ${packageRecord.name}`}
                       title="Edit package"
@@ -355,6 +366,8 @@ export default function IapPackagesPanel({ onHeaderActionsChange }) {
           </form>
         </div>
       )}
+
+      {functionPackage && <IapPackageFunctionDialog packageRecord={functionPackage} onClose={() => setFunctionPackage(null)} />}
     </div>
   )
 }

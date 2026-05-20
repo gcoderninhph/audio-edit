@@ -1,7 +1,6 @@
-import { BadgePercent, CreditCard, KeyRound, Package, Settings2 } from 'lucide-react'
+import { BadgePercent, CreditCard, KeyRound, Package } from 'lucide-react'
 import DeveloperMarker from './DeveloperMarker'
 import IapApiKeyPanel from './IapApiKeyPanel'
-import IapPackFunctionPanel from './IapPackFunctionPanel'
 import IapPaymentOperationsPanel from './IapPaymentOperationsPanel'
 import IapPackagesPanel from './IapPackagesPanel'
 import IapSalesPanel from './IapSalesPanel'
@@ -10,7 +9,6 @@ const TABS = [
   { key: 'packages', label: 'IAP package', meta: 'Catalog', icon: Package },
   { key: 'api-key', label: 'API key', meta: 'Bank hook', icon: KeyRound },
   { key: 'payment-tools', label: 'Payment tools', meta: 'Beneficiary, refund, history', icon: CreditCard },
-  { key: 'pack-function', label: 'Pack function', meta: 'Rewards', icon: Settings2 },
   { key: 'sale', label: 'Sale', meta: 'Promotions', icon: BadgePercent },
 ]
 
@@ -43,7 +41,6 @@ export default function IapManagementTabs({ onHeaderActionsChange, onNavigate, r
         {activeTab === 'packages' && <IapPackagesPanel onHeaderActionsChange={onHeaderActionsChange} />}
         {activeTab === 'api-key' && <IapApiKeyPanel onHeaderActionsChange={onHeaderActionsChange} />}
         {activeTab === 'payment-tools' && <IapPaymentOperationsPanel activeSection={route?.paymentToolSection} historyDetailId={route?.paymentToolHistoryId} onNavigate={onNavigate} paymentTransactionId={route?.paymentTransactionId} />}
-        {activeTab === 'pack-function' && <IapPackFunctionPanel onHeaderActionsChange={onHeaderActionsChange} />}
         {activeTab === 'sale' && <IapSalesPanel onHeaderActionsChange={onHeaderActionsChange} />}
       </div>
     </section>

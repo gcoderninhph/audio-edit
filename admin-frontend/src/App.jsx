@@ -8,9 +8,13 @@ import SetupPage from './components/SetupPage'
 import UserDetailPage from './components/UserDetailPage'
 import './App.css'
 
-const IAP_TABS = new Set(['packages', 'api-key', 'payment-tools', 'pack-function', 'sale'])
+const IAP_TABS = new Set(['packages', 'api-key', 'payment-tools', 'sale'])
 
 function parseIapRoute(normalizedPath) {
+  if (normalizedPath === '/admin/iap/pack-function') {
+    return { name: 'iap', iapTab: 'packages', paymentToolSection: '' }
+  }
+
   const historyDetailMatch = normalizedPath.match(/^\/admin\/iap\/payment-tools\/history\/(\d+)$/)
   if (historyDetailMatch) {
     return {
@@ -156,7 +160,6 @@ function App() {
       if (route.iapTab === 'payment-tools' && route.paymentToolHistoryId) return 'Bank hook transaction'
       if (route.iapTab === 'payment-tools' && route.paymentTransactionId) return 'Payment transaction'
       if (route.iapTab === 'payment-tools') return 'IAP payment tools'
-      if (route.iapTab === 'pack-function') return 'IAP pack functions'
       if (route.iapTab === 'sale') return 'IAP sales'
       return 'IAP packages'
     }
