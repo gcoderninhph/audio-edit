@@ -50,13 +50,13 @@ export function getVoiceoverExportFileName(fileName = 'voiceover.mp3') {
 }
 
 export function buildVideoAudioFilter(timelineDurationSeconds, videoVolume) {
-  return `volume=${formatAudioMixVolume(videoVolume)},atrim=0:${formatExportSeconds(timelineDurationSeconds)},aresample=async=1:first_pts=0`;
+  return `volume=${formatAudioMixVolume(videoVolume)},atrim=0:${formatExportSeconds(timelineDurationSeconds)},asetpts=PTS-STARTPTS`;
 }
 
 export function buildVoiceoverAudioFilter(timelineDurationSeconds, voiceoverTrack, voiceoverVolume) {
   const delayMs = Math.max(0, Math.round((Number(voiceoverTrack?.startTime) || 0) * 1000));
   const delayFilter = delayMs > 0 ? `adelay=${delayMs}|${delayMs},` : '';
-  return `${delayFilter}volume=${formatAudioMixVolume(voiceoverVolume)},atrim=0:${formatExportSeconds(timelineDurationSeconds)},aresample=async=1:first_pts=0`;
+  return `${delayFilter}volume=${formatAudioMixVolume(voiceoverVolume)},atrim=0:${formatExportSeconds(timelineDurationSeconds)},asetpts=PTS-STARTPTS`;
 }
 
 export function buildVideoOnlyAudioArgs({ sourcePath = 'cut.mp4', timelineDurationSeconds, videoVolume, outputPath = 'mixed-audio.m4a' }) {

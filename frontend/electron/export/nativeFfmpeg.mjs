@@ -138,18 +138,18 @@ export function getFrameChunkPlan({ encoderPlan = null, sceneCount = 0, totalDur
   const normalizedSceneCount = normalizeCount(sceneCount)
   const normalizedDurationSeconds = normalizeSeconds(totalDurationSeconds)
   const hardware = Boolean(encoderPlan?.hardware)
-  const minChunkDurationSeconds = hardware ? 4 : 8
-  const maxChunkDurationSeconds = hardware ? 12 : 18
-  const queueDepth = hardware ? 4 : 3
-  const baseWorkerCeiling = hardware ? 12 : 8
-  const baseWorkerFloor = hardware ? 2 : 1
+  const minChunkDurationSeconds = hardware ? 6 : 2.5
+  const maxChunkDurationSeconds = hardware ? 14 : 8
+  const queueDepth = hardware ? 2 : 5
+  const baseWorkerCeiling = hardware ? 4 : 12
+  const baseWorkerFloor = hardware ? 1 : 2
   const baseWorkerCount = clamp(
-    Math.ceil(logicalCpuCount / (hardware ? 3 : 4)),
+    hardware ? Math.ceil(logicalCpuCount / 8) : Math.ceil(logicalCpuCount / 2),
     baseWorkerFloor,
     baseWorkerCeiling,
   )
   const maxWorkersByDuration = normalizedDurationSeconds > 0
-    ? Math.max(1, Math.floor(normalizedDurationSeconds / minChunkDurationSeconds))
+    ? Math.max(1, Math.ceil(normalizedDurationSeconds / minChunkDurationSeconds))
     : baseWorkerCount
   const workerCount = clamp(
     Math.min(baseWorkerCount, maxWorkersByDuration),
@@ -174,15 +174,17 @@ export function getFrameChunkPlan({ encoderPlan = null, sceneCount = 0, totalDur
 
 export function getFrameWorkerPlan({ workerCount = 1, encoderPlan = null } = {}) {
   const logicalCpuCount = getLogicalCpuCount()
-  const cpuBudget = Math.max(2, Math.floor(logicalCpuCount * (encoderPlan?.hardware ? 0.85 : 0.95)))
-  const cpuBudgetPerWorker = Math.max(2, Math.floor(cpuBudget / Math.max(1, workerCount)))
+  const hardware = Boolean(encoderPlan?.hardware)
+  const cpuBudget = Math.max(2, Math.floor(logicalCpuCount * (hardware ? 0.95 : 1)))
+  const cpuBudgetPerWorker = Math.max(1, Math.floor(cpuBudget / Math.max(1, workerCount)))
 
   return {
     logicalCpuCount,
     cpuBudget,
-    decodeThreads: clamp(cpuBudgetPerWorker, 2, encoderPlan?.hardware ? 8 : 12),
-    filterThreads: clamp(Math.ceil(cpuBudgetPerWorker / 2), 2, 6),
-    filterComplexThreads: clamp(Math.ceil(cpuBudgetPerWorker / 3), 1, 4),
+    decodeThreads: clamp(cpuBudgetPerWorker, hardware ? 2 : 1, hardware ? 6 : 6),
+    encodeThreads: hardware ? 1 : clamp(cpuBudgetPerWorker, 1, 6),
+    filterThreads: clamp(Math.ceil(cpuBudgetPerWorker * 0.75), hardware ? 2 : 1, hardware ? 6 : 6),
+    filterComplexThreads: clamp(Math.ceil(cpuBudgetPerWorker * 0.5), 1, hardware ? 4 : 4),
   }
 }
 
@@ -252,6 +254,32 @@ async function readAvailableEncoders() {
   return outputLines.join('\n')
 }
 
+async function canUseHardwareEncoder(codec) {
+  try {
+    await runNativeFfmpeg([
+      '-hide_banner',
+      '-y',
+      '-f',
+      'lavfi',
+      '-i',
+      'color=c=black:s=256x144:r=30:d=0.1',
+      '-frames:v',
+      '1',
+      '-an',
+      '-pix_fmt',
+      'yuv420p',
+      '-c:v',
+      codec,
+      '-f',
+      'null',
+      '-',
+    ])
+    return true
+  } catch {
+    return false
+  }
+}
+
 export async function readNativeVideoFrameRate(inputPath) {
   const outputLines = []
 
@@ -285,10 +313,11 @@ export async function getNativeEncodePlan(exportQualityProfileId) {
       const encoderOutput = await readAvailableEncoders()
 
       for (const encoder of HARDWARE_ENCODERS) {
-        if (encoderOutput.includes(encoder.codec)) {
+        if (encoderOutput.includes(encoder.codec) && await canUseHardwareEncoder(encoder.codec)) {
           return {
             ...encoder,
             hardware: true,
+            verified: true,
           }
         }
       }
@@ -297,6 +326,7 @@ export async function getNativeEncodePlan(exportQualityProfileId) {
         codec: 'libx264',
         label: 'cpu-libx264',
         hardware: false,
+        verified: true,
       }
     })().catch((error) => {
       cachedEncoderPlanPromise = null

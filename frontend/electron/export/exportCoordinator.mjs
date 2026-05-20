@@ -9,7 +9,7 @@ import {
 import { describeFrameBackground, sanitizeFrameBackground } from '../../src/utils/frameComposer.js'
 import { renderNativeExportAudioTrack } from './exportAudioStage.mjs'
 import { resolveExportOutputTarget } from './exportOutputIpc.mjs'
-import { frameMergedVideo } from './framePipeline.mjs'
+import { frameSourceTimelineVideo } from './framePipeline.mjs'
 import {
   buildJobDirectory,
   cleanupJobDirectory,
@@ -24,8 +24,7 @@ import {
   writeFrameBackgroundAsset,
   writeOverlayAssets,
 } from './nativeExportJobHelpers.mjs'
-import { runNativeFfmpeg } from './nativeFfmpeg.mjs'
-import { extractSceneSegments, mergeSceneSegments } from './scenePipeline.mjs'
+import { getNativeEncodePlan, runNativeFfmpeg } from './nativeFfmpeg.mjs'
 
 async function runNativeExportJob(sender, payload = {}) {
   const jobId = payload.jobId || `native-export-${Date.now()}`
@@ -66,10 +65,10 @@ async function runNativeExportJob(sender, payload = {}) {
     const { inputPath: voiceoverPath = '' } = payload.voiceover?.source
       ? await resolveInputPath(payload.voiceover.source, jobDirectory)
       : { inputPath: '' }
-    const needsAudioRemix = Boolean(voiceoverPath) && !isAudioMixMuted(normalizedAudioMix.voiceoverVolume)
-      || isAudioMixMuted(normalizedAudioMix.videoVolume)
-      || Math.abs(normalizedAudioMix.videoVolume - 1) > 0.001
-    const framedVideoPath = needsAudioRemix ? path.join(jobDirectory, 'framed-output.mp4') : outputTarget.filePath
+    const wantsVideoAudio = !isAudioMixMuted(normalizedAudioMix.videoVolume)
+    const wantsVoiceoverAudio = Boolean(voiceoverPath) && !isAudioMixMuted(normalizedAudioMix.voiceoverVolume)
+    const needsAudioRender = wantsVideoAudio || wantsVoiceoverAudio
+    const framedVideoPath = needsAudioRender ? path.join(jobDirectory, 'framed-output.mp4') : outputTarget.filePath
 
     await mkdir(outputTarget.directory, { recursive: true })
 
@@ -95,30 +94,48 @@ async function runNativeExportJob(sender, payload = {}) {
       voiceoverPath: voiceoverPath || null,
     })
 
-    const segmentPaths = await extractSceneSegments({
+    emitLog(sender, jobId, 'preparing', 'Skip intermediate scene cut and merge; encode directly from source timeline', 'info', {
+      percent: 12,
+      stagePercent: 100,
+      detail: 'Dùng timeline trực tiếp, bỏ bước cắt/gộp scene trung gian',
+    }, {
+      keptSceneCount: keptScenes.length,
+      timelineDurationSeconds,
+    })
+
+    const encoderPlan = await getNativeEncodePlan(exportQualityProfileId)
+    const runHybridAudioStage = needsAudioRender && encoderPlan.hardware
+
+    if (runHybridAudioStage) {
+      emitLog(sender, jobId, 'preparing', 'Run hybrid export pipeline: GPU video encode with parallel CPU audio rendering', 'info', {
+        percent: 14,
+        stagePercent: 100,
+        detail: `Hybrid export: ${encoderPlan.label} encode + CPU audio mix song song`,
+      }, {
+        encoder: encoderPlan.label,
+        hardware: true,
+        parallelAudio: true,
+      })
+    } else if (needsAudioRender) {
+      emitLog(sender, jobId, 'preparing', 'Audio render will run after frame encode because no verified GPU encoder is active', 'info', {
+        percent: 14,
+        stagePercent: 100,
+        detail: `Khong co GPU encoder kha dung, giu audio stage chay sau ${encoderPlan.label}`,
+      }, {
+        encoder: encoderPlan.label,
+        hardware: false,
+        parallelAudio: false,
+      })
+    }
+
+    const frameRenderPromise = frameSourceTimelineVideo({
       sender,
-      emitLog,
-      emitProgress,
       jobId,
+      jobDirectory,
       inputPath,
-      jobDirectory,
-      keptScenes,
-    })
-    const mergedPath = await mergeSceneSegments({
-      sender,
-      emitLog,
-      emitProgress,
-      jobId,
-      jobDirectory,
-      segmentPaths,
-    })
-    const { outputPath, encoderPlan } = await frameMergedVideo({
-      sender,
-      jobId,
-      jobDirectory,
-      mergedPath,
       outputPath: framedVideoPath,
       exportQualityProfileId,
+      encoderPlan,
       keptScenes,
       framePreset,
       frameBackground: nativeFrameBackground,
@@ -127,21 +144,46 @@ async function runNativeExportJob(sender, payload = {}) {
       emitLog,
       emitProgress,
     })
-    let finalOutputPath = outputPath
-
-    if (needsAudioRemix) {
-      const mixedAudioPath = await renderNativeExportAudioTrack({
+    const audioRenderPromise = runHybridAudioStage
+      ? renderNativeExportAudioTrack({
         sender,
         jobId,
         emitLog,
         emitProgress,
         jobDirectory,
-        mergedPath,
+        inputPath,
+        keptScenes,
         voiceoverPath,
         voiceoverTrack: payload.voiceover,
         normalizedAudioMix,
         timelineDurationSeconds,
+        emitProgressUpdates: false,
       })
+      : null
+
+    const [{ outputPath, encoderPlan: resolvedEncoderPlan }, mixedAudioFromHybrid = null] = await Promise.all([
+      frameRenderPromise,
+      audioRenderPromise,
+    ])
+    let finalOutputPath = outputPath
+    let mixedAudioPath = mixedAudioFromHybrid
+
+    if (needsAudioRender) {
+      if (!runHybridAudioStage) {
+        mixedAudioPath = await renderNativeExportAudioTrack({
+          sender,
+          jobId,
+          emitLog,
+          emitProgress,
+          jobDirectory,
+          inputPath,
+          keptScenes,
+          voiceoverPath,
+          voiceoverTrack: payload.voiceover,
+          normalizedAudioMix,
+          timelineDurationSeconds,
+        })
+      }
       const remuxedOutputPath = outputTarget.filePath
 
       emitLog(sender, jobId, 'audio', 'Remux framed video with configured export audio', 'info', {
@@ -175,7 +217,7 @@ async function runNativeExportJob(sender, payload = {}) {
       stagePercent: 100,
       detail: `Saved native export to ${outputTarget.fileName}`,
     }, {
-      encoder: encoderPlan.label,
+      encoder: resolvedEncoderPlan.label,
       outputPath: finalOutputPath,
     })
 

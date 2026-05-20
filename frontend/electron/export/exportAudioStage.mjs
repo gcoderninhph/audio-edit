@@ -1,12 +1,80 @@
 import path from 'node:path'
 import {
-  buildMixedAudioArgs,
-  buildVideoOnlyAudioArgs,
+  buildVideoAudioFilter,
+  buildVoiceoverAudioFilter,
   buildVoiceoverOnlyAudioArgs,
   isAudioMixMuted,
   isMissingAudioStreamError,
 } from '../../src/utils/exportAudioMix.js'
 import { runNativeFfmpeg } from './nativeFfmpeg.mjs'
+import { buildAccurateAudioTimelineSource } from './timelineInputPlan.mjs'
+
+function buildTimelineVideoAudioFilter({ keptScenes, timelineDurationSeconds, videoVolume }) {
+  if (!Array.isArray(keptScenes) || keptScenes.length === 0) {
+    throw new Error('No source audio slices were generated for native export.')
+  }
+
+  const timelineSource = buildAccurateAudioTimelineSource(keptScenes)
+  const filterComplex = [
+    timelineSource.filterComplex,
+    `[${timelineSource.sourceAudioLabel}]${buildVideoAudioFilter(timelineDurationSeconds, videoVolume)}[videoa]`,
+  ].filter(Boolean).join(';')
+
+  return {
+    filterComplex,
+    sourceInputCount: timelineSource.sourceInputCount,
+  }
+}
+
+function buildTimelineVideoOnlyAudioArgs({ sourcePath, keptScenes, timelineDurationSeconds, videoVolume, outputPath }) {
+  const timelineAudio = buildTimelineVideoAudioFilter({ keptScenes, timelineDurationSeconds, videoVolume })
+
+  return [
+    '-hide_banner',
+    '-y',
+    '-i',
+    sourcePath,
+    '-vn',
+    '-filter_complex',
+    timelineAudio.filterComplex,
+    '-map',
+    '[videoa]',
+    '-c:a',
+    'aac',
+    '-b:a',
+    '192k',
+    outputPath,
+  ]
+}
+
+function buildTimelineMixedAudioArgs({ sourcePath, keptScenes, voiceoverPath, timelineDurationSeconds, voiceoverTrack, videoVolume, voiceoverVolume, outputPath }) {
+  const timelineAudio = buildTimelineVideoAudioFilter({ keptScenes, timelineDurationSeconds, videoVolume })
+  const voiceoverInputIndex = timelineAudio.sourceInputCount
+  const filterComplex = [
+    timelineAudio.filterComplex,
+    `[${voiceoverInputIndex}:a]${buildVoiceoverAudioFilter(timelineDurationSeconds, voiceoverTrack, voiceoverVolume)}[voicea]`,
+    '[videoa][voicea]amix=inputs=2:duration=first:dropout_transition=0[mixa]',
+  ].join(';')
+
+  return [
+    '-hide_banner',
+    '-y',
+    '-i',
+    sourcePath,
+    '-i',
+    voiceoverPath,
+    '-vn',
+    '-filter_complex',
+    filterComplex,
+    '-map',
+    '[mixa]',
+    '-c:a',
+    'aac',
+    '-b:a',
+    '192k',
+    outputPath,
+  ]
+}
 
 export async function renderNativeExportAudioTrack({
   sender,
@@ -14,11 +82,13 @@ export async function renderNativeExportAudioTrack({
   emitLog,
   emitProgress,
   jobDirectory,
-  mergedPath,
+  inputPath,
+  keptScenes,
   voiceoverPath,
   voiceoverTrack,
   normalizedAudioMix,
   timelineDurationSeconds,
+  emitProgressUpdates = true,
 }) {
   const outputPath = path.join(jobDirectory, 'mixed-audio.m4a')
   const wantsVideoAudio = !isAudioMixMuted(normalizedAudioMix.videoVolume)
@@ -34,19 +104,27 @@ export async function renderNativeExportAudioTrack({
   }
 
   const runAudioStage = async (args, detail) => {
-    emitProgress(sender, jobId, {
-      phase: 'audio',
-      percent: 98,
+    emitLog(sender, jobId, 'audio', detail, 'info', {
+      percent: emitProgressUpdates ? 98 : 82,
       stagePercent: 0,
       detail,
     })
+    if (emitProgressUpdates) {
+      emitProgress(sender, jobId, {
+        phase: 'audio',
+        percent: 98,
+        stagePercent: 0,
+        detail,
+      })
+    }
     await runNativeFfmpeg(args, { cwd: jobDirectory })
   }
 
   if (wantsVideoAudio && wantsVoiceoverAudio) {
     try {
-      await runAudioStage(buildMixedAudioArgs({
-        sourcePath: mergedPath,
+      await runAudioStage(buildTimelineMixedAudioArgs({
+        sourcePath: inputPath,
+        keptScenes,
         voiceoverPath,
         timelineDurationSeconds,
         voiceoverTrack,
@@ -80,8 +158,9 @@ export async function renderNativeExportAudioTrack({
   }
 
   try {
-    await runAudioStage(buildVideoOnlyAudioArgs({
-      sourcePath: mergedPath,
+    await runAudioStage(buildTimelineVideoOnlyAudioArgs({
+      sourcePath: inputPath,
+      keptScenes,
       timelineDurationSeconds,
       videoVolume: normalizedAudioMix.videoVolume,
       outputPath,

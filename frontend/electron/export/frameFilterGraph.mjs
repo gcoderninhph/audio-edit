@@ -70,7 +70,7 @@ function buildMovingWatermarkFilter(inputLabel, outputLabel, framePreset, timeOf
   return `[${inputLabel}]drawtext=text='${WATERMARK_TEXT}':font='Arial':fontsize=${fontSize}:fontcolor=white@0.42:borderw=${borderWidth}:bordercolor=black@0.38:shadowcolor=black@0.35:shadowx=${shadowOffset}:shadowy=${shadowOffset}:x='${xExpression}':y='${yExpression}'[${outputLabel}]`
 }
 
-export function buildFrameFilter(framePreset, frameBackground, overlayAssets, motionSegments, { frameRate = DEFAULT_NATIVE_FRAME_RATE, timeOffset = 0, duration = 0, hideWatermark = false } = {}) {
+export function buildFrameFilter(framePreset, frameBackground, overlayAssets, motionSegments, { frameRate = DEFAULT_NATIVE_FRAME_RATE, timeOffset = 0, duration = 0, hideWatermark = false, sourceVideoLabel = '0:v', mediaInputOffset = 1 } = {}) {
   const safeOverlayAssets = Array.isArray(overlayAssets) ? overlayAssets : []
   const safeMotionSegments = Array.isArray(motionSegments) ? motionSegments : []
   const usesMotionSegments = hasSceneMotionSegments(safeMotionSegments)
@@ -79,11 +79,11 @@ export function buildFrameFilter(framePreset, frameBackground, overlayAssets, mo
   const backgroundImagePath = getNativeBackgroundImagePath(frameBackground)
   const fadePreset = getVideoFadePresetById(frameBackground?.presetId)
   const sourceLabel = 'src'
-  const filterChain = [`[0:v]fps=${nativeFrameRate},setpts=N/(${nativeFrameRate}*TB)${stableMotionFormat}[${sourceLabel}]`]
+  const filterChain = [`[${sourceVideoLabel}]fps=${nativeFrameRate},setpts=N/(${nativeFrameRate}*TB)${stableMotionFormat}[${sourceLabel}]`]
 
   filterChain.push(...(backgroundImagePath
     ? [
-      `[1:v]scale=w=${framePreset.width}:h=${framePreset.height}:force_original_aspect_ratio=increase,crop=${framePreset.width}:${framePreset.height},setsar=1${stableMotionFormat}[bg]`,
+      `[${mediaInputOffset}:v]scale=w=${framePreset.width}:h=${framePreset.height}:force_original_aspect_ratio=increase,crop=${framePreset.width}:${framePreset.height},setsar=1${stableMotionFormat}[bg]`,
       buildNativeForegroundScale({ inputLabel: sourceLabel, outputLabel: 'fg', framePreset, motionSegments: safeMotionSegments }),
       buildNativeForegroundOverlay({ backgroundLabel: 'bg', foregroundLabel: 'fg', outputLabel: 'v0', framePreset, motionSegments: safeMotionSegments }),
     ]
@@ -102,7 +102,7 @@ export function buildFrameFilter(framePreset, frameBackground, overlayAssets, mo
       ] : [
         `[${sourceLabel}]scale=w=${framePreset.width}:h=${framePreset.height}:force_original_aspect_ratio=decrease,pad=${framePreset.width}:${framePreset.height}:(ow-iw)/2:(oh-ih)/2:${toFfmpegColor(frameBackground)}[v0]`,
       ]))
-  const subtitleInputOffset = backgroundImagePath ? 2 : 1
+  const subtitleInputOffset = mediaInputOffset + (backgroundImagePath ? 1 : 0)
 
   let currentLabel = 'v0'
   if (!hideWatermark) {
