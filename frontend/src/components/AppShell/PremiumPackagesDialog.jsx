@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import DeveloperLocator from '../DeveloperLocator/DeveloperLocator';
 import { fetchPublicPremiumPackages } from '../../utils/iapClient';
+import PaymentQrDialog from './PaymentQrDialog';
 import './PremiumPackagesDialog.css';
 
 const MAX_PACKAGES_PER_PAGE = 3;
@@ -131,6 +132,7 @@ export default function PremiumPackagesDialog({ auth, locatorCode, onClose, open
   const [error, setError] = useState('');
   const [isLoading, setIsLoading] = useState(false);
   const [packages, setPackages] = useState([]);
+  const [paymentPackage, setPaymentPackage] = useState(null);
   const [cardsPerPage, setCardsPerPage] = useState(() => resolveCardsPerPage(getViewportWidth()));
   const [activePage, setActivePage] = useState(0);
 
@@ -238,6 +240,10 @@ export default function PremiumPackagesDialog({ auth, locatorCode, onClose, open
       return;
     }
     setActivePage(Math.max(0, Math.min(nextPage, pageCount - 1)));
+  }
+
+  function handleClosePaymentDialog() {
+    setPaymentPackage(null);
   }
 
   if (!open) {
@@ -354,8 +360,7 @@ export default function PremiumPackagesDialog({ auth, locatorCode, onClose, open
                         <button
                           type="button"
                           className="premium-package-cta"
-                          onClick={() => {}}
-                          title="Purchase flow is not connected yet."
+                          onClick={() => setPaymentPackage(packageRecord)}
                         >
                           Buy now
                         </button>
@@ -366,6 +371,13 @@ export default function PremiumPackagesDialog({ auth, locatorCode, onClose, open
               ))}
             </div>
           </div>
+        )}
+        {paymentPackage && (
+          <PaymentQrDialog
+            locatorCode={`${locatorCode}.premium-popup.payment`}
+            onClose={handleClosePaymentDialog}
+            packageRecord={paymentPackage}
+          />
         )}
       </section>
     </div>

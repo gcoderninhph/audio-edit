@@ -16,7 +16,7 @@ function getAccountLabel(record) {
   return values.join(' · ') || '-'
 }
 
-export default function IapBankHookHistoryPage({ onHeaderActionsChange, onNavigate }) {
+export default function IapBankHookHistoryPage({ embedded = false, onHeaderActionsChange, onNavigate }) {
   const [error, setError] = useState('')
   const [history, setHistory] = useState([])
   const [isLoading, setIsLoading] = useState(true)
@@ -61,9 +61,13 @@ export default function IapBankHookHistoryPage({ onHeaderActionsChange, onNaviga
   ]), [isLoading, loadHistory, onNavigate])
 
   useEffect(() => {
-    onHeaderActionsChange?.(headerActions)
-    return () => onHeaderActionsChange?.(null)
-  }, [headerActions, onHeaderActionsChange])
+    if (embedded || !onHeaderActionsChange) {
+      return undefined
+    }
+
+    onHeaderActionsChange(headerActions)
+    return () => onHeaderActionsChange(null)
+  }, [embedded, headerActions, onHeaderActionsChange])
 
   const handleFilterSubmit = (event) => {
     event.preventDefault()
@@ -83,15 +87,17 @@ export default function IapBankHookHistoryPage({ onHeaderActionsChange, onNaviga
     setFilters({ endDate: '', search: '', startDate: '' })
   }
 
-  return (
-    <div className="page-stack dev-host">
+  const canOpenDetail = typeof onNavigate === 'function'
+  const historyPanel = (
+    <section className={`panel dev-host${embedded ? ' iap-inline-detail-panel iap-history-embedded-panel' : ''}`}>
       <DeveloperMarker code="admin.react.manage.iap.bank-hook-history" title="Admin React IAP Bank Hook History" />
-      <section className="panel dev-host">
         <DeveloperMarker code="admin.react.manage.iap.bank-hook-history.table" title="Admin React IAP Bank Hook History Table" />
-        <div className="section-heading compact">
-          <p>Bank hook</p>
-          <h2>History</h2>
-        </div>
+        {!embedded && (
+          <div className="section-heading compact">
+            <p>Bank hook</p>
+            <h2>History</h2>
+          </div>
+        )}
 
         <form className="iap-history-filter-grid dev-host" onSubmit={handleFilterSubmit}>
           <DeveloperMarker code="admin.react.manage.iap.bank-hook-history.filters" title="Admin React IAP Bank Hook History Filters" />
@@ -124,7 +130,7 @@ export default function IapBankHookHistoryPage({ onHeaderActionsChange, onNaviga
         {error && <div className="notice notice-error">{error}</div>}
 
         <div className="table-wrap">
-          <table className="admin-table">
+          <table className={`admin-table${embedded ? ' compact-table' : ''}`}>
             <thead>
               <tr>
                 <th>Received</th>
@@ -137,7 +143,7 @@ export default function IapBankHookHistoryPage({ onHeaderActionsChange, onNaviga
             </thead>
             <tbody>
               {history.map((record) => (
-                <tr key={record.id} className="clickable-row" onClick={() => onNavigate(`/admin/iap/bank-hook-history/${record.id}`)}>
+                <tr key={record.id} className={canOpenDetail ? 'clickable-row' : ''} onClick={canOpenDetail ? () => onNavigate(`/admin/iap/bank-hook-history/${record.id}`) : undefined}>
                   <td>
                     <strong>{formatDateTime(record.receivedAt)}</strong>
                     <small>Bank time: {getBankTimeLabel(record)}</small>
@@ -171,6 +177,11 @@ export default function IapBankHookHistoryPage({ onHeaderActionsChange, onNaviga
 
         <Pagination pagination={pagination} itemLabel="transactions" onPageChange={setPage} />
       </section>
-    </div>
   )
+
+  if (embedded) {
+    return historyPanel
+  }
+
+  return <div className="page-stack dev-host">{historyPanel}</div>
 }

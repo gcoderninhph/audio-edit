@@ -1,4 +1,5 @@
-import { apiFetch } from './runtimeConfig';
+import { getAuthRequestHeaders } from './authClient';
+import { apiFetch, buildServerUrl } from './runtimeConfig';
 
 const CREDIT_PACK_TYPES = new Set(['addCredit']);
 const PREMIUM_PACK_TYPES = new Set(['premiumSubscribe', 'creditsAndPremiumPack']);
@@ -63,4 +64,63 @@ export async function fetchPublicPremiumPackages() {
 
 export async function fetchPublicCreditPackages() {
   return filterPackagesByType(await fetchPublicPackages(), CREDIT_PACK_TYPES);
+}
+
+async function parsePaymentResponse(response, fallbackMessage) {
+  let payload;
+  try {
+    payload = await response.json();
+  } catch {
+    payload = null;
+  }
+
+  if (!response.ok) {
+    throw new Error(payload?.error || fallbackMessage);
+  }
+
+  return payload || {};
+}
+
+export async function createIapPayment(packageId) {
+  return parsePaymentResponse(await apiFetch('/api/iap/payments', {
+    body: JSON.stringify({ packageId }),
+    headers: {
+      'Content-Type': 'application/json',
+      ...getAuthRequestHeaders(),
+    },
+    method: 'POST',
+  }), 'Unable to create payment ticket.');
+}
+
+export async function fetchIapPayment(paymentId) {
+  return parsePaymentResponse(await apiFetch(`/api/iap/payments/${encodeURIComponent(paymentId)}`, {
+    headers: getAuthRequestHeaders(),
+    method: 'GET',
+  }), 'Unable to check payment status.');
+}
+
+export function buildIapPaymentQrUrl(paymentId) {
+  if (!paymentId) {
+    return '';
+  }
+  return buildServerUrl(`/api/iap/payments/${encodeURIComponent(paymentId)}/qr`);
+}
+
+export async function fetchIapPaymentQrBlob(paymentId) {
+  const response = await apiFetch(`/api/iap/payments/${encodeURIComponent(paymentId)}/qr`, {
+    headers: getAuthRequestHeaders(),
+    method: 'GET',
+  });
+
+  if (!response.ok) {
+    let payload;
+    try {
+      payload = await response.json();
+    } catch {
+      payload = null;
+    }
+    throw new Error(payload?.error || 'Unable to load QR image.');
+  }
+
+  return response.blob();
 }

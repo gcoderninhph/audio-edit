@@ -187,6 +187,58 @@ export async function deleteAdminIapApiKey(keyId) {
   return response.data || {}
 }
 
+export async function fetchAdminIapBeneficiaryAccounts() {
+  const response = await requestJson('/api/admin/iap/beneficiary-accounts')
+  if (!response.ok) throw new Error(response.data?.error || 'Unable to load beneficiary accounts.')
+  return response.data || {}
+}
+
+export async function createAdminIapBeneficiaryAccount(payload) {
+  const response = await requestJson('/api/admin/iap/beneficiary-accounts', {
+    method: 'POST',
+    body: JSON.stringify(payload),
+  })
+  if (!response.ok) throw new Error(response.data?.error || 'Unable to create beneficiary account.')
+  return response.data || {}
+}
+
+export async function updateAdminIapBeneficiaryAccount(accountId, payload) {
+  const response = await requestJson(`/api/admin/iap/beneficiary-accounts/${encodeURIComponent(accountId)}`, {
+    method: 'PATCH',
+    body: JSON.stringify(payload),
+  })
+  if (!response.ok) throw new Error(response.data?.error || 'Unable to update beneficiary account.')
+  return response.data || {}
+}
+
+export async function deleteAdminIapBeneficiaryAccount(accountId) {
+  const response = await requestJson(`/api/admin/iap/beneficiary-accounts/${encodeURIComponent(accountId)}`, {
+    method: 'DELETE',
+  })
+  if (!response.ok) throw new Error(response.data?.error || 'Unable to delete beneficiary account.')
+  return response.data || {}
+}
+
+export async function fetchAdminIapPaymentTransactions({ page = 1, pageSize = 20 } = {}) {
+  const searchParams = new URLSearchParams({ page: String(page), pageSize: String(pageSize) })
+  const response = await requestJson(`/api/admin/iap/payment-transactions?${searchParams.toString()}`)
+  if (!response.ok) throw new Error(response.data?.error || 'Unable to load payment transactions.')
+  return response.data || {}
+}
+
+export async function fetchAdminIapPaymentTransactionDetail(transactionId) {
+  const response = await requestJson(`/api/admin/iap/payment-transactions/${encodeURIComponent(transactionId)}`)
+  if (!response.ok) throw new Error(response.data?.error || 'Unable to load payment transaction detail.')
+  return response.data || {}
+}
+
+export async function fetchAdminIapRefundPending({ page = 1, pageSize = 20 } = {}) {
+  const searchParams = new URLSearchParams({ page: String(page), pageSize: String(pageSize) })
+  const response = await requestJson(`/api/admin/iap/refund-pending?${searchParams.toString()}`)
+  if (!response.ok) throw new Error(response.data?.error || 'Unable to load refund pending records.')
+  return response.data || {}
+}
+
 export async function fetchAdminIapBankHookHistory({ page = 1, pageSize = 20, search = '', startDate = '', endDate = '' } = {}) {
   const searchParams = new URLSearchParams({ page: String(page), pageSize: String(pageSize) })
   if (search) searchParams.set('search', search)

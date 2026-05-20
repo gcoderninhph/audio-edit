@@ -8,6 +8,7 @@ try:
         list_iap_bank_hook_history_page,
         record_iap_bank_hook_history,
     )
+    from iap_payment_store import process_iap_payment_hook
     from iap_api_key_store import (
         IapApiKeyNotFoundError,
         IapApiKeyValidationError,
@@ -46,6 +47,7 @@ except ImportError:
         list_iap_bank_hook_history_page,
         record_iap_bank_hook_history,
     )
+    from .iap_payment_store import process_iap_payment_hook
     from .iap_api_key_store import (
         IapApiKeyNotFoundError,
         IapApiKeyValidationError,
@@ -124,7 +126,8 @@ def register_iap_routes(app):
         try:
             api_key_record = validate_iap_hook_request(request.method, request.headers)
             history_record = record_iap_bank_hook_history(api_key_record, _extract_payment_hook_payload(request))
-            return jsonify({'historyId': history_record['id'], 'success': True})
+            payment_result = process_iap_payment_hook(history_record)
+            return jsonify({'historyId': history_record['id'], 'success': bool(payment_result.get('success'))})
         except IapApiKeyNotFoundError:
             return jsonify({'error': 'Invalid payment hook API key'}), 401
         except IapApiKeyValidationError as error:
