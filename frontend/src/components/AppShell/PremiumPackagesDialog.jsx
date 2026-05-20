@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import DeveloperLocator from '../DeveloperLocator/DeveloperLocator';
 import { fetchPublicPremiumPackages } from '../../utils/iapClient';
+import { getPremiumWindowStatus } from '../../utils/premiumWindow';
 import PaymentQrDialog from './PaymentQrDialog';
 import './PremiumPackagesDialog.css';
 
@@ -135,6 +136,7 @@ export default function PremiumPackagesDialog({ auth, locatorCode, onClose, open
   const [paymentPackage, setPaymentPackage] = useState(null);
   const [cardsPerPage, setCardsPerPage] = useState(() => resolveCardsPerPage(getViewportWidth()));
   const [activePage, setActivePage] = useState(0);
+  const [statusNow, setStatusNow] = useState(() => Date.now());
 
   useEffect(() => {
     if (typeof window === 'undefined') {
@@ -192,13 +194,41 @@ export default function PremiumPackagesDialog({ auth, locatorCode, onClose, open
     };
   }, [open]);
 
+  const premiumStatus = useMemo(() => getPremiumWindowStatus(auth?.user, statusNow), [auth?.user, statusNow]);
+
+  useEffect(() => {
+    if (!open) {
+      return undefined;
+    }
+    const refreshTimerId = window.setTimeout(() => setStatusNow(Date.now()), 0);
+    return () => window.clearTimeout(refreshTimerId);
+  }, [open]);
+
+  useEffect(() => {
+    if (!open) {
+      return undefined;
+    }
+    if (!premiumStatus.isActive && !premiumStatus.isUpcoming) {
+      return undefined;
+    }
+    const timerId = window.setInterval(() => setStatusNow(Date.now()), 1000);
+    return () => window.clearInterval(timerId);
+  }, [open, premiumStatus.isActive, premiumStatus.isUpcoming]);
+
   const packagePages = useMemo(() => chunkPackages(packages, cardsPerPage), [cardsPerPage, packages]);
   const recommendedKeys = useMemo(() => resolveRecommendedKeys(packages), [packages]);
   const activePageIndex = packagePages.length ? Math.max(0, Math.min(activePage, packagePages.length - 1)) : 0;
-  const isPremium = Boolean(auth?.user?.isPremium);
+  const isPremium = premiumStatus.isActive;
+  const premiumBarLabel = isPremium
+    ? `${premiumStatus.remainingLabel} remaining`
+    : premiumStatus.isUpcoming
+      ? `Starts in ${premiumStatus.remainingLabel}`
+      : 'No active premium window';
   const headerNote = isPremium
-    ? 'This account already has premium active. Plans below are still visible for later purchase flows.'
-    : 'Choose a premium plan from the server catalog. Buy buttons are placeholders for now.';
+    ? `Premium ends on ${premiumStatus.expiryLabel}. You can still open a new purchase flow below.`
+    : premiumStatus.isUpcoming
+      ? `Premium starts soon and currently ends on ${premiumStatus.expiryLabel}.`
+      : 'Choose a premium plan from the server catalog and continue to QR checkout.';
 
   useEffect(() => {
     if (!open || !packagePages.length) {
@@ -267,6 +297,14 @@ export default function PremiumPackagesDialog({ auth, locatorCode, onClose, open
             <p className="premium-dialog-note">{headerNote}</p>
           </div>
           <button type="button" className="premium-dialog-close" onClick={onClose} aria-label="Close premium plans dialog">×</button>
+        </div>
+
+        <div className="premium-status-card dev-locator-host">
+          <DeveloperLocator code={`${locatorCode}.premium-popup.status`} title="Premium Popup Status" />
+          <div className="premium-status-bar-track" role="progressbar" aria-label="Premium time remaining" aria-valuemin={0} aria-valuemax={100} aria-valuenow={Math.round(premiumStatus.progressPercent)}>
+            <div className="premium-status-bar-fill" style={{ width: `${premiumStatus.progressPercent}%` }} />
+            <strong className="premium-status-bar-label">{premiumBarLabel}</strong>
+          </div>
         </div>
 
         {error && <div className="premium-dialog-alert premium-dialog-alert-error">{error}</div>}

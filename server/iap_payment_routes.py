@@ -18,6 +18,7 @@ try:
     from iap_payment_store import (
         IapPaymentNotFoundError,
         IapPaymentValidationError,
+        cancel_iap_payment_ticket,
         create_iap_payment_ticket,
         expire_iap_payment_tickets,
         get_iap_payment_ticket,
@@ -41,6 +42,7 @@ except ImportError:
     from .iap_payment_store import (
         IapPaymentNotFoundError,
         IapPaymentValidationError,
+        cancel_iap_payment_ticket,
         create_iap_payment_ticket,
         expire_iap_payment_tickets,
         get_iap_payment_ticket,
@@ -99,7 +101,20 @@ def register_iap_payment_routes(app):
         if auth_error:
             return auth_error
         try:
-            ticket = get_iap_payment_ticket(ticket_id, user_id=claims.get('sub'))
+            ticket = get_iap_payment_ticket(ticket_id, user_id=claims.get('sub'), record_client_check=True)
+            return jsonify(_payment_status_payload(ticket))
+        except IapPaymentNotFoundError:
+            return jsonify({'error': 'IAP payment ticket not found'}), 404
+        except AuthStoreError:
+            return _iap_payment_store_error_response()
+
+    @app.route('/api/iap/payments/<int:ticket_id>/cancel', methods=['POST'])
+    def cancel_iap_payment_route(ticket_id):
+        claims, auth_error = require_access_token()
+        if auth_error:
+            return auth_error
+        try:
+            ticket = cancel_iap_payment_ticket(ticket_id, user_id=claims.get('sub'))
             return jsonify(_payment_status_payload(ticket))
         except IapPaymentNotFoundError:
             return jsonify({'error': 'IAP payment ticket not found'}), 404

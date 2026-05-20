@@ -99,6 +99,13 @@ export async function fetchIapPayment(paymentId) {
   }), 'Unable to check payment status.');
 }
 
+export async function cancelIapPayment(paymentId) {
+  return parsePaymentResponse(await apiFetch(`/api/iap/payments/${encodeURIComponent(paymentId)}/cancel`, {
+    headers: getAuthRequestHeaders(),
+    method: 'POST',
+  }), 'Unable to cancel payment ticket.');
+}
+
 export function buildIapPaymentQrUrl(paymentId) {
   if (!paymentId) {
     return '';

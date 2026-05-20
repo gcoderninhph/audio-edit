@@ -44,6 +44,7 @@ export default function IapPaymentTransactionDetailPanel({ onBack, transactionId
     ['History id', transaction.historyId ? String(transaction.historyId) : '-'],
     ['Created at', formatOptionalDateTime(transaction.createdAt)],
     ['Updated at', formatOptionalDateTime(transaction.updatedAt)],
+    ['Last client check status', formatOptionalDateTime(transaction.lastClientCheckAt)],
     ['Expires at', formatOptionalDateTime(transaction.expiresAt)],
     ['Completed at', formatOptionalDateTime(transaction.completedAt)],
     ['Failure reason', transaction.failureReason || '-'],

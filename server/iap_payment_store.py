@@ -3,21 +3,24 @@ import time
 
 try:
     from auth_credit_store import update_user_credits
-    from auth_store import AuthStoreError, MYSQL_DATABASE, _connect, _require_driver, ensure_auth_schema, find_user_by_id
+    from auth_store import AuthStoreError, MYSQL_DATABASE, _connect, _ensure_column, _require_driver, ensure_auth_schema, find_user_by_id
     from iap_admin_store import list_iap_pack_functions
     from iap_beneficiary_store import get_current_iap_beneficiary_account, ensure_iap_beneficiary_schema
+    from iap_payment_records import list_iap_record_page, paginate_iap_records, row_to_payment_refund, row_to_payment_ticket
     from iap_store import IapPackageNotFoundError, get_iap_package
 except ImportError:
     from .auth_credit_store import update_user_credits
-    from .auth_store import AuthStoreError, MYSQL_DATABASE, _connect, _require_driver, ensure_auth_schema, find_user_by_id
+    from .auth_store import AuthStoreError, MYSQL_DATABASE, _connect, _ensure_column, _require_driver, ensure_auth_schema, find_user_by_id
     from .iap_admin_store import list_iap_pack_functions
     from .iap_beneficiary_store import get_current_iap_beneficiary_account, ensure_iap_beneficiary_schema
+    from .iap_payment_records import list_iap_record_page, paginate_iap_records, row_to_payment_refund, row_to_payment_ticket
     from .iap_store import IapPackageNotFoundError, get_iap_package
 
 
 PAYMENT_TICKET_TTL_SECONDS = 180
 PAYMENT_STATUS_PENDING = 'pending'
 PAYMENT_STATUS_PAID = 'paid'
+PAYMENT_STATUS_CANCELLED = 'cancelled'
 PAYMENT_STATUS_FAILED = 'failed'
 PAYMENT_STATUS_EXPIRED = 'expired'
 REFUND_STATUS_PENDING = 'pending'
@@ -61,50 +64,6 @@ def _normalize_text(value, max_length=255):
     return normalized_value[:max_length]
 
 
-def _row_to_ticket(row):
-    if not row:
-        return None
-    return {
-        'id': int(row.get('id') or 0),
-        'transactionCode': row.get('transaction_code') or '',
-        'userId': row.get('user_id') or '',
-        'packageId': row.get('package_id') or '',
-        'packageName': row.get('package_name') or '',
-        'packType': row.get('pack_type') or '',
-        'beneficiaryAccountId': int(row.get('beneficiary_account_id') or 0),
-        'beneficiaryName': row.get('beneficiary_name') or '',
-        'bankId': row.get('bank_id') or '',
-        'bankAccount': row.get('bank_account') or '',
-        'amount': int(row.get('amount') or 0),
-        'currency': row.get('currency') or 'VND',
-        'status': row.get('status') or PAYMENT_STATUS_PENDING,
-        'failureReason': row.get('failure_reason') or '',
-        'historyId': int(row.get('history_id') or 0),
-        'expiresAt': int(row.get('expires_at') or 0),
-        'completedAt': int(row.get('completed_at') or 0),
-        'createdAt': int(row.get('created_at') or 0),
-        'updatedAt': int(row.get('updated_at') or 0),
-    }
-
-
-def _row_to_refund(row):
-    if not row:
-        return None
-    return {
-        'id': int(row.get('id') or 0),
-        'ticketId': int(row.get('ticket_id') or 0),
-        'historyId': int(row.get('history_id') or 0),
-        'userId': row.get('user_id') or '',
-        'transactionCode': row.get('transaction_code') or '',
-        'amount': int(row.get('amount') or 0),
-        'accountNumber': row.get('account_number') or '',
-        'reason': row.get('reason') or '',
-        'status': row.get('status') or REFUND_STATUS_PENDING,
-        'createdAt': int(row.get('created_at') or 0),
-        'updatedAt': int(row.get('updated_at') or 0),
-    }
-
-
 def ensure_iap_payment_schema():
     global _schema_ready
     if _schema_ready:
@@ -137,6 +96,7 @@ def ensure_iap_payment_schema():
                         expires_at BIGINT NOT NULL,
                         completed_at BIGINT NOT NULL DEFAULT 0,
                         created_at BIGINT NOT NULL,
+                        last_client_check_at BIGINT NOT NULL DEFAULT 0,
                         updated_at BIGINT NOT NULL,
                         INDEX idx_iap_payment_user_created (user_id, created_at),
                         INDEX idx_iap_payment_status_expires (status, expires_at),
@@ -144,6 +104,7 @@ def ensure_iap_payment_schema():
                     ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
                     """
                 )
+                _ensure_column(cursor, 'iap_payment_tickets', 'last_client_check_at', 'BIGINT NOT NULL DEFAULT 0 AFTER created_at')
                 cursor.execute(
                     """
                     CREATE TABLE IF NOT EXISTS iap_payment_refunds (
@@ -235,7 +196,7 @@ def create_iap_payment_ticket(user_id, package_id):
     return get_iap_payment_ticket(ticket_id, user_id=user_id)
 
 
-def get_iap_payment_ticket(ticket_id, user_id=None):
+def get_iap_payment_ticket(ticket_id, user_id=None, record_client_check=False):
     expire_iap_payment_tickets()
     ensure_iap_payment_schema()
     driver = _require_driver()
@@ -249,9 +210,13 @@ def get_iap_payment_ticket(ticket_id, user_id=None):
         try:
             with connection.cursor() as cursor:
                 cursor.execute(f'SELECT * FROM iap_payment_tickets WHERE id = %s{user_clause} LIMIT 1', tuple(params))
-                ticket = _row_to_ticket(cursor.fetchone())
+                ticket = row_to_payment_ticket(cursor.fetchone())
                 if not ticket:
                     raise IapPaymentNotFoundError('IAP payment ticket not found')
+                if record_client_check:
+                    checked_at = _now()
+                    cursor.execute('UPDATE iap_payment_tickets SET last_client_check_at = %s WHERE id = %s', (checked_at, ticket['id']))
+                    ticket['lastClientCheckAt'] = checked_at
                 return ticket
         finally:
             connection.close()
@@ -259,6 +224,35 @@ def get_iap_payment_ticket(ticket_id, user_id=None):
         raise
     except (driver.MySQLError, ValueError) as error:
         raise AuthStoreError('Unable to load IAP payment ticket') from error
+
+
+def cancel_iap_payment_ticket(ticket_id, user_id=None):
+    ticket = get_iap_payment_ticket(ticket_id, user_id=user_id)
+    if ticket['status'] != PAYMENT_STATUS_PENDING:
+        return ticket
+
+    now = _now()
+    driver = _require_driver()
+    try:
+        connection = _connect(MYSQL_DATABASE)
+        try:
+            with connection.cursor() as cursor:
+                cursor.execute(
+                    'UPDATE iap_payment_tickets SET status = %s, failure_reason = %s, completed_at = %s, updated_at = %s WHERE id = %s AND status = %s',
+                    (
+                        PAYMENT_STATUS_CANCELLED,
+                        'Cancelled by the desktop client before payment confirmation.',
+                        now,
+                        now,
+                        ticket['id'],
+                        PAYMENT_STATUS_PENDING,
+                    ),
+                )
+        finally:
+            connection.close()
+    except driver.MySQLError as error:
+        raise AuthStoreError('Unable to cancel IAP payment ticket') from error
+    return get_iap_payment_ticket(ticket_id, user_id=user_id)
 
 
 def _insert_refund(cursor, ticket, history_record, reason):
@@ -316,7 +310,7 @@ def _find_matching_pending_ticket(cursor, history_record):
     haystack = _history_text(history_record)
     cursor.execute('SELECT * FROM iap_payment_tickets WHERE status = %s AND expires_at > %s ORDER BY created_at ASC', (PAYMENT_STATUS_PENDING, _now()))
     for row in cursor.fetchall() or []:
-        ticket = _row_to_ticket(row)
+        ticket = row_to_payment_ticket(row)
         if ticket['transactionCode'].upper() in haystack:
             return ticket
     return None
@@ -397,40 +391,13 @@ def process_iap_payment_hook(history_record):
         raise AuthStoreError('Unable to process IAP payment hook') from error
 
 
-def _paginate(page=1, page_size=20):
-    safe_page = max(1, int(page or 1))
-    safe_page_size = max(1, min(100, int(page_size or 20)))
-    return safe_page, safe_page_size
-
-
 def list_iap_payment_tickets_page(page=1, page_size=20):
     expire_iap_payment_tickets()
-    safe_page, safe_page_size = _paginate(page, page_size)
-    return _list_page('iap_payment_tickets', _row_to_ticket, safe_page, safe_page_size)
+    safe_page, safe_page_size = paginate_iap_records(page, page_size)
+    return list_iap_record_page('iap_payment_tickets', row_to_payment_ticket, safe_page, safe_page_size)
 
 
 def list_iap_refund_pending_page(page=1, page_size=20):
     ensure_iap_payment_schema()
-    safe_page, safe_page_size = _paginate(page, page_size)
-    return _list_page('iap_payment_refunds', _row_to_refund, safe_page, safe_page_size)
-
-
-def _list_page(table_name, row_mapper, page, page_size):
-    driver = _require_driver()
-    try:
-        connection = _connect(MYSQL_DATABASE)
-        try:
-            with connection.cursor() as cursor:
-                cursor.execute(f'SELECT COUNT(*) AS total_items FROM {table_name}')
-                total_items = int((cursor.fetchone() or {}).get('total_items') or 0)
-                total_pages = max(1, (total_items + page_size - 1) // page_size)
-                safe_page = min(page, total_pages)
-                cursor.execute(f'SELECT * FROM {table_name} ORDER BY created_at DESC, id DESC LIMIT %s OFFSET %s', (page_size, (safe_page - 1) * page_size))
-                return {
-                    'items': [row_mapper(row) for row in cursor.fetchall() or []],
-                    'pagination': {'page': safe_page, 'pageSize': page_size, 'totalItems': total_items, 'totalPages': total_pages},
-                }
-        finally:
-            connection.close()
-    except driver.MySQLError as error:
-        raise AuthStoreError('Unable to list IAP payment records') from error
+    safe_page, safe_page_size = paginate_iap_records(page, page_size)
+    return list_iap_record_page('iap_payment_refunds', row_to_payment_refund, safe_page, safe_page_size)

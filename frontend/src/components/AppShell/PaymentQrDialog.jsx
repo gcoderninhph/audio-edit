@@ -1,31 +1,19 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import DeveloperLocator from '../DeveloperLocator/DeveloperLocator';
-import { createIapPayment, fetchIapPayment, fetchIapPaymentQrBlob } from '../../utils/iapClient';
+import { cancelIapPayment, createIapPayment, fetchIapPayment, fetchIapPaymentQrBlob } from '../../utils/iapClient';
 import { getStoredAuthSession, saveAuthSession } from '../../utils/authClient';
+import {
+  PackagePreviewCard,
+  PaymentInfoTable,
+} from './PaymentQrDialogShared';
+import {
+  buildPackageBenefits,
+  buildPendingRows,
+  buildReviewRows,
+  formatPrice,
+} from './paymentQrDialogModel';
 import './PaymentQrDialog.css';
-
-function getPackTypeLabel(packType) {
-  if (packType === 'creditsAndPremiumPack') {
-    return 'Credits + premium';
-  }
-  if (packType === 'premiumSubscribe') {
-    return 'Premium';
-  }
-  return 'Credits';
-}
-
-function formatPrice(value, currency) {
-  try {
-    return new Intl.NumberFormat('en-US', {
-      currency: currency || 'VND',
-      maximumFractionDigits: 0,
-      style: 'currency',
-    }).format(Number(value || 0));
-  } catch {
-    return `${Number(value || 0)} ${currency || 'VND'}`;
-  }
-}
 
 function getRemainingSeconds(payment) {
   if (!payment?.expiresAt) {
@@ -41,114 +29,6 @@ function formatCountdown(seconds) {
   return `${minutes}:${String(remainder).padStart(2, '0')}`;
 }
 
-function parseDescriptionFeatures(description) {
-  const normalizedDescription = String(description || '').trim();
-  if (!normalizedDescription) {
-    return [];
-  }
-
-  const descriptionLines = normalizedDescription
-    .split(/\r?\n/)
-    .map((line) => line.trim())
-    .filter(Boolean);
-
-  return descriptionLines.flatMap((line) => {
-    if (line.startsWith('- ')) {
-      return line
-        .split(/\s+-\s+/)
-        .map((segment) => segment.replace(/^-\s*/, '').trim())
-        .filter(Boolean);
-    }
-
-    if (line.includes(' - ')) {
-      return line.split(/\s+-\s+/).map((segment) => segment.trim()).filter(Boolean);
-    }
-
-    return [line];
-  });
-}
-
-function buildPackageBenefits(packageRecord) {
-  const benefits = [];
-  if (!packageRecord) {
-    return benefits;
-  }
-  if (Number(packageRecord.credits) > 0) {
-    benefits.push(`${Number(packageRecord.credits)} credits included`);
-  }
-  if (packageRecord.packType === 'premiumSubscribe' || packageRecord.packType === 'creditsAndPremiumPack') {
-    benefits.push('Premium access included');
-  }
-
-  benefits.push(...parseDescriptionFeatures(packageRecord.description));
-
-  return benefits.filter(Boolean).slice(0, 4);
-}
-
-function buildReviewRows(packageRecord, paymentLabel) {
-  return [
-    ['Package', packageRecord?.name || '-'],
-    ['Pack type', getPackTypeLabel(packageRecord?.packType)],
-    ['Amount', paymentLabel],
-    ['Currency', packageRecord?.currency || 'VND'],
-    ['Ticket duration', '3 minutes'],
-  ];
-}
-
-function buildPendingRows(payment, remainingSeconds) {
-  if (!payment) {
-    return [];
-  }
-
-  return [
-    ['Status', 'Waiting for payment confirmation'],
-    ['Amount', formatPrice(payment.amount, payment.currency)],
-    ['Transfer content', payment.transactionCode],
-    ['Receiver name', payment.beneficiaryName || '-'],
-    ['Bank id', payment.bankId || '-'],
-    ['Bank account', payment.bankAccount || '-'],
-    ['Time left', formatCountdown(remainingSeconds)],
-  ];
-}
-
-function PackagePreviewCard({ locatorCode, packageBenefits, packageRecord, paymentLabel }) {
-  const cardBenefits = packageBenefits.length > 0 ? packageBenefits : ['No extra benefits listed.'];
-
-  return (
-    <article className={`premium-package-card payment-package-card dev-locator-host${packageRecord?.isRecommended ? ' premium-package-card-recommended' : ''}`}>
-      <DeveloperLocator code={locatorCode} title="QR Payment Package Preview Card" />
-      <div className="premium-package-header-block">
-        <div className="premium-package-type">{getPackTypeLabel(packageRecord?.packType)}</div>
-        <div className="premium-package-title-row">
-          <h3>{packageRecord?.name || 'IAP package'}</h3>
-          {packageRecord?.isRecommended && <span className="premium-package-badge">Recommended</span>}
-        </div>
-      </div>
-      <div className="premium-package-price">{paymentLabel}</div>
-      <ul className="premium-package-features">
-        {cardBenefits.map((benefit) => <li key={benefit}>{benefit}</li>)}
-      </ul>
-    </article>
-  );
-}
-
-function PaymentInfoTable({ rows }) {
-  return (
-    <div className="payment-info-table-wrap">
-      <table className="payment-info-table">
-        <tbody>
-          {rows.map(([label, value]) => (
-            <tr key={label}>
-              <th scope="row">{label}</th>
-              <td>{value || '-'}</td>
-            </tr>
-          ))}
-        </tbody>
-      </table>
-    </div>
-  );
-}
-
 function persistUpdatedUser(user) {
   if (!user?.id) {
     return;
@@ -162,6 +42,7 @@ function persistUpdatedUser(user) {
 
 export default function PaymentQrDialog({ locatorCode, onClose, packageRecord }) {
   const [error, setError] = useState('');
+  const [isCancelling, setIsCancelling] = useState(false);
   const [isStarting, setIsStarting] = useState(false);
   const [isQrImageUnavailable, setIsQrImageUnavailable] = useState(false);
   const [payment, setPayment] = useState(null);
@@ -173,12 +54,12 @@ export default function PaymentQrDialog({ locatorCode, onClose, packageRecord })
   const packageBenefits = useMemo(() => buildPackageBenefits(packageRecord), [packageRecord]);
   const paymentLabel = formatPrice(packageRecord?.price, packageRecord?.currency);
   const reviewRows = useMemo(() => buildReviewRows(packageRecord, paymentLabel), [packageRecord, paymentLabel]);
-  const pendingRows = useMemo(() => buildPendingRows(payment, remainingSeconds), [payment, remainingSeconds]);
+  const pendingRows = useMemo(() => buildPendingRows(payment, remainingSeconds, formatCountdown), [payment, remainingSeconds]);
   const activeQrImageSrc = status === 'pending' && payment?.id === qrImagePaymentId ? qrImageSrc : '';
   const isActiveQrUnavailable = status === 'pending' && payment?.id === qrImagePaymentId && isQrImageUnavailable;
 
   useEffect(() => {
-    if (!payment || status !== 'pending') {
+    if (!payment || status !== 'pending' || isCancelling) {
       return undefined;
     }
 
@@ -186,10 +67,10 @@ export default function PaymentQrDialog({ locatorCode, onClose, packageRecord })
       setRemainingSeconds(getRemainingSeconds(payment));
     }, 1000);
     return () => window.clearInterval(timerId);
-  }, [payment, status]);
+  }, [isCancelling, payment, status]);
 
   useEffect(() => {
-    if (!payment?.id || status !== 'pending') {
+    if (!payment?.id || status !== 'pending' || isCancelling) {
       return undefined;
     }
 
@@ -224,10 +105,10 @@ export default function PaymentQrDialog({ locatorCode, onClose, packageRecord })
       isCancelled = true;
       window.clearInterval(intervalId);
     };
-  }, [payment?.id, status]);
+  }, [isCancelling, payment?.id, status]);
 
   useEffect(() => {
-    if (!payment?.id || status !== 'pending') {
+    if (!payment?.id || status !== 'pending' || isCancelling) {
       return undefined;
     }
 
@@ -266,7 +147,7 @@ export default function PaymentQrDialog({ locatorCode, onClose, packageRecord })
         qrImageObjectUrlRef.current = '';
       }
     };
-  }, [payment?.id, status]);
+  }, [isCancelling, payment?.id, status]);
 
   useEffect(() => () => {
     if (qrImageObjectUrlRef.current) {
@@ -293,9 +174,30 @@ export default function PaymentQrDialog({ locatorCode, onClose, packageRecord })
     }
   };
 
+  const handleRequestClose = async () => {
+    if (isCancelling) {
+      return;
+    }
+    if (!payment?.id || status !== 'pending') {
+      onClose();
+      return;
+    }
+
+    setIsCancelling(true);
+    setError('');
+    try {
+      await cancelIapPayment(payment.id);
+      setIsCancelling(false);
+      onClose();
+    } catch (cancelError) {
+      setError(cancelError.message || 'Unable to cancel payment ticket.');
+      setIsCancelling(false);
+    }
+  };
+
   const handleBackdropMouseDown = (event) => {
     event.stopPropagation();
-    onClose();
+    void handleRequestClose();
   };
 
   const dialog = (
@@ -308,10 +210,16 @@ export default function PaymentQrDialog({ locatorCode, onClose, packageRecord })
             <h2>{packageRecord?.name || 'IAP package'}</h2>
             <p className="premium-dialog-note">Review the package first. After confirmation, the app creates a 3-minute payment ticket and shows the Sepay QR with the exact transfer content.</p>
           </div>
-          <button type="button" className="premium-dialog-close" onClick={onClose} aria-label="Close QR payment dialog">×</button>
+          <button type="button" className="premium-dialog-close" onClick={() => void handleRequestClose()} aria-label="Close QR payment dialog" disabled={isCancelling}>×</button>
         </div>
 
         {error && <div className="premium-dialog-alert premium-dialog-alert-error">{error}</div>}
+        {isCancelling && (
+          <div className="premium-dialog-state dev-locator-host">
+            <DeveloperLocator code={`${locatorCode}.pending.cancelling`} title="QR Payment Cancelling State" />
+            Cancelling payment ticket on the server...
+          </div>
+        )}
 
         {status === 'review' && (
           <div className="payment-review-layout">
@@ -334,8 +242,8 @@ export default function PaymentQrDialog({ locatorCode, onClose, packageRecord })
               </div>
               <div className="payment-review-actions dev-locator-host">
                 <DeveloperLocator code={`${locatorCode}.review.actions`} title="QR Payment Review Actions" />
-                <button type="button" className="payment-secondary-button" onClick={onClose} disabled={isStarting}>Cancel</button>
-                <button type="button" className="premium-package-cta payment-confirm-button" onClick={handleStartPayment} disabled={isStarting}>
+                <button type="button" className="payment-secondary-button" onClick={() => void handleRequestClose()} disabled={isStarting || isCancelling}>Cancel</button>
+                <button type="button" className="premium-package-cta payment-confirm-button" onClick={handleStartPayment} disabled={isStarting || isCancelling}>
                   {isStarting ? 'Creating payment...' : 'Confirm payment'}
                 </button>
               </div>
@@ -394,7 +302,7 @@ export default function PaymentQrDialog({ locatorCode, onClose, packageRecord })
               <span>Your account has been updated.</span>
             </div>
             <div className="payment-review-actions">
-              <button type="button" className="premium-package-cta payment-confirm-button" onClick={onClose}>Close</button>
+              <button type="button" className="premium-package-cta payment-confirm-button" onClick={() => void handleRequestClose()}>Close</button>
             </div>
           </div>
         )}
@@ -406,7 +314,7 @@ export default function PaymentQrDialog({ locatorCode, onClose, packageRecord })
               <span>{error || 'The payment ticket is no longer active.'}</span>
             </div>
             <div className="payment-review-actions">
-              <button type="button" className="payment-secondary-button" onClick={onClose}>Close</button>
+              <button type="button" className="payment-secondary-button" onClick={() => void handleRequestClose()}>Close</button>
             </div>
           </div>
         )}
