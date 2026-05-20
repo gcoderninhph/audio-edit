@@ -341,31 +341,31 @@ def create_registered_user(user_record):
         raise AuthStoreError('Unable to create auth user') from error
 
 
-def update_user_credits(user_id, delta_credits):
+def update_user_credits(user_id, delta_credits, **kwargs):
     try:
         from auth_credit_store import update_user_credits as update_user_credits_impl
     except ImportError:
         from .auth_credit_store import update_user_credits as update_user_credits_impl
 
-    return update_user_credits_impl(user_id, delta_credits)
+    return update_user_credits_impl(user_id, delta_credits, **kwargs)
 
 
-def debit_user_credits(user_id, amount):
+def debit_user_credits(user_id, amount, **kwargs):
     try:
         from auth_credit_store import debit_user_credits as debit_user_credits_impl
     except ImportError:
         from .auth_credit_store import debit_user_credits as debit_user_credits_impl
 
-    return debit_user_credits_impl(user_id, amount)
+    return debit_user_credits_impl(user_id, amount, **kwargs)
 
 
-def refund_user_credits(user_id, amount):
+def refund_user_credits(user_id, amount, **kwargs):
     try:
         from auth_credit_store import refund_user_credits as refund_user_credits_impl
     except ImportError:
         from .auth_credit_store import refund_user_credits as refund_user_credits_impl
 
-    return refund_user_credits_impl(user_id, amount)
+    return refund_user_credits_impl(user_id, amount, **kwargs)
 
 
 try:

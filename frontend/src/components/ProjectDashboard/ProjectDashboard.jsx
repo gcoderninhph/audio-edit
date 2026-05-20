@@ -1,67 +1,30 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
-import { deleteLocalProject, listLocalProjects } from '../../utils/projectStorage';
+import { useCallback, useEffect, useMemo, useState } from 'react';
+import { FolderPlus } from 'lucide-react';
+import { deleteLocalProject, listLocalProjects, saveLocalProject } from '../../utils/projectStorage';
 import DeveloperLocator from '../DeveloperLocator/DeveloperLocator';
+import { NewProjectCard, ProjectCard, SeriesCard } from './ProjectDashboardCards';
+import { CreateSeriesDialog, ProjectInfoDialog } from './ProjectDashboardDialogs';
+import SeriesDetailView from './SeriesDetailView';
+import {
+  applyProjectInfo,
+  buildSeriesGroups,
+  buildSeriesId,
+  getProjectTitle,
+  getStandaloneProjects,
+  normalizeEpisodeNumber,
+  sortProjectsByCreated,
+} from './projectDashboardModel';
 import './ProjectDashboard.css';
-
-function formatDate(isoString) {
-  if (!isoString) return '';
-  return new Date(isoString).toLocaleString('en-US', {
-    day: '2-digit', month: '2-digit', year: 'numeric',
-    hour: '2-digit', minute: '2-digit'
-  });
-}
-
-function getProjectCreatedTime(project) {
-  return Date.parse(project.created_at || project.updated_at || 0);
-}
-
-function ProjectCardThumbnail({ previewUrl, title }) {
-  const videoRef = useRef(null);
-  const [isReady, setIsReady] = useState(false);
-  const [hasError, setHasError] = useState(false);
-
-  const handleLoadedMetadata = () => {
-    const videoElement = videoRef.current;
-    if (!videoElement) {
-      return;
-    }
-
-    const previewTime = Math.min(0.05, Math.max(videoElement.duration || 0, 0));
-    if (previewTime > 0) {
-      videoElement.currentTime = previewTime;
-      return;
-    }
-
-    setIsReady(true);
-  };
-
-  if (!previewUrl || hasError) {
-    return <div className="project-card-thumb-fallback">🎬</div>;
-  }
-
-  return (
-    <>
-      <video
-        ref={videoRef}
-        className={`project-card-video ${isReady ? 'ready' : ''}`}
-        src={previewUrl}
-        muted
-        preload="metadata"
-        playsInline
-        onLoadedMetadata={handleLoadedMetadata}
-        onLoadedData={() => setIsReady(true)}
-        onSeeked={() => setIsReady(true)}
-        onError={() => setHasError(true)}
-        aria-label={title}
-      />
-      {!isReady && <div className="project-card-thumb-fallback">🎬</div>}
-    </>
-  );
-}
 
 export default function ProjectDashboard({ onOpenProject, onNewProject }) {
   const [projects, setProjects] = useState([]);
+  const [isCreateSeriesOpen, setIsCreateSeriesOpen] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
+  const [menuProjectId, setMenuProjectId] = useState('');
+  const [menuPosition, setMenuPosition] = useState(null);
+  const [editingProject, setEditingProject] = useState(null);
+  const [selectedEpisodeId, setSelectedEpisodeId] = useState('');
+  const [selectedSeriesId, setSelectedSeriesId] = useState('');
   const [sortOrder, setSortOrder] = useState('newest');
 
   useEffect(() => {
@@ -70,55 +33,165 @@ export default function ProjectDashboard({ onOpenProject, onNewProject }) {
     const loadProjects = async () => {
       try {
         const data = await listLocalProjects();
-        if (!isCancelled) {
-          setProjects(Array.isArray(data) ? data : []);
-        }
+        if (!isCancelled) setProjects(Array.isArray(data) ? data : []);
       } catch (err) {
         console.error('Failed to load projects:', err);
       } finally {
-        if (!isCancelled) {
-          setIsLoading(false);
-        }
+        if (!isCancelled) setIsLoading(false);
       }
     };
 
     void loadProjects();
-
     return () => {
       isCancelled = true;
     };
   }, []);
 
-  const handleDelete = async (e, id) => {
-    e.stopPropagation();
-    if (!confirm('Delete this project?')) return;
-    try {
-      await deleteLocalProject(id);
-      setProjects(prev => prev.filter(p => p.id !== id));
-    } catch (err) {
-      console.error('Delete failed:', err);
-    }
-  };
+  const seriesGroups = useMemo(() => buildSeriesGroups(projects), [projects]);
+  const standaloneProjects = useMemo(
+    () => sortProjectsByCreated(getStandaloneProjects(projects), sortOrder),
+    [projects, sortOrder],
+  );
+  const selectedSeries = useMemo(
+    () => seriesGroups.find((group) => group.id === selectedSeriesId) || null,
+    [selectedSeriesId, seriesGroups],
+  );
 
   const handleNewProject = () => {
     const input = document.createElement('input');
     input.type = 'file';
     input.accept = 'video/*';
-    input.onchange = (e) => {
-      const file = e.target.files[0];
+    input.onchange = (event) => {
+      const file = event.target.files[0];
       if (file) onNewProject(file);
     };
     input.click();
   };
 
-  const sortedProjects = useMemo(() => {
-    const nextProjects = [...projects];
-    nextProjects.sort((left, right) => {
-      const delta = getProjectCreatedTime(right) - getProjectCreatedTime(left);
-      return sortOrder === 'oldest' ? -delta : delta;
+  const handleMenuToggle = (event, projectId) => {
+    event.stopPropagation();
+    if (menuProjectId === projectId) {
+      setMenuProjectId('');
+      setMenuPosition(null);
+      return;
+    }
+
+    const rect = event.currentTarget.getBoundingClientRect();
+    const menuWidth = 152;
+    const menuHeight = 92;
+    const margin = 10;
+    const topBelow = rect.bottom + 6;
+    const top = topBelow + menuHeight > window.innerHeight - margin
+      ? Math.max(margin, rect.top - menuHeight - 6)
+      : topBelow;
+    const left = Math.min(
+      Math.max(margin, rect.right - menuWidth),
+      window.innerWidth - menuWidth - margin,
+    );
+    setMenuProjectId(projectId);
+    setMenuPosition({ left, top });
+  };
+
+  const handleEditProject = (event, project) => {
+    event.stopPropagation();
+    setMenuProjectId('');
+    setMenuPosition(null);
+    setEditingProject(project);
+  };
+
+  const handleDeleteProject = async (event, project) => {
+    event.stopPropagation();
+    setMenuProjectId('');
+    setMenuPosition(null);
+    if (!confirm(`Delete "${getProjectTitle(project)}"?`)) return;
+    try {
+      await deleteLocalProject(project.id);
+      setProjects((currentProjects) => currentProjects.filter((item) => item.id !== project.id));
+      if (selectedEpisodeId === project.id) setSelectedEpisodeId('');
+    } catch (err) {
+      console.error('Delete failed:', err);
+    }
+  };
+
+  const saveProjectInfo = useCallback(async (project, updates) => {
+    const nextProject = applyProjectInfo(project, updates);
+    await saveLocalProject({
+      episodeNumber: nextProject.episode_number,
+      sessionId: project.id,
+      videoOriginalName: nextProject.video_original_name,
+      videoSeriesId: nextProject.series_id,
+      videoSeriesName: nextProject.series_name,
     });
-    return nextProjects;
-  }, [projects, sortOrder]);
+    setProjects((currentProjects) => currentProjects.map((item) => (item.id === project.id ? nextProject : item)));
+  }, []);
+
+  const handleSaveProjectInfo = async (updates) => {
+    if (!editingProject) return;
+    try {
+      await saveProjectInfo(editingProject, updates);
+      setEditingProject(null);
+    } catch (err) {
+      console.error('Save project info failed:', err);
+    }
+  };
+
+  const handleCreateSeries = async ({ projectIds, seriesName }) => {
+    const seriesId = buildSeriesId(seriesName);
+    const selectedProjects = standaloneProjects.filter((project) => projectIds.includes(project.id));
+    if (!seriesId || selectedProjects.length === 0) return;
+    try {
+      await Promise.all(selectedProjects.map((project, index) => saveProjectInfo(project, {
+        episodeNumber: index + 1,
+        seriesId,
+        seriesName,
+        title: getProjectTitle(project),
+      })));
+      setIsCreateSeriesOpen(false);
+      setSelectedSeriesId(seriesId);
+      setSelectedEpisodeId(selectedProjects[0]?.id || '');
+    } catch (err) {
+      console.error('Create series failed:', err);
+    }
+  };
+
+  const handleOpenSeries = (group) => {
+    setSelectedSeriesId(group.id);
+    setSelectedEpisodeId(group.projects[0]?.id || '');
+  };
+
+  const handleEpisodeNumberChange = async (project, value) => {
+    try {
+      await saveProjectInfo(project, {
+        episodeNumber: normalizeEpisodeNumber(value) || 1,
+        seriesId: project.series_id,
+        seriesName: project.series_name,
+        title: getProjectTitle(project),
+      });
+    } catch (err) {
+      console.error('Episode update failed:', err);
+    }
+  };
+
+  if (selectedSeries) {
+    return (
+      <>
+        <SeriesDetailView
+          menuPosition={menuPosition}
+          menuProjectId={menuProjectId}
+          onBack={() => setSelectedSeriesId('')}
+          onDeleteProject={handleDeleteProject}
+          onEditProject={handleEditProject}
+          onEpisodeNumberChange={handleEpisodeNumberChange}
+          onMenuToggle={handleMenuToggle}
+          onOpenProject={onOpenProject}
+          onSelectEpisode={setSelectedEpisodeId}
+          selectedEpisodeId={selectedEpisodeId}
+          series={selectedSeries}
+        />
+        {editingProject && <ProjectInfoDialog onClose={() => setEditingProject(null)} onSave={handleSaveProjectInfo} project={editingProject} seriesGroups={seriesGroups} />}
+      </>
+    );
+  }
 
   return (
     <div className="dashboard dev-locator-host">
@@ -133,84 +206,56 @@ export default function ProjectDashboard({ onOpenProject, onNewProject }) {
           <div className="dashboard-sort dev-locator-host">
             <DeveloperLocator code="dashboard.sort" title="Dashboard Sort Control" />
             <label className="dashboard-sort-label" htmlFor="dashboard-sort-select">Sort</label>
-            <select
-              id="dashboard-sort-select"
-              className="dashboard-sort-select"
-              value={sortOrder}
-              onChange={(event) => setSortOrder(event.target.value)}
-            >
+            <select id="dashboard-sort-select" className="dashboard-sort-select" value={sortOrder} onChange={(event) => setSortOrder(event.target.value)}>
               <option value="newest">Newest first</option>
               <option value="oldest">Oldest first</option>
             </select>
           </div>
-          <button className="btn btn-primary new-project-btn" onClick={handleNewProject}>
-            <span className="new-project-icon">+</span>
-            New project
-          </button>
+          <button className="btn btn-primary new-project-btn" onClick={handleNewProject}><span className="new-project-icon">+</span> New project</button>
         </div>
       </div>
 
       {isLoading ? (
-        <div className="dashboard-loading">
-          <div className="detecting-spinner" />
-          <div style={{ marginTop: '12px', color: 'var(--text-secondary)' }}>Loading projects...</div>
-        </div>
+        <div className="dashboard-loading"><div className="detecting-spinner" /><div>Loading projects...</div></div>
       ) : projects.length === 0 ? (
-        <div className="dashboard-empty">
-          <div className="empty-icon-large">🎬</div>
-          <h2>No projects yet</h2>
-          <p>Start by uploading a video</p>
-          <button className="btn btn-primary" onClick={handleNewProject} style={{ marginTop: '16px' }}>
-            + Create your first project
-          </button>
-        </div>
+        <div className="dashboard-empty"><h2>No projects yet</h2><p>Start by uploading a video</p><button className="btn btn-primary" onClick={handleNewProject}>+ Create your first project</button></div>
       ) : (
-        <div className="project-grid">
-          {/* New project card */}
-          <div className="project-card project-card-new dev-locator-host" onClick={handleNewProject}>
-            <DeveloperLocator code="dashboard.project.new" title="New Project Card" />
-            <div className="project-card-new-icon">+</div>
-            <div className="project-card-new-label">New</div>
-          </div>
-
-          {/* Existing projects */}
-          {sortedProjects.map((project) => (
-            <div
-              key={project.id}
-              className="project-card dev-locator-host"
-              onClick={() => onOpenProject(project.id)}
-            >
-              <DeveloperLocator
-                code={`dashboard.project.${project.id}`}
-                title="Saved Project Card"
-                style={{ right: '42px' }}
-              />
-              <div className="project-card-thumb">
-                <ProjectCardThumbnail
-                  previewUrl={project.preview_url}
-                  title={project.video_original_name || 'Project preview'}
-                />
-                <div className="project-card-play">▶</div>
-              </div>
-              <div className="project-card-info">
-                <div className="project-card-name" title={project.video_original_name}>
-                  {project.video_original_name || 'Untitled'}
-                </div>
-                <div className="project-card-date">
-                  Created {formatDate(project.created_at || project.updated_at)}
-                </div>
-              </div>
-              <button
-                className="project-card-delete"
-                onClick={(e) => handleDelete(e, project.id)}
-                title="Delete project"
-              >
-                🗑️
-              </button>
+        <>
+          <section className="dashboard-section dev-locator-host">
+            <DeveloperLocator code="dashboard.series.list" title="Dashboard Series List" />
+            <div className="dashboard-section-header">
+              <div><h2>Series</h2><span>{seriesGroups.length} groups</span></div>
+              <button type="button" className="btn btn-ghost btn-sm" onClick={() => setIsCreateSeriesOpen(true)} disabled={standaloneProjects.length === 0}><FolderPlus size={16} /> New series</button>
             </div>
-          ))}
-        </div>
+            {seriesGroups.length > 0 ? (
+              <div className="series-grid">{seriesGroups.map((group) => <SeriesCard key={group.id} group={group} onOpen={() => handleOpenSeries(group)} />)}</div>
+            ) : <div className="dashboard-section-empty">No series</div>}
+          </section>
+
+          <section className="dashboard-section dev-locator-host">
+            <DeveloperLocator code="dashboard.videos.list" title="Dashboard Standalone Videos List" />
+            <div className="dashboard-section-header"><div><h2>Standalone videos</h2><span>{standaloneProjects.length} videos</span></div></div>
+            <div className="project-grid">
+              <NewProjectCard onClick={handleNewProject} />
+              {standaloneProjects.map((project) => (
+                <ProjectCard
+                  key={project.id}
+                  isMenuOpen={menuProjectId === project.id}
+                  menuPosition={menuProjectId === project.id ? menuPosition : null}
+                  onDelete={(event) => handleDeleteProject(event, project)}
+                  onEdit={(event) => handleEditProject(event, project)}
+                  onMenuToggle={(event) => handleMenuToggle(event, project.id)}
+                  onOpen={() => onOpenProject(project.id)}
+                  project={project}
+                />
+              ))}
+            </div>
+          </section>
+        </>
       )}
+
+      {editingProject && <ProjectInfoDialog onClose={() => setEditingProject(null)} onSave={handleSaveProjectInfo} project={editingProject} seriesGroups={seriesGroups} />}
+      {isCreateSeriesOpen && <CreateSeriesDialog onClose={() => setIsCreateSeriesOpen(false)} onCreate={handleCreateSeries} standaloneProjects={standaloneProjects} />}
     </div>
   );
 }

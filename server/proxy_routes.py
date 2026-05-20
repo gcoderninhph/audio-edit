@@ -5,7 +5,7 @@ from urllib.parse import urlparse
 
 try:
     from auth_routes import require_access_token
-    from auth_store import AuthStoreError, InsufficientCreditsError, debit_user_credits, refund_user_credits
+    from proxy_credit_helpers import charge_user_credits_or_error, refund_credits_if_needed
     from proxy_route_helpers import (
         build_json_success_response,
         build_local_translation_response,
@@ -19,6 +19,7 @@ try:
         should_use_local_translation_fallback,
         sync_server_request_status,
     )
+    from proxy_transcription_routes import register_transcription_routes
     from translation_fallback import (
         get_local_translation_download,
         get_local_translation_status,
@@ -27,7 +28,7 @@ try:
     )
 except ImportError:
     from .auth_routes import require_access_token
-    from .auth_store import AuthStoreError, InsufficientCreditsError, debit_user_credits, refund_user_credits
+    from .proxy_credit_helpers import charge_user_credits_or_error, refund_credits_if_needed
     from .proxy_route_helpers import (
         build_json_success_response,
         build_local_translation_response,
@@ -41,6 +42,7 @@ except ImportError:
         should_use_local_translation_fallback,
         sync_server_request_status,
     )
+    from .proxy_transcription_routes import register_transcription_routes
     from .translation_fallback import (
         get_local_translation_download,
         get_local_translation_status,
@@ -48,149 +50,13 @@ except ImportError:
         RequestStoreError,
     )
 
-WHISPER_API_URL = "http://localhost:8081/api/transcriptions"
 LLM_SUBTRANS_API_URL = "http://localhost:8090/api"
-TRANSCRIPTION_CREDIT_COST = 20
 TRANSLATION_CREDIT_COST = 100
 VOICEOVER_CREDIT_COST = 200
 
 
-def auth_store_error_response():
-    return jsonify({'error': 'Authentication database is unavailable'}), 503
-
-
-def build_credit_error_response(error, action_label):
-    return jsonify({
-        'error': f'Not enough credits to {action_label}',
-        'availableCredits': error.available_credits,
-        'creditBalance': error.available_credits,
-        'requiredCredits': error.required_credits,
-    }), 402
-
-
-def charge_user_credits_or_error(claims, credit_cost, action_label, change_type, details=None):
-    try:
-        return debit_user_credits(
-            get_claim_user_id(claims),
-            credit_cost,
-            change_type=change_type,
-            note=action_label,
-            details=details,
-        ), None
-    except InsufficientCreditsError as error:
-        return None, build_credit_error_response(error, action_label)
-    except AuthStoreError:
-        return None, auth_store_error_response()
-
-
-def refund_credits_if_needed(user_id, credit_cost, change_type, note, details=None):
-    if not user_id or credit_cost <= 0:
-        return
-
-    try:
-        refund_user_credits(user_id, credit_cost, change_type=change_type, note=note, details=details)
-    except AuthStoreError as error:
-        print(f'Unable to refund credits after failed request: {error}')
-
-
 def register_proxy_routes(app):
-    @app.route('/api/transcription/start', methods=['POST'])
-    def start_transcription():
-        claims, auth_error = require_access_token()
-        if auth_error:
-            return auth_error
-
-        if 'file' not in request.files:
-            return jsonify({'error': 'No file part'}), 400
-
-        file = request.files['file']
-        files = {'file': (file.filename, file.stream, file.mimetype)}
-        data = {
-            'modelSize': 'base',
-            'language': 'auto',
-            'device': 'cpu'
-        }
-        user_id = get_claim_user_id(claims)
-        charged_user, charge_error = charge_user_credits_or_error(
-            claims,
-            TRANSCRIPTION_CREDIT_COST,
-            'generate original subtitles',
-            'transcription_charge',
-            details={'feature': 'transcription'},
-        )
-        if charge_error:
-            return charge_error
-
-        try:
-            response = requests.post(WHISPER_API_URL, files=files, data=data)
-            response_payload = read_response_payload(response)
-            if response.ok:
-                request_id = first_payload_value(response_payload, ('id', 'jobId', 'requestId', 'request_id'))
-                if not request_id:
-                    refund_credits_if_needed(
-                        user_id,
-                        TRANSCRIPTION_CREDIT_COST,
-                        'transcription_refund',
-                        'Refunded subtitle generation credits',
-                        {'feature': 'transcription'},
-                    )
-                    return jsonify({'error': 'Whisper did not return a job ID'}), 502
-                request_error = save_server_request(
-                    request_id,
-                    user_id,
-                    'transcription',
-                    'whisper',
-                    source_file_name=file.filename,
-                    details={'modelSize': data['modelSize'], 'language': data['language'], 'device': data['device']},
-                )
-                if request_error:
-                    return request_error
-                return build_json_success_response(
-                    response_payload,
-                    response.status_code,
-                    creditBalance=charged_user.get('credits'),
-                    creditCost=TRANSCRIPTION_CREDIT_COST,
-                )
-
-            refund_credits_if_needed(
-                user_id,
-                TRANSCRIPTION_CREDIT_COST,
-                'transcription_refund',
-                'Refunded subtitle generation credits',
-                {'feature': 'transcription'},
-            )
-            return build_proxy_response(response, 'Failed to communicate with Whisper API')
-        except requests.RequestException as error:
-            refund_credits_if_needed(
-                user_id,
-                TRANSCRIPTION_CREDIT_COST,
-                'transcription_refund',
-                'Refunded subtitle generation credits',
-                {'feature': 'transcription'},
-            )
-            print(f"Whisper API error: {error}")
-            return jsonify({'error': 'Failed to communicate with Whisper API'}), 502
-
-    @app.route('/api/transcription/status/<string:job_id>', methods=['GET'])
-    def get_transcription_status(job_id):
-        claims, auth_error = require_access_token()
-        if auth_error:
-            return auth_error
-
-        stored_request, owner_error = require_request_owner(job_id, claims)
-        if owner_error:
-            return owner_error
-
-        try:
-            response = requests.get(f"{WHISPER_API_URL}/{job_id}")
-            if response.ok:
-                request_error = sync_server_request_status(stored_request, read_response_payload(response), 'transcription')
-                if request_error:
-                    return request_error
-            return build_proxy_response(response, 'Failed to communicate with Whisper API')
-        except requests.RequestException as error:
-            print(f"Whisper API error: {error}")
-            return jsonify({'error': 'Failed to communicate with Whisper API'}), 502
+    register_transcription_routes(app)
 
     @app.route('/api/translation/start', methods=['POST'])
     def start_translation():

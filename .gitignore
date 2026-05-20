@@ -5,3 +5,4 @@ backend_logs/
 backend_uploads/
 mysql_data/
 redis_data/
+whishper_data/

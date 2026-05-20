@@ -8,6 +8,7 @@ import { useEditorPersistence } from './useEditorPersistence';
 import { useVideoEditorSubtitleActions } from './useVideoEditorSubtitleActions';
 import { useFrameExport } from './useFrameExport';
 import { useSceneMotionConfig } from './useSceneMotionConfig';
+import { useEditorSceneListActions } from './useEditorSceneListActions';
 import { useSubtitleTracks } from './useSubtitleTracks';
 import { useVideoEditorVoiceoverState } from './useVideoEditorVoiceoverState';
 import { DEFAULT_EXPORT_QUALITY_PROFILE_ID } from '../utils/exportQualityProfile';
@@ -67,7 +68,6 @@ export function useVideoEditor() {
   const keptScenes = useMemo(() => getKeptScenes(scenes, deletedSceneIds), [scenes, deletedSceneIds]);
   const keptDuration = useMemo(() => getKeptDuration(keptScenes), [keptScenes]);
   const currentScene = useMemo(() => getCurrentSceneAtTime(scenes, currentTime), [scenes, currentTime]);
-
   const filteredSubtitles = useMemo(() => filterVisibleSubtitles(subtitles, scenes, deletedSceneIds), [subtitles, scenes, deletedSceneIds]);
   const { localizedVoiceoverAudioName, localizedVoiceoverTrack, voiceoverSubtitles } = useVideoEditorVoiceoverState({ activeSubtitleLanguage, filteredSubtitles, keptScenes, lastVoiceoverAudioName, voiceoverTrack });
 
@@ -269,7 +269,6 @@ export function useVideoEditor() {
     if (scenes.length > 0) {
       pushState(getCurrentSnapshot());
     }
-
     setIsDetecting(true);
     setDetectProgress(0);
     setScenes([]);
@@ -322,40 +321,17 @@ export function useVideoEditor() {
     }
   }, [videoFile, videoUrl, sensitivity, scenes, pushState, getCurrentSnapshot]);
 
-  const toggleDeleteScene = useCallback((sceneId) => {
-    pushState(getCurrentSnapshot());
-    setDeletedSceneIds(prev => {
-      const next = new Set(prev);
-      if (next.has(sceneId)) {
-        next.delete(sceneId);
-      } else {
-        next.add(sceneId);
-      }
-      return next;
-    });
-    clearExportResult();
-  }, [clearExportResult, pushState, getCurrentSnapshot]);
+  const { deleteAllScenes, restoreAllScenes, seekToScene, toggleDeleteScene } = useEditorSceneListActions({
+    clearExportResult,
+    getCurrentSnapshot,
+    pushState,
+    scenes,
+    setCurrentTime,
+    setDeletedSceneIds,
+    videoRef,
+  });
 
-  const restoreAllScenes = useCallback(() => {
-    pushState(getCurrentSnapshot());
-    setDeletedSceneIds(new Set());
-    clearExportResult();
-  }, [clearExportResult, pushState, getCurrentSnapshot]);
-
-  const deleteAllScenes = useCallback(() => {
-    pushState(getCurrentSnapshot());
-    setDeletedSceneIds(new Set(scenes.map(s => s.id)));
-    clearExportResult();
-  }, [clearExportResult, scenes, pushState, getCurrentSnapshot]);
-
-  const seekToScene = useCallback((scene) => {
-    if (videoRef.current) {
-      videoRef.current.currentTime = scene.start;
-    }
-    setCurrentTime(scene.start);
-  }, []);
-
-  const { startTranscription, startTranslation, startVoiceover, updateSubtitle } = useVideoEditorSubtitleActions({
+  const { clearSubtitles, clearVoiceover, startTranscription, startTranslation, startVoiceover, updateSubtitle } = useVideoEditorSubtitleActions({
     activeSubtitleLanguage,
     deletedSceneIds,
     getCurrentSnapshot,
@@ -380,6 +356,7 @@ export function useVideoEditor() {
     transcriptionJobId,
     translationJobId,
     updateActiveSubtitle,
+    voiceoverTrack,
     videoDuration,
     videoFile,
     voiceoverSubtitles,
@@ -402,7 +379,6 @@ export function useVideoEditor() {
   }, [getCurrentSnapshot, redoAction, setSubtitleTracks]);
 
   const exportConfig = useMemo(() => ({ qualityProfileId: exportQualityProfileId, setQualityProfileId: setExportQualityProfileId, fileName: exportFileName, setFileName: setExportFileName, outputDirectory: exportOutputDirectory, chooseOutputDirectory: chooseExportOutputDirectory }), [chooseExportOutputDirectory, exportFileName, exportOutputDirectory, exportQualityProfileId, setExportFileName, setExportQualityProfileId]);
-
   const exportResult = useMemo(() => ({ savedFilePath: exportSavedFilePath, size: exportSize, url: exportUrl, revealSavedFile: revealExportSavedFile }), [exportSavedFilePath, exportSize, exportUrl, revealExportSavedFile]);
 
   return {
@@ -417,7 +393,7 @@ export function useVideoEditor() {
     activeSubtitleLanguage, setActiveSubtitleLanguage, subtitleLanguageOptions,
     subtitles, filteredSubtitles, isTranscribing, transcribeProgress, startTranscription,
     isTranslating, translateProgress, startTranslation,
-    isGeneratingVoiceover, voiceoverProgress, lastVoiceoverAudioName: localizedVoiceoverAudioName, voiceoverTrack: localizedVoiceoverTrack, startVoiceover, updateSubtitle,
+    isGeneratingVoiceover, voiceoverProgress, lastVoiceoverAudioName: localizedVoiceoverAudioName, voiceoverTrack: localizedVoiceoverTrack, clearSubtitles, clearVoiceover, startVoiceover, updateSubtitle,
     undo: performUndo, redo: performRedo, canUndo, canRedo, historyList, loadHistoryList, loadSession, deleteSession,
   };
 }

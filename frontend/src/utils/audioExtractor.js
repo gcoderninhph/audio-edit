@@ -12,7 +12,7 @@ function mapTranscriptionSegments(segments = []) {
     id: seg.id || `sub_${index}`,
     start: seg.start,
     end: seg.end,
-    text: seg.text.trim(),
+    text: String(seg.text || '').trim(),
   }));
 }
 
@@ -61,7 +61,18 @@ export async function transcribeVideo(ffmpeg, videoFile, duration, onProgress, o
     if (Number.isFinite(nextCreditBalance)) {
       updateStoredAuthCredits(nextCreditBalance);
     }
-    const jobId = startData.id;
+
+    const immediateSegments = Array.isArray(startData.segments)
+      ? startData.segments
+      : Array.isArray(startData.result?.segments)
+        ? startData.result.segments
+        : null;
+    if (Array.isArray(immediateSegments)) {
+      onProgress({ phase: 'Subtitles completed!', percent: 100 });
+      return mapTranscriptionSegments(immediateSegments);
+    }
+
+    const jobId = startData.id || startData.jobId || startData.requestId || startData.request_id;
 
     if (!jobId) throw new Error('Whisper did not return a job ID');
 
