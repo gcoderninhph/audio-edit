@@ -6,3 +6,4 @@ backend_uploads/
 mysql_data/
 redis_data/
 whishper_data/
+llm_subtrans_data/

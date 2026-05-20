@@ -1,5 +1,6 @@
 from flask import Response, jsonify, request
 import io
+import os
 import requests
 from urllib.parse import urlparse
 
@@ -50,7 +51,7 @@ except ImportError:
         RequestStoreError,
     )
 
-LLM_SUBTRANS_API_URL = "http://localhost:8090/api"
+LLM_SUBTRANS_API_URL = os.environ.get('LLM_SUBTRANS_API_URL', 'http://llm-subtrans-web:8080/api').rstrip('/')
 TRANSLATION_CREDIT_COST = 100
 VOICEOVER_CREDIT_COST = 200
 

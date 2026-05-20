@@ -9,6 +9,8 @@ services:
         condition: service_started
       redis:
         condition: service_started
+      llm-subtrans-web:
+        condition: service_healthy
       whishper:
         condition: service_started
     environment:
@@ -28,6 +30,7 @@ services:
       IAP_REDIS_PORT: 6379
       IAP_REDIS_DB: 0
       IAP_REDIS_PREFIX: audio_editor
+      LLM_SUBTRANS_API_URL: http://llm-subtrans-web:8080/api
       WHISPER_API_URL: http://whishper:8000
       BACKEND_LOG_LEVEL: INFO
     volumes:
@@ -49,6 +52,66 @@ services:
     volumes:
       - ./redis_data:/data
 
+  subtrans-redis:
+    image: redis:7-alpine
+    restart: unless-stopped
+    ports:
+      - "6380:6379"
+    volumes:
+      - ./subtrans_redis_data:/data
+
+  llm-subtrans-web:
+    image: ninhmphpl/llm_subtrans:latest
+    restart: unless-stopped
+    depends_on:
+      mysql:
+        condition: service_started
+      redis:
+        condition: service_started
+    environment:
+      REDIS_URL: redis://host.docker.internal:6380/0
+      MYSQL_HOST: mysql
+      MYSQL_PORT: "3306"
+      MYSQL_USER: root
+      MYSQL_PASSWORD: ${MYSQL_ROOT_PASSWORD}
+      MYSQL_DATABASE: ${MYSQL_DATABASE}
+    ports:
+      - "${LLM_SUBTRANS_PORT:-8091}:8080"
+    volumes:
+      - ./llm_subtrans_data:/workspace/data
+      - /var/run/docker.sock:/var/run/docker.sock
+    command: ["web"]
+    healthcheck:
+      test:
+        - CMD
+        - python
+        - -c
+        - import urllib.request; urllib.request.urlopen('http://127.0.0.1:8080/health', timeout=5).read()
+      interval: 20s
+      timeout: 5s
+      retries: 5
+
+  llm-subtrans:
+    image: ninhmphpl/llm_subtrans:latest
+    profiles:
+      - cli
+    depends_on:
+      mysql:
+        condition: service_started
+      redis:
+        condition: service_started
+    environment:
+      REDIS_URL: redis://host.docker.internal:6380/0
+      MYSQL_HOST: mysql
+      MYSQL_PORT: "3306"
+      MYSQL_USER: root
+      MYSQL_PASSWORD: ${MYSQL_ROOT_PASSWORD}
+      MYSQL_DATABASE: ${MYSQL_DATABASE}
+    volumes:
+      - ./llm_subtrans_data:/workspace/data
+    command: ["cli"]
+    restart: "no"
+
   mongo:
     image: mongo
     container_name: whishper-mongo
@@ -65,28 +128,6 @@ services:
       - "27017"
     command: ["--logpath", "/var/log/mongodb/mongod.log"]
 
-  translate:
-    image: libretranslate/libretranslate:latest
-    container_name: whishper-libretranslate
-    restart: unless-stopped
-    tty: true
-    env_file:
-      - .env
-    environment:
-      LT_DISABLE_WEB_UI: "True"
-      LT_LOAD_ONLY: ${LT_LOAD_ONLY:-en,es,fr}
-      LT_UPDATE_MODELS: "True"
-    volumes:
-      - ./whishper_data/libretranslate/data:/home/libretranslate/.local/share
-      - ./whishper_data/libretranslate/cache:/home/libretranslate/.local/cache
-    expose:
-      - "5000"
-    healthcheck:
-      test: ["CMD-SHELL", "./venv/bin/python scripts/healthcheck.py"]
-      interval: 2s
-      timeout: 3s
-      retries: 5
-
   whishper:
     image: pluja/whishper:latest
     container_name: whishper
@@ -96,13 +137,11 @@ services:
     depends_on:
       mongo:
         condition: service_started
-      translate:
-        condition: service_healthy
     expose:
       - "80"
     environment:
       PUBLIC_INTERNAL_API_HOST: http://127.0.0.1:80
-      PUBLIC_TRANSLATION_API_HOST: http://translate:5000
+      PUBLIC_TRANSLATION_API_HOST: ""
       PUBLIC_API_HOST: ${WHISHPER_HOST:-http://whishper}
       PUBLIC_WHISHPER_PROFILE: cpu
       WHISPER_MODELS: ${WHISPER_MODELS:-base}
