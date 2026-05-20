@@ -1,5 +1,6 @@
 import path from 'node:path'
-import { buildFrameFilter, getNativeBackgroundImagePath } from './frameFilterGraph.mjs'
+import { buildFastFeatureEncoderOutputArgs, buildFastFeatureInputArgs } from './frameCudaTurboPath.mjs'
+import { buildFastFeatureFrameFilter, buildFrameFilter, getNativeBackgroundImagePath } from './frameFilterGraph.mjs'
 import { buildChunkSceneMotionSegments } from './frameMotionFilter.mjs'
 import { getFrameWorkerPlan, runNativeFfmpeg } from './nativeFfmpeg.mjs'
 import { buildChunkSourceSlices, buildSeekInputArgs, buildVideoTimelineSource } from './timelineInputPlan.mjs'
@@ -46,13 +47,7 @@ export function buildFrameChunks(totalDurationSeconds, targetChunkDurationSecond
     const duration = frameCount / safeFrameRate
 
     if (duration > 0) {
-      chunks.push({
-        index: chunks.length,
-        start,
-        duration,
-        startFrame,
-        frameCount,
-      })
+      chunks.push({ index: chunks.length, start, duration, startFrame, frameCount })
     }
 
     startFrame += frameCount
@@ -78,12 +73,7 @@ function buildChunkOverlayAssets(overlayAssets, chunk) {
         return null
       }
 
-      return {
-        path: asset.path,
-        x: asset.x,
-        y: asset.y,
-        events,
-      }
+      return { path: asset.path, x: asset.x, y: asset.y, events }
     })
     .filter(Boolean)
 }
@@ -130,9 +120,43 @@ function buildChunkOutputPath(jobDirectory, index) {
   return path.join(jobDirectory, `frame-chunk-${String(index).padStart(3, '0')}.mp4`)
 }
 
-function buildChunkArgs({ inputPath, chunk, timelineSlices, chunkOverlayAssets, workerPlan, framePreset, frameBackground, encoderPlan, outputPath, motionSegments, nativeFrameRate, hideWatermark }) {
+function buildChunkArgs({ inputPath, chunk, timelineSlices, chunkOverlayAssets, workerPlan, framePreset, frameBackground, encoderPlan, outputPath, motionSegments, nativeFrameRate, hideWatermark, useFastFeatureFramePath }) {
   if (!Array.isArray(timelineSlices) || timelineSlices.length === 0) {
     throw new Error(`No source slices were generated for frame chunk ${chunk.index + 1}.`)
+  }
+
+  if (useFastFeatureFramePath) {
+    const sourceInputArgs = buildFastFeatureInputArgs(inputPath, timelineSlices)
+    const filterPlan = buildFastFeatureFrameFilter(framePreset, frameBackground, chunkOverlayAssets, motionSegments, {
+      frameRate: nativeFrameRate,
+      timeOffset: chunk.start,
+      duration: chunk.duration,
+      hideWatermark,
+      mediaInputOffset: 1,
+    })
+    const overlayInputArgs = chunkOverlayAssets.flatMap((asset) => ['-loop', '1', '-i', asset.path])
+
+    return [
+      '-hide_banner',
+      '-y',
+      ...sourceInputArgs,
+      ...overlayInputArgs,
+      '-filter_complex',
+      filterPlan.filterComplex,
+      '-map',
+      filterPlan.outputLabel,
+      '-c:v',
+      encoderPlan.codec,
+      ...buildFastFeatureEncoderOutputArgs(encoderPlan),
+      '-pix_fmt',
+      'yuv420p',
+      '-r',
+      String(nativeFrameRate),
+      '-fps_mode',
+      'cfr',
+      '-an',
+      outputPath,
+    ]
   }
 
   const sourceInputArgs = buildSeekInputArgs(inputPath, timelineSlices, { threads: workerPlan.decodeThreads })
@@ -202,6 +226,7 @@ async function runChunks({
   workerConcurrency,
   workerPlan,
   chunkPaths,
+  useFastFeatureFramePath,
 }) {
   const chunkProgressMicroseconds = chunks.map(() => 0)
   const latestSpeedByChunk = chunks.map(() => '')
@@ -221,6 +246,7 @@ async function runChunks({
     const chunkOverlayAssets = buildChunkOverlayAssets(overlayAssets, chunk)
     const chunkSceneMotionSegments = buildChunkSceneMotionSegments(sceneMotionSegments, chunk)
     const outputPath = buildChunkOutputPath(jobDirectory, chunk.index)
+    const chunkStartedAt = Date.now()
     chunkPaths[chunk.index] = outputPath
 
     emitLog(sender, jobId, 'framing', `Start frame chunk ${chunk.index + 1}/${chunks.length}`, 'info', {}, {
@@ -233,6 +259,7 @@ async function runChunks({
       overlayCount: chunkOverlayAssets.length,
       motionCount: chunkSceneMotionSegments.length,
       workerConcurrency,
+      fastFeatureFramePath: useFastFeatureFramePath,
     })
 
     await runNativeFfmpeg(buildChunkArgs({
@@ -248,6 +275,7 @@ async function runChunks({
       hideWatermark,
       motionSegments: chunkSceneMotionSegments,
       nativeFrameRate,
+      useFastFeatureFramePath,
     }), {
       cwd: jobDirectory,
       onStdoutLine: (line) => {
@@ -279,11 +307,7 @@ async function runChunks({
 
     chunkProgressMicroseconds[chunk.index] = Math.round(chunk.duration * 1000000)
     latestSpeedByChunk[chunk.index] = ''
-    emitLog(sender, jobId, 'framing', `Finished frame chunk ${chunk.index + 1}/${chunks.length}`, 'info', {}, {
-      chunkIndex: chunk.index,
-      outputPath,
-      workerConcurrency,
-    })
+    emitLog(sender, jobId, 'framing', `Finished frame chunk ${chunk.index + 1}/${chunks.length}`, 'info', {}, { chunkIndex: chunk.index, elapsedMs: Date.now() - chunkStartedAt, outputPath, workerConcurrency })
     emitAggregateProgress({ force: true })
   })
 }
@@ -306,6 +330,7 @@ export async function runFrameChunksWithRetry({
   chunks,
   initialWorkerCount,
   initialWorkerPlan,
+  useFastFeatureFramePath = false,
 }) {
   const chunkPaths = new Array(chunks.length)
 
@@ -352,6 +377,7 @@ export async function runFrameChunksWithRetry({
         workerConcurrency,
         workerPlan,
         chunkPaths,
+        useFastFeatureFramePath,
       })
       return chunkPaths
     } catch (error) {

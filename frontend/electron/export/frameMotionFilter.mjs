@@ -63,6 +63,17 @@ function buildFocusExpression(segments, axis) {
   )
 }
 
+function buildSingleSegmentMotionExpressions(segment) {
+  const amountExpression = buildMotionAmountExpression(segment)
+  const zoomExpression = `1+(${formatFilterNumber(segment.zoomScale - 1)})*(${amountExpression})`
+
+  return {
+    zoomExpression,
+    focusXExpression: `0.5+(${formatFilterNumber(segment.focusX - 0.5)})*(${amountExpression})`,
+    focusYExpression: `0.5+(${formatFilterNumber(segment.focusY - 0.5)})*(${amountExpression})`,
+  }
+}
+
 export function buildFrameSceneMotionSegments(keptScenes) {
   return buildSceneMotionSegments(keptScenes)
 }
@@ -106,9 +117,12 @@ export function buildNativeForegroundScale({ inputLabel, outputLabel, framePrese
   const boxLabel = `${outputLabel}_box`
   const zoomLabel = `${outputLabel}_zoom`
   const baseScaleExpression = `min(${framePreset.width}/iw,${framePreset.height}/ih)`
-  const zoomExpression = buildZoomExpression(motionSegments)
-  const focusXExpression = buildFocusExpression(motionSegments, 'focusX')
-  const focusYExpression = buildFocusExpression(motionSegments, 'focusY')
+  const singleSegmentExpressions = motionSegments.length === 1
+    ? buildSingleSegmentMotionExpressions(motionSegments[0])
+    : null
+  const zoomExpression = singleSegmentExpressions?.zoomExpression || buildZoomExpression(motionSegments)
+  const focusXExpression = singleSegmentExpressions?.focusXExpression || buildFocusExpression(motionSegments, 'focusX')
+  const focusYExpression = singleSegmentExpressions?.focusYExpression || buildFocusExpression(motionSegments, 'focusY')
   const zoomWidthExpression = buildNearestEvenExpression(`iw*${baseScaleExpression}*(${zoomExpression})`)
   const xExpression = buildPixelExpression(`if(gte(w,W),min(max(W/2-(${focusXExpression})*w,W-w),0),(W-w)/2)`)
   const yExpression = buildPixelExpression(`if(gte(h,H),min(max(H/2-(${focusYExpression})*h,H-h),0),(H-h)/2)`)
@@ -119,6 +133,22 @@ export function buildNativeForegroundScale({ inputLabel, outputLabel, framePrese
     `[${zoomSourceLabel}]scale=w='${zoomWidthExpression}':h=-2:eval=frame:flags=bicubic+accurate_rnd+full_chroma_int,setsar=1,format=yuv444p[${zoomLabel}]`,
     `[${boxLabel}][${zoomLabel}]overlay=x='${xExpression}':y='${yExpression}':shortest=1:eof_action=pass:eval=frame[${outputLabel}]`,
   ].join(';')
+}
+
+export function buildNativeForegroundCropZoomScale({ inputLabel, outputLabel, framePreset, motionSegments }) {
+  if (!hasSceneMotionSegments(motionSegments)) {
+    return buildNativeForegroundScale({ inputLabel, outputLabel, framePreset, motionSegments })
+  }
+
+  const zoomExpression = buildZoomExpression(motionSegments)
+  const focusXExpression = buildFocusExpression(motionSegments, 'focusX')
+  const focusYExpression = buildFocusExpression(motionSegments, 'focusY')
+  const cropWidthExpression = `2*floor((iw/(${zoomExpression}))/2)`
+  const cropHeightExpression = `2*floor((ih/(${zoomExpression}))/2)`
+  const xExpression = `min(max((iw-out_w)*(${focusXExpression}),0),iw-out_w)`
+  const yExpression = `min(max((ih-out_h)*(${focusYExpression}),0),ih-out_h)`
+
+  return `[${inputLabel}]crop=w='${cropWidthExpression}':h='${cropHeightExpression}':x='${xExpression}':y='${yExpression}',scale=w=${framePreset.width}:h=${framePreset.height}:force_original_aspect_ratio=decrease:flags=fast_bilinear,setsar=1[${outputLabel}]`
 }
 
 export function buildNativeForegroundOverlay({ backgroundLabel, foregroundLabel, outputLabel, motionSegments }) {

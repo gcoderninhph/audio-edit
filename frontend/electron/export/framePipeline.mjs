@@ -1,5 +1,6 @@
 import { writeFile } from 'node:fs/promises'
 import path from 'node:path'
+import { buildSceneSplitFrameChunks } from './frameCudaTurboPath.mjs'
 import { buildFrameSceneMotionSegments } from './frameMotionFilter.mjs'
 import { buildFrameChunks, getTimelineDurationSeconds, runFrameChunksWithRetry } from './frameChunkRunner.mjs'
 import { getFrameChunkPlan, getFrameWorkerPlan, getNativeEncodePlan, readNativeVideoFrameRate, runNativeFfmpeg } from './nativeFfmpeg.mjs'
@@ -42,6 +43,23 @@ async function concatFrameChunks({ sender, emitLog, emitProgress, jobDirectory, 
   return outputPath
 }
 
+function isNativeImageBackground(frameBackground) {
+  return Boolean(frameBackground && typeof frameBackground === 'object' && frameBackground.kind === 'image')
+}
+
+function shouldUseFastFeatureFramePath({ encoderPlan, frameBackground }) {
+  return Boolean(
+    encoderPlan?.hardware
+      && encoderPlan.codec === 'h264_nvenc'
+      && !isNativeImageBackground(frameBackground),
+  )
+}
+
+function getFastFeatureWorkerCount(logicalCpuCount, chunkCount) {
+  const targetWorkerCount = Math.min(10, Math.max(8, Math.ceil((Number(logicalCpuCount) || 1) / 3)))
+  return Math.max(1, Math.min(chunkCount, targetWorkerCount))
+}
+
 export async function frameSourceTimelineVideo({
   sender,
   emitLog,
@@ -67,12 +85,17 @@ export async function frameSourceTimelineVideo({
   })
   const sceneMotionSegments = buildFrameSceneMotionSegments(keptScenes)
   const nativeFrameRate = await readNativeVideoFrameRate(inputPath)
-  const chunks = buildFrameChunks(totalDurationSeconds, chunkPlan.targetChunkDurationSeconds, nativeFrameRate)
+  const useFastFeatureFramePath = shouldUseFastFeatureFramePath({ encoderPlan, frameBackground })
+  const chunks = useFastFeatureFramePath
+    ? buildSceneSplitFrameChunks(keptScenes, nativeFrameRate, 7)
+    : buildFrameChunks(totalDurationSeconds, chunkPlan.targetChunkDurationSeconds, nativeFrameRate)
   if (chunks.length === 0) {
     throw new Error('No frame chunks were generated for native export.')
   }
 
-  const effectiveWorkerCount = Math.max(1, Math.min(chunkPlan.workerCount, chunks.length))
+  const effectiveWorkerCount = useFastFeatureFramePath
+    ? getFastFeatureWorkerCount(chunkPlan.logicalCpuCount, chunks.length)
+    : Math.max(1, Math.min(chunkPlan.workerCount, chunks.length))
   const workerPlan = getFrameWorkerPlan({
     workerCount: effectiveWorkerCount,
     encoderPlan,
@@ -91,6 +114,9 @@ export async function frameSourceTimelineVideo({
     frameWorkerPlan: workerPlan,
     frameRate: nativeFrameRate,
     frameAlignedChunks: true,
+    fastFeatureFramePath: useFastFeatureFramePath,
+    fastFeatureMotionCount: sceneMotionSegments.length,
+    fastFeatureBackground: useFastFeatureFramePath && typeof frameBackground === 'object' ? frameBackground.kind || 'custom' : null,
     overlayCount: overlayAssets.length,
     chunkCount: chunks.length,
   })
@@ -113,6 +139,7 @@ export async function frameSourceTimelineVideo({
     chunks,
     initialWorkerCount: effectiveWorkerCount,
     initialWorkerPlan: workerPlan,
+    useFastFeatureFramePath,
   })
 
   const finalOutputPath = await concatFrameChunks({

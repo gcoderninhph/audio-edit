@@ -6,6 +6,7 @@ import {
   isVideoFadeFrameBackground,
 } from '../../src/utils/frameComposer.js'
 import {
+  buildNativeForegroundCropZoomScale,
   buildNativeForegroundOverlay,
   buildNativeForegroundScale,
   hasSceneMotionSegments,
@@ -43,6 +44,17 @@ function buildEnableExpression(events) {
 
 function formatFrameRate(frameRate) {
   return String(normalizeNativeFrameRate(frameRate)).replace(/\.0+$/, '')
+}
+
+function getFastVideoFadeBlurPlan(framePreset, fadePreset) {
+  const divisor = fadePreset?.id === 'soft' ? 5 : fadePreset?.id === 'cinematic' ? 6 : 7
+  const width = Math.max(128, Math.round(framePreset.width / divisor / 2) * 2)
+  const height = Math.max(128, Math.round(framePreset.height / divisor / 2) * 2)
+  const sigma = fadePreset?.id === 'soft' ? 5 : fadePreset?.id === 'cinematic' ? 6 : 7
+  return {
+    scale: `${width}:${height}`,
+    sigma,
+  }
 }
 
 function buildLinearExpression(segment, axis) {
@@ -119,6 +131,54 @@ export function buildFrameFilter(framePreset, frameBackground, overlayAssets, mo
   })
 
   filterChain.push(`[${currentLabel}]fps=${nativeFrameRate},setpts=N/(${nativeFrameRate}*TB),format=yuv420p[vout]`)
+
+  return {
+    filterComplex: filterChain.join(';'),
+    outputLabel: '[vout]',
+  }
+}
+
+export function buildFastFeatureFrameFilter(framePreset, frameBackground, overlayAssets, motionSegments, { frameRate = DEFAULT_NATIVE_FRAME_RATE, timeOffset = 0, duration = 0, hideWatermark = false, sourceVideoLabel = '0:v', mediaInputOffset = 1 } = {}) {
+  const safeOverlayAssets = Array.isArray(overlayAssets) ? overlayAssets : []
+  const safeMotionSegments = Array.isArray(motionSegments) ? motionSegments : []
+  const nativeFrameRate = formatFrameRate(frameRate)
+  const fadePreset = getVideoFadePresetById(frameBackground?.presetId)
+  const sourceLabel = 'src'
+  const filterChain = [`[${sourceVideoLabel}]fps=${nativeFrameRate},setpts=N/(${nativeFrameRate}*TB)[${sourceLabel}]`]
+
+  if (isNativeVideoFadeBackground(frameBackground)) {
+    const fastBlur = getFastVideoFadeBlurPlan(framePreset, fadePreset)
+    filterChain.push(
+      `[${sourceLabel}]split=2[bgsrc][fgsrc]`,
+      `[bgsrc]scale=w=${framePreset.width}:h=${framePreset.height}:force_original_aspect_ratio=increase:flags=fast_bilinear,crop=${framePreset.width}:${framePreset.height},scale=${fastBlur.scale}:flags=fast_bilinear,gblur=sigma=${fastBlur.sigma}:steps=1,scale=${framePreset.width}:${framePreset.height}:flags=bicubic,eq=brightness=${formatFilterNumber(fadePreset.nativeBrightness, 3)}:saturation=${formatFilterNumber(fadePreset.nativeSaturation, 3)},drawbox=x=0:y=0:w=iw:h=ih:color=${toFfmpegColor(DEFAULT_FRAME_BACKGROUND)}@${formatFilterNumber(fadePreset.nativeOverlayOpacity, 3)}:t=fill[bg]`,
+      buildNativeForegroundCropZoomScale({ inputLabel: 'fgsrc', outputLabel: 'fg', framePreset, motionSegments: safeMotionSegments }),
+      '[bg][fg]overlay=(W-w)/2:(H-h)/2:shortest=1:eof_action=pass[v0]',
+    )
+  } else {
+    filterChain.push(
+      `color=c=${toFfmpegColor(frameBackground)}:s=${framePreset.width}x${framePreset.height}:r=${nativeFrameRate}[bg]`,
+      buildNativeForegroundCropZoomScale({ inputLabel: sourceLabel, outputLabel: 'fg', framePreset, motionSegments: safeMotionSegments }),
+      '[bg][fg]overlay=(W-w)/2:(H-h)/2:shortest=1:eof_action=pass[v0]',
+    )
+  }
+
+  const subtitleInputOffset = mediaInputOffset
+  let currentLabel = 'v0'
+
+  if (!hideWatermark) {
+    filterChain.push(buildMovingWatermarkFilter(currentLabel, 'vwm', framePreset, timeOffset, duration))
+    currentLabel = 'vwm'
+  }
+
+  safeOverlayAssets.forEach((asset, index) => {
+    const nextLabel = `v${index + 1}`
+    filterChain.push(
+      `[${currentLabel}][${index + subtitleInputOffset}:v]overlay=${asset.x}:${asset.y}:shortest=1:eof_action=pass:repeatlast=0:enable='${buildEnableExpression(asset.events)}'[${nextLabel}]`,
+    )
+    currentLabel = nextLabel
+  })
+
+  filterChain.push(`[${currentLabel}]format=yuv420p[vout]`)
 
   return {
     filterComplex: filterChain.join(';'),
