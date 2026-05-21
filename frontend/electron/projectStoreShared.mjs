@@ -4,6 +4,8 @@ import path from 'node:path'
 
 const PROJECTS_DIR_NAME = 'projects'
 const PROJECT_METADATA_FILE = 'project.json'
+const PROJECT_SUBTITLES_DIR_NAME = 'subtitles'
+const PROJECT_VOICEOVER_SEGMENTS_DIR_NAME = 'voiceover-segments'
 const PROJECT_VOICEOVERS_DIR_NAME = 'voiceovers'
 
 function getWorkspaceProjectsRoot() {
@@ -57,6 +59,14 @@ export function getProjectVoiceoverDirectory(projectId, projectsRoot = getProjec
   return path.join(getProjectDirectory(projectId, projectsRoot), PROJECT_VOICEOVERS_DIR_NAME)
 }
 
+export function getProjectSubtitlesDirectory(projectId, projectsRoot = getProjectsRoot()) {
+  return path.join(getProjectDirectory(projectId, projectsRoot), PROJECT_SUBTITLES_DIR_NAME)
+}
+
+export function getProjectVoiceoverSegmentDirectory(projectId, projectsRoot = getProjectsRoot()) {
+  return path.join(getProjectSubtitlesDirectory(projectId, projectsRoot), PROJECT_VOICEOVER_SEGMENTS_DIR_NAME)
+}
+
 export function getLegacySiblingProjectVoiceoverDirectory(projectId, projectsRoot = getProjectsRoot()) {
   return path.join(projectsRoot, `${projectId}-voiceover`)
 }
@@ -71,6 +81,10 @@ export function getProjectVideoPath(projectId, fileName, projectsRoot = getProje
 
 export function getProjectVoiceoverPath(projectId, fileName, projectsRoot = getProjectsRoot()) {
   return path.join(getProjectVoiceoverDirectory(projectId, projectsRoot), fileName)
+}
+
+export function getProjectVoiceoverSegmentPath(projectId, fileName, projectsRoot = getProjectsRoot()) {
+  return path.join(getProjectVoiceoverSegmentDirectory(projectId, projectsRoot), fileName)
 }
 
 export function getLegacySiblingProjectVoiceoverPath(projectId, fileName, projectsRoot = getProjectsRoot()) {
@@ -146,6 +160,12 @@ export async function ensureProjectVoiceoverDirectory(projectId, projectsRoot = 
   const voiceoverDirectory = getProjectVoiceoverDirectory(projectId, projectsRoot)
   await mkdir(voiceoverDirectory, { recursive: true })
   return voiceoverDirectory
+}
+
+export async function ensureProjectVoiceoverSegmentDirectory(projectId, projectsRoot = getProjectsRoot()) {
+  const segmentDirectory = getProjectVoiceoverSegmentDirectory(projectId, projectsRoot)
+  await mkdir(segmentDirectory, { recursive: true })
+  return segmentDirectory
 }
 
 export async function readProjectMetadataFromRoot(projectId, projectsRoot) {

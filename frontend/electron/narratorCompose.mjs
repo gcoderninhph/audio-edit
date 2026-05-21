@@ -6,11 +6,18 @@ import path from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { randomUUID } from 'node:crypto'
 import { runNativeFfmpeg } from './export/nativeFfmpeg.mjs'
+import { loadProjectVoiceoverSegmentFile, saveProjectVoiceoverSegmentFile } from './projectVoiceoverSegmentStore.mjs'
 
 const __filename = fileURLToPath(import.meta.url)
 const __dirname = path.dirname(__filename)
 const NARRATOR_SAMPLE_RATE = 44100
 const NARRATOR_CHANNELS = 2
+
+function toManifestMs(value) {
+  const numericValue = Number(value)
+  if (!Number.isFinite(numericValue) || numericValue <= 0) return 0
+  return Math.max(0, Math.round(numericValue))
+}
 
 function normalizeBytes(bytes) {
   if (!bytes) return new Uint8Array()
@@ -67,18 +74,29 @@ function runProcess(command, args, options = {}) {
   })
 }
 
-async function downloadAudioUrl({ url }) {
+async function downloadAudioUrl({ url, projectId, segmentHash }) {
+  const storedSegment = await loadProjectVoiceoverSegmentFile(projectId, segmentHash).catch(() => null)
+  if (storedSegment) {
+    return storedSegment
+  }
   const response = await fetch(url)
   if (!response.ok) {
     throw new Error(`Unable to download Vbee audio: ${response.status}`)
   }
   const contentDisposition = response.headers.get('content-disposition') || ''
   const fileNameMatch = contentDisposition.match(/filename\*?=(?:UTF-8''|"?)([^";]+)/i)
-  return {
+  const downloadResult = {
     bytes: new Uint8Array(await response.arrayBuffer()),
     fileName: fileNameMatch ? decodeURIComponent(fileNameMatch[1]).replace(/^"|"$/g, '') : 'vbee-segment.audio',
     mimeType: response.headers.get('content-type') || 'application/octet-stream',
   }
+  if (projectId && segmentHash) {
+    const storedResult = await saveProjectVoiceoverSegmentFile(projectId, segmentHash, downloadResult).catch(() => null)
+    if (storedResult) {
+      return { ...downloadResult, ...storedResult }
+    }
+  }
+  return downloadResult
 }
 
 async function writeNormalizedSegment(tempDir, segment, index) {
@@ -93,11 +111,13 @@ async function writeNormalizedSegment(tempDir, segment, index) {
     '-ac', String(NARRATOR_CHANNELS),
     wavPath,
   ])
+  const startMs = toManifestMs(segment.startMs)
+  const endMs = Math.max(startMs, toManifestMs(segment.endMs))
   return {
-    duration_ms: Math.max(0, Number(segment.endMs || 0) - Number(segment.startMs || 0)),
-    end_ms: Math.max(0, Math.round(Number(segment.endMs || 0))),
+    duration_ms: Math.max(0, endMs - startMs),
+    end_ms: endMs,
     path: wavPath,
-    start_ms: Math.max(0, Math.round(Number(segment.startMs || 0))),
+    start_ms: startMs,
   }
 }
 
@@ -114,7 +134,7 @@ async function composeNarration(payload = {}) {
     for (const [index, segment] of segments.entries()) {
       manifestSegments.push(await writeNormalizedSegment(tempDir, segment, index))
     }
-    const totalDurationMs = Math.max(Number(payload.totalDurationMs || 0), ...manifestSegments.map((segment) => segment.end_ms || 0))
+    const totalDurationMs = Math.max(toManifestMs(payload.totalDurationMs), ...manifestSegments.map((segment) => segment.end_ms || 0))
     await writeFile(manifestPath, JSON.stringify({
       channels: NARRATOR_CHANNELS,
       cleanup_inputs: false,

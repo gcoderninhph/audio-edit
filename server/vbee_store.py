@@ -20,8 +20,8 @@ try:
         update_vbee_token,
     )
     from vbee_request_store import (
+        clear_all_vbee_request_data,
         create_vbee_request_record,
-        get_vbee_audio_cache,
         get_vbee_request,
         get_vbee_segment_by_provider_request,
         list_queued_vbee_segments,
@@ -30,9 +30,18 @@ try:
         list_vbee_segments,
         mark_vbee_segment_processing,
         refresh_vbee_request_summary,
-        save_vbee_audio_cache,
         update_vbee_segment,
     )
+    from vbee_audio_cache_store import (
+        clear_vbee_segment_audio_urls,
+        delete_vbee_audio_cache,
+        get_latest_completed_vbee_segment_for_reuse,
+        get_vbee_audio_cache,
+        list_expired_vbee_audio_cache,
+        save_vbee_audio_cache,
+        touch_vbee_audio_cache_expiry,
+    )
+    from vbee_segment_store import get_vbee_segment_detail, list_vbee_segment_summaries_page
 except ImportError:
     from .vbee_schema import (
         FINAL_VBEE_STATUSES,
@@ -55,8 +64,8 @@ except ImportError:
         update_vbee_token,
     )
     from .vbee_request_store import (
+        clear_all_vbee_request_data,
         create_vbee_request_record,
-        get_vbee_audio_cache,
         get_vbee_request,
         get_vbee_segment_by_provider_request,
         list_queued_vbee_segments,
@@ -65,6 +74,15 @@ except ImportError:
         list_vbee_segments,
         mark_vbee_segment_processing,
         refresh_vbee_request_summary,
-        save_vbee_audio_cache,
         update_vbee_segment,
     )
+    from .vbee_audio_cache_store import (
+        clear_vbee_segment_audio_urls,
+        delete_vbee_audio_cache,
+        get_latest_completed_vbee_segment_for_reuse,
+        get_vbee_audio_cache,
+        list_expired_vbee_audio_cache,
+        save_vbee_audio_cache,
+        touch_vbee_audio_cache_expiry,
+    )
+    from .vbee_segment_store import get_vbee_segment_detail, list_vbee_segment_summaries_page

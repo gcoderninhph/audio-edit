@@ -241,12 +241,12 @@ export async function runVoiceoverJob({
   setLastVoiceoverAudioName('');
 
   try {
-    const result = await createVoiceoverFromSubtitles(subtitles, updateVoiceoverProgress);
+    const result = await createVoiceoverFromSubtitles(subtitles, updateVoiceoverProgress, { projectId: currentSessionId });
     if (sessionIdRef.current !== currentSessionId) {
       return;
     }
 
-  updateVoiceoverProgress({ phase: 'Saving audio to project...', percent: 95 });
+    updateVoiceoverProgress({ phase: 'Saving audio to project...', percent: 95 });
     const savedVoiceover = await saveLocalProjectVoiceoverAudio(currentSessionId, {
       bytes: result.audioBlob,
       duration: result.duration,

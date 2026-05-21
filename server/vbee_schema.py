@@ -123,8 +123,10 @@ def row_to_segment(row):
         'providerRequestId': row.get('provider_request_id') or '',
         'status': row.get('status') or VBEE_STATUS_QUEUED,
         'audioUrl': row.get('audio_url') or '',
+        'fileName': row.get('file_name') or '',
         'errorMessage': row.get('error_message') or '',
         'characterCount': int(row.get('character_count') or 0),
+        'expiresAt': int(row.get('expires_at') or 0),
         'createdAt': int(row.get('created_at') or 0),
         'updatedAt': int(row.get('updated_at') or 0),
     }
@@ -223,14 +225,18 @@ def ensure_vbee_schema():
                         voice_code VARCHAR(80) NOT NULL DEFAULT '',
                         text_hash VARCHAR(64) NOT NULL DEFAULT '',
                         audio_url TEXT NOT NULL,
+                        file_name VARCHAR(255) NOT NULL DEFAULT '',
                         provider_request_id VARCHAR(160) NULL,
                         character_count INT NOT NULL DEFAULT 0,
+                        expires_at BIGINT NOT NULL DEFAULT 0,
                         created_at BIGINT NOT NULL,
                         updated_at BIGINT NOT NULL
                     ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
                     """
                 )
                 _ensure_column(cursor, 'vbee_voice_requests', 'queue_position', 'INT NOT NULL DEFAULT 0 AFTER progress')
+                _ensure_column(cursor, 'vbee_audio_cache', 'file_name', "VARCHAR(255) NOT NULL DEFAULT '' AFTER audio_url")
+                _ensure_column(cursor, 'vbee_audio_cache', 'expires_at', 'BIGINT NOT NULL DEFAULT 0 AFTER character_count')
         finally:
             connection.close()
     except driver.MySQLError as error:

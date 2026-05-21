@@ -3,9 +3,11 @@ import hmac
 from flask import jsonify, request
 
 try:
-    from auth_routes import AuthStoreError, require_access_token, require_admin_access
+    from admin_store import get_auth_user
+    from vbee_asset_service import clear_all_vbee_segment_assets, expire_vbee_segment_assets, get_vbee_segment_asset_download_url
+    from auth_routes import AuthStoreError, require_access_token, require_admin_access, verify_password
     from proxy_credit_helpers import charge_user_credits_or_error, refund_credits_if_needed
-    from vbee_service import apply_vbee_webhook, create_voiceover_request, get_voiceover_request_status, normalize_srt_subtitles, normalize_subtitles
+    from vbee_service import apply_vbee_webhook, create_voiceover_request, get_voiceover_request_status, normalize_srt_subtitles, normalize_subtitles, refresh_processing_vbee_segments
     from vbee_store import (
         VbeeNotFoundError,
         VbeeValidationError,
@@ -13,16 +15,20 @@ try:
         delete_vbee_token,
         get_vbee_config,
         get_vbee_request,
+        get_vbee_segment_detail,
         get_vbee_token,
+        list_vbee_segment_summaries_page,
         list_vbee_requests_page,
         list_vbee_tokens,
         update_vbee_config,
         update_vbee_token,
     )
 except ImportError:
-    from .auth_routes import AuthStoreError, require_access_token, require_admin_access
+    from .admin_store import get_auth_user
+    from .vbee_asset_service import clear_all_vbee_segment_assets, expire_vbee_segment_assets, get_vbee_segment_asset_download_url
+    from .auth_routes import AuthStoreError, require_access_token, require_admin_access, verify_password
     from .proxy_credit_helpers import charge_user_credits_or_error, refund_credits_if_needed
-    from .vbee_service import apply_vbee_webhook, create_voiceover_request, get_voiceover_request_status, normalize_srt_subtitles, normalize_subtitles
+    from .vbee_service import apply_vbee_webhook, create_voiceover_request, get_voiceover_request_status, normalize_srt_subtitles, normalize_subtitles, refresh_processing_vbee_segments
     from .vbee_store import (
         VbeeNotFoundError,
         VbeeValidationError,
@@ -30,7 +36,9 @@ except ImportError:
         delete_vbee_token,
         get_vbee_config,
         get_vbee_request,
+        get_vbee_segment_detail,
         get_vbee_token,
+        list_vbee_segment_summaries_page,
         list_vbee_requests_page,
         list_vbee_tokens,
         update_vbee_config,
@@ -66,6 +74,15 @@ def _config_payload():
         'webhookPath': webhook_path,
         'webhookUrl': f'{webhook_host}{webhook_path}' if webhook_host else webhook_path,
     }
+
+
+def _load_segment_audio_url(segment):
+    return get_vbee_segment_asset_download_url(segment.get('hash') or segment.get('cacheKey') or '')
+
+
+def _refresh_admin_vbee_segments(limit=200):
+    expire_vbee_segment_assets(limit=max(20, int(limit or 200)))
+    refresh_processing_vbee_segments(limit=limit)
 
 
 def _read_start_payload():
@@ -210,6 +227,73 @@ def register_vbee_routes(app):
             return jsonify({'request': get_vbee_request(request_id)})
         except VbeeNotFoundError:
             return jsonify({'error': 'Vbee request not found'}), 404
+        except AuthStoreError:
+            return _store_error_response()
+
+    @app.route('/api/admin/services/vbee/segments', methods=['GET'])
+    def admin_vbee_segments_route():
+        _claims, auth_error = require_admin_access()
+        if auth_error:
+            return auth_error
+        try:
+            _refresh_admin_vbee_segments()
+            page = list_vbee_segment_summaries_page(
+                status=request.args.get('status') or '',
+                page=request.args.get('page'),
+                page_size=request.args.get('pageSize'),
+            )
+            return jsonify({'segments': page['segments'], 'pagination': page['pagination']})
+        except AuthStoreError:
+            return _store_error_response()
+
+    @app.route('/api/admin/services/vbee/segments/clear-cache', methods=['POST'])
+    def admin_vbee_segments_clear_cache_route():
+        claims, auth_error = require_admin_access()
+        if auth_error:
+            return auth_error
+        try:
+            payload = request.get_json(silent=True) or {}
+            password = str(payload.get('password') or '')
+            if not password:
+                return jsonify({'error': 'Admin password is required.'}), 400
+            admin_user = get_auth_user(claims.get('sub'))
+            if not verify_password(password, admin_user):
+                return jsonify({'error': 'Admin password is incorrect.'}), 401
+            return jsonify({'result': clear_all_vbee_segment_assets()})
+        except RuntimeError as error:
+            return jsonify({'error': str(error)}), 503
+        except AuthStoreError:
+            return _store_error_response()
+
+    @app.route('/api/admin/services/vbee/segments/<string:cache_key>', methods=['GET'])
+    def admin_vbee_segment_route(cache_key):
+        _claims, auth_error = require_admin_access()
+        if auth_error:
+            return auth_error
+        try:
+            _refresh_admin_vbee_segments()
+            return jsonify({'segment': get_vbee_segment_detail(cache_key)})
+        except VbeeNotFoundError:
+            return jsonify({'error': 'Vbee segment not found'}), 404
+        except AuthStoreError:
+            return _store_error_response()
+
+    @app.route('/api/admin/services/vbee/segments/<string:cache_key>/audio-url', methods=['GET'])
+    def admin_vbee_segment_audio_url_route(cache_key):
+        _claims, auth_error = require_admin_access()
+        if auth_error:
+            return auth_error
+        try:
+            _refresh_admin_vbee_segments()
+            segment = get_vbee_segment_detail(cache_key)
+            if segment.get('status') != 'complete':
+                return jsonify({'error': 'Segment audio is not ready yet.'}), 409
+            audio_url = _load_segment_audio_url(segment)
+            if not audio_url:
+                return jsonify({'error': 'Segment audio is unavailable.'}), 404
+            return jsonify({'audioUrl': audio_url})
+        except VbeeNotFoundError:
+            return jsonify({'error': 'Vbee segment not found'}), 404
         except AuthStoreError:
             return _store_error_response()
 

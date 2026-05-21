@@ -1,12 +1,14 @@
-import { FileClock, KeyRound, Settings } from 'lucide-react'
+import { FileAudio, FileClock, KeyRound, Settings } from 'lucide-react'
 import DeveloperMarker from './DeveloperMarker'
 import VbeeConfigPanel from './VbeeConfigPanel'
+import VbeeSegmentsPanel from './VbeeSegmentsPanel'
 import VbeeRequestsPanel from './VbeeRequestsPanel'
 import VbeeTokensPanel from './VbeeTokensPanel'
 
 const SECTIONS = [
   { key: 'tokens', label: 'Token list', meta: 'Credential pool', icon: KeyRound },
   { key: 'requests', label: 'Request', meta: 'Queue and webhook state', icon: FileClock },
+  { key: 'segments', label: 'Segments', meta: 'Processing and reuse', icon: FileAudio },
   { key: 'config', label: 'Config', meta: 'Provider defaults', icon: Settings },
 ]
 
@@ -14,9 +16,12 @@ function getVbeeSectionPath(sectionKey) {
   return `/admin/service/vbee/${sectionKey}`
 }
 
-function renderSection(sectionKey, requestId, onNavigate) {
+function renderSection(sectionKey, requestId, segmentHash, onNavigate) {
   if (sectionKey === 'requests') {
     return <VbeeRequestsPanel onNavigate={onNavigate} requestId={requestId} />
+  }
+  if (sectionKey === 'segments') {
+    return <VbeeSegmentsPanel onNavigate={onNavigate} segmentHash={segmentHash} />
   }
   if (sectionKey === 'config') {
     return <VbeeConfigPanel />
@@ -24,7 +29,7 @@ function renderSection(sectionKey, requestId, onNavigate) {
   return <VbeeTokensPanel />
 }
 
-export default function VbeeOperationsPanel({ activeSection = 'tokens', onNavigate, requestId }) {
+export default function VbeeOperationsPanel({ activeSection = 'tokens', onNavigate, requestId, segmentHash }) {
   const currentSection = SECTIONS.find((section) => section.key === activeSection) || SECTIONS[0]
 
   return (
@@ -48,7 +53,7 @@ export default function VbeeOperationsPanel({ activeSection = 'tokens', onNaviga
         </aside>
         <div className="iap-operations-content dev-host">
           <DeveloperMarker code={`admin.react.service.vbee.${currentSection.key}`} title="Admin React Service Vbee Content" />
-          {renderSection(currentSection.key, requestId, onNavigate)}
+          {renderSection(currentSection.key, requestId, segmentHash, onNavigate)}
         </div>
       </div>
     </div>

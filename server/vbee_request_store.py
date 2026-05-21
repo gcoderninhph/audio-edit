@@ -255,6 +255,33 @@ def update_vbee_segment(segment_id, status=None, token_id=None, provider_request
     return refresh_vbee_request_summary(row['request_id']) if row else None
 
 
+def clear_all_vbee_request_data():
+    ensure_vbee_schema()
+    driver = _require_driver()
+    try:
+        connection = _connect(MYSQL_DATABASE)
+        try:
+            with connection.cursor() as cursor:
+                cursor.execute('SELECT COUNT(*) AS total_items FROM vbee_voice_requests')
+                request_count = int((cursor.fetchone() or {}).get('total_items') or 0)
+                cursor.execute('SELECT COUNT(*) AS total_items FROM vbee_voice_segments')
+                segment_count = int((cursor.fetchone() or {}).get('total_items') or 0)
+                cursor.execute('SELECT COUNT(*) AS total_items FROM vbee_audio_cache')
+                asset_count = int((cursor.fetchone() or {}).get('total_items') or 0)
+                cursor.execute('DELETE FROM vbee_voice_segments')
+                cursor.execute('DELETE FROM vbee_voice_requests')
+                cursor.execute('DELETE FROM vbee_audio_cache')
+        finally:
+            connection.close()
+    except driver.MySQLError as error:
+        raise AuthStoreError('Unable to clear Vbee request data') from error
+    return {
+        'assetCount': asset_count,
+        'requestCount': request_count,
+        'segmentCount': segment_count,
+    }
+
+
 def get_vbee_segment_by_provider_request(provider_request_id):
     ensure_vbee_schema()
     driver = _require_driver()
@@ -275,40 +302,3 @@ def get_vbee_segment_by_provider_request(provider_request_id):
         raise AuthStoreError('Unable to load Vbee segment') from error
 
 
-def get_vbee_audio_cache(cache_key):
-    ensure_vbee_schema()
-    driver = _require_driver()
-    try:
-        connection = _connect(MYSQL_DATABASE)
-        try:
-            with connection.cursor() as cursor:
-                cursor.execute('SELECT * FROM vbee_audio_cache WHERE cache_key = %s LIMIT 1', (cache_key,))
-                row = cursor.fetchone()
-                return {
-                    'cacheKey': row.get('cache_key') or '',
-                    'audioUrl': row.get('audio_url') or '',
-                    'providerRequestId': row.get('provider_request_id') or '',
-                    'characterCount': int(row.get('character_count') or 0),
-                } if row else None
-        finally:
-            connection.close()
-    except driver.MySQLError as error:
-        raise AuthStoreError('Unable to read Vbee audio cache') from error
-
-
-def save_vbee_audio_cache(cache_key, language, voice_code, audio_url, provider_request_id='', character_count=0):
-    ensure_vbee_schema()
-    now = now_timestamp()
-    driver = _require_driver()
-    try:
-        connection = _connect(MYSQL_DATABASE)
-        try:
-            with connection.cursor() as cursor:
-                cursor.execute(
-                    'INSERT INTO vbee_audio_cache (cache_key, language, voice_code, text_hash, audio_url, provider_request_id, character_count, created_at, updated_at) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s) ON DUPLICATE KEY UPDATE audio_url = VALUES(audio_url), provider_request_id = VALUES(provider_request_id), character_count = VALUES(character_count), updated_at = VALUES(updated_at)',
-                    (cache_key, language, voice_code, cache_key[-64:], audio_url, provider_request_id, int(character_count or 0), now, now),
-                )
-        finally:
-            connection.close()
-    except driver.MySQLError as error:
-        raise AuthStoreError('Unable to save Vbee audio cache') from error

@@ -46,6 +46,35 @@ export async function fetchAdminVbeeRequestDetail(requestId) {
   return response.data || {}
 }
 
+export async function fetchAdminVbeeSegments({ page = 1, pageSize = 10, status = '' } = {}) {
+  const searchParams = new URLSearchParams({ page: String(page), pageSize: String(pageSize) })
+  if (status) searchParams.set('status', status)
+  const response = await requestJson(`/api/admin/services/vbee/segments?${searchParams.toString()}`)
+  if (!response.ok) throw new Error(response.data?.error || 'Unable to load Vbee segments.')
+  return response.data || {}
+}
+
+export async function clearAdminVbeeSegmentsCache(password) {
+  const response = await requestJson('/api/admin/services/vbee/segments/clear-cache', {
+    method: 'POST',
+    body: JSON.stringify({ password }),
+  })
+  if (!response.ok) throw new Error(response.data?.error || 'Unable to clear Vbee segment cache.')
+  return response.data || {}
+}
+
+export async function fetchAdminVbeeSegmentDetail(segmentHash) {
+  const response = await requestJson(`/api/admin/services/vbee/segments/${encodeURIComponent(segmentHash)}`)
+  if (!response.ok) throw new Error(response.data?.error || 'Unable to load Vbee segment.')
+  return response.data || {}
+}
+
+export async function fetchAdminVbeeSegmentAudioUrl(segmentHash) {
+  const response = await requestJson(`/api/admin/services/vbee/segments/${encodeURIComponent(segmentHash)}/audio-url`)
+  if (!response.ok) throw new Error(response.data?.error || 'Unable to load Vbee segment audio.')
+  return response.data || {}
+}
+
 export async function fetchAdminVbeeConfig() {
   const response = await requestJson('/api/admin/services/vbee/config')
   if (!response.ok) throw new Error(response.data?.error || 'Unable to load Vbee config.')

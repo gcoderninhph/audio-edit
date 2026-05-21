@@ -17,6 +17,15 @@ async function readApiErrorMessage(response, fallbackMessage) {
   }
 }
 
+async function fetchVoiceoverStatus(requestId) {
+  const statusResponse = await apiFetch(`/api/voiceover/status/${requestId}`, {
+    headers: getAuthRequestHeaders(),
+  })
+  if (statusResponse.status === 404) throw new Error('The voiceover job does not exist')
+  if (!statusResponse.ok) throw new Error(await readApiErrorMessage(statusResponse, 'Unable to check voiceover job status'))
+  return statusResponse.json()
+}
+
 function normalizeSubtitlePayload(subtitles) {
   return subtitles
     .map((subtitle) => ({
@@ -60,10 +69,14 @@ function extractFileName(contentDisposition, fallbackFileName) {
   return fileNameMatch ? decodeURIComponent(fileNameMatch[1]).replace(/^"|"$/g, '') : fallbackFileName
 }
 
-async function downloadAudioUrl(audioUrl, fallbackFileName) {
+async function downloadAudioUrl(audioUrl, fallbackFileName, options = {}) {
   const narratorBridge = getNarratorBridge()
   if (narratorBridge?.downloadAudio) {
-    const result = await narratorBridge.downloadAudio({ url: audioUrl })
+    const result = await narratorBridge.downloadAudio({
+      projectId: options.projectId || '',
+      segmentHash: options.segmentHash || '',
+      url: audioUrl,
+    })
     return {
       bytes: normalizeBytes(result.bytes),
       fileName: result.fileName || fallbackFileName,
@@ -96,6 +109,7 @@ function getCompletedSegments(statusData) {
     .filter((segment) => isCompleteStatus(segment.status) && segment.audioUrl)
     .map((segment, index) => ({
       audioUrl: segment.audioUrl,
+      cacheKey: segment.cacheKey || '',
       endMs: Number(segment.endMs || 0),
       fileName: `vbee-segment-${index + 1}.audio`,
       index: Number.isFinite(Number(segment.index)) ? Number(segment.index) : index,
@@ -104,7 +118,43 @@ function getCompletedSegments(statusData) {
     }))
 }
 
-async function downloadNewSegments(statusData, downloadedSegments, onProgress) {
+function isMatchingSegment(leftSegment, rightSegment) {
+  if ((leftSegment?.cacheKey || '') && (rightSegment?.cacheKey || '')) {
+    return leftSegment.cacheKey === rightSegment.cacheKey
+  }
+  return String(leftSegment?.index ?? '') === String(rightSegment?.index ?? '')
+}
+
+async function downloadSegmentWithRetry(requestId, segment, projectId) {
+  try {
+    return {
+      ...segment,
+      ...(await downloadAudioUrl(segment.audioUrl, segment.fileName, {
+        projectId,
+        segmentHash: segment.cacheKey,
+      })),
+    }
+  } catch (error) {
+    if (!requestId) {
+      throw error
+    }
+    const refreshedStatus = await fetchVoiceoverStatus(requestId)
+    const refreshedSegment = getCompletedSegments(refreshedStatus).find((candidate) => isMatchingSegment(candidate, segment))
+    const retrySegment = refreshedSegment?.audioUrl ? refreshedSegment : segment
+    if (!retrySegment?.audioUrl) {
+      throw error
+    }
+    return {
+      ...retrySegment,
+      ...(await downloadAudioUrl(retrySegment.audioUrl, retrySegment.fileName, {
+        projectId,
+        segmentHash: retrySegment.cacheKey,
+      })),
+    }
+  }
+}
+
+async function downloadNewSegments(statusData, requestId, projectId, downloadedSegments, onProgress) {
   const completedSegments = getCompletedSegments(statusData)
   const totalSegments = Number(statusData.totalSegments || completedSegments.length || 1)
   for (const segment of completedSegments) {
@@ -112,8 +162,8 @@ async function downloadNewSegments(statusData, downloadedSegments, onProgress) {
     const currentDownload = downloadedSegments.get(segmentKey)
     if (currentDownload?.audioUrl === segment.audioUrl) continue
     onProgress?.({ phase: 'Downloading completed Vbee audio...', percent: Math.min(88, 68 + Math.round((downloadedSegments.size / totalSegments) * 20)) })
-    const downloadResult = await downloadAudioUrl(segment.audioUrl, segment.fileName)
-    downloadedSegments.set(segmentKey, { ...segment, ...downloadResult })
+    const downloadResult = await downloadSegmentWithRetry(requestId, segment, projectId)
+    downloadedSegments.set(segmentKey, downloadResult)
   }
 }
 
@@ -144,20 +194,14 @@ async function composeDownloadedSegments(downloadedSegments, requestId, totalDur
   throw new Error('Native narrator compose is required for multi-segment voiceover output.')
 }
 
-async function pollVoiceoverJob(requestId, subtitles, onProgress) {
+async function pollVoiceoverJob(requestId, subtitles, onProgress, options = {}) {
   const downloadedSegments = new Map()
   const totalDurationMs = Math.max(0, ...subtitles.map((subtitle) => Number(subtitle.end || 0) * 1000))
 
   while (true) {
     await new Promise((resolve) => window.setTimeout(resolve, 500))
-    const statusResponse = await apiFetch(`/api/voiceover/status/${requestId}`, {
-      headers: getAuthRequestHeaders(),
-    })
-    if (statusResponse.status === 404) throw new Error('The voiceover job does not exist')
-    if (!statusResponse.ok) throw new Error(await readApiErrorMessage(statusResponse, 'Unable to check voiceover job status'))
-
-    const statusData = await statusResponse.json()
-    await downloadNewSegments(statusData, downloadedSegments, onProgress)
+    const statusData = await fetchVoiceoverStatus(requestId)
+    await downloadNewSegments(statusData, requestId, options.projectId, downloadedSegments, onProgress)
 
     if (isFailedStatus(statusData.status)) {
       throw new Error(statusData.errorMessage || statusData.error_message || 'Voiceover generation failed')
@@ -186,7 +230,7 @@ async function pollVoiceoverJob(requestId, subtitles, onProgress) {
   }
 }
 
-export async function createVoiceoverFromSubtitles(subtitles, onProgress) {
+export async function createVoiceoverFromSubtitles(subtitles, onProgress, options = {}) {
   const subtitlePayload = normalizeSubtitlePayload(subtitles)
   if (!subtitlePayload.length) {
     throw new Error('No subtitles available to generate voiceover')
@@ -217,5 +261,5 @@ export async function createVoiceoverFromSubtitles(subtitles, onProgress) {
   }
 
   onProgress?.({ phase: startData.status === 'queued' ? 'The job is queued at Vbee...' : 'Vbee accepted the job...', percent: 20 })
-  return pollVoiceoverJob(requestId, subtitlePayload, onProgress)
+  return pollVoiceoverJob(requestId, subtitlePayload, onProgress, options)
 }

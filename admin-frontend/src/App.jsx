@@ -11,7 +11,7 @@ import './App.css'
 
 const IAP_TABS = new Set(['packages', 'api-key', 'payment-tools', 'sale'])
 const SERVICE_TABS = new Set(['vbee'])
-const VBEE_SECTIONS = new Set(['tokens', 'requests', 'config'])
+const VBEE_SECTIONS = new Set(['tokens', 'requests', 'segments', 'config'])
 
 function parseIapRoute(normalizedPath) {
   if (normalizedPath === '/admin/iap/pack-function') {
@@ -84,6 +84,11 @@ function parseAdminRoute(pathname = window.location.pathname) {
   const serviceRequestMatch = normalizedPath.match(/^\/admin\/service\/vbee\/requests\/(.+)$/)
   if (serviceRequestMatch) {
     return { name: 'service', serviceTab: 'vbee', vbeeRequestId: decodeURIComponent(serviceRequestMatch[1]), vbeeSection: 'requests' }
+  }
+
+  const serviceSegmentMatch = normalizedPath.match(/^\/admin\/service\/vbee\/segments\/(.+)$/)
+  if (serviceSegmentMatch) {
+    return { name: 'service', serviceTab: 'vbee', vbeeSegmentHash: decodeURIComponent(serviceSegmentMatch[1]), vbeeSection: 'segments' }
   }
 
   const serviceSectionMatch = normalizedPath.match(/^\/admin\/service\/vbee\/([^/]+)$/)
@@ -187,14 +192,16 @@ function App() {
     }
     if (route.name === 'service') {
       if (route.vbeeRequestId) return 'Vbee request'
+      if (route.vbeeSegmentHash) return 'Vbee segment'
       if (route.vbeeSection === 'requests') return 'Vbee requests'
+      if (route.vbeeSection === 'segments') return 'Vbee segments'
       if (route.vbeeSection === 'config') return 'Vbee config'
       return 'Vbee tokens'
     }
     if (route.name === 'user-detail') return 'User detail'
     if (route.name === 'manage') return 'User management'
     return 'Admin login'
-  }, [route.iapTab, route.name, route.paymentToolHistoryId, route.paymentTransactionId, route.vbeeRequestId, route.vbeeSection])
+  }, [route.iapTab, route.name, route.paymentToolHistoryId, route.paymentTransactionId, route.vbeeRequestId, route.vbeeSection, route.vbeeSegmentHash])
 
   const handleSessionUpdate = (nextSession) => {
     setSession(nextSession)

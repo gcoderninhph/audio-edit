@@ -58,6 +58,31 @@
   font-weight: 700;
 }
 
+.button-group {
+  display: inline-flex;
+  align-items: stretch;
+}
+
+.button-group > .primary-button,
+.button-group > .ghost-button,
+.button-group > .icon-text-button {
+  border-radius: 0;
+}
+
+.button-group > * + * {
+  margin-left: -1px;
+}
+
+.button-group > :first-child {
+  border-top-left-radius: var(--radius-md);
+  border-bottom-left-radius: var(--radius-md);
+}
+
+.button-group > :last-child {
+  border-top-right-radius: var(--radius-md);
+  border-bottom-right-radius: var(--radius-md);
+}
+
 .primary-button {
   background: var(--accent-gradient);
   color: white;

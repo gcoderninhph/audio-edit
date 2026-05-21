@@ -4,7 +4,8 @@ from urllib.parse import urljoin
 import requests
 
 try:
-    from vbee_cache import build_audio_cache_key, get_cached_audio, set_cached_audio, set_cached_request_status
+    from vbee_asset_service import expire_vbee_segment_assets, reuse_vbee_segment_asset, store_vbee_segment_audio_asset
+    from vbee_cache import build_audio_cache_key, set_cached_request_status
     from vbee_store import (
         VBEE_STATUS_COMPLETE,
         VBEE_STATUS_FAILED,
@@ -13,7 +14,6 @@ try:
         VbeeNotFoundError,
         VbeeValidationError,
         create_vbee_request_record,
-        get_vbee_audio_cache,
         get_vbee_config,
         get_vbee_request,
         get_vbee_segment_by_provider_request,
@@ -22,11 +22,11 @@ try:
         list_processing_vbee_segments,
         list_queued_vbee_segments,
         mark_vbee_segment_processing,
-        save_vbee_audio_cache,
         update_vbee_segment,
     )
 except ImportError:
-    from .vbee_cache import build_audio_cache_key, get_cached_audio, set_cached_audio, set_cached_request_status
+    from .vbee_asset_service import expire_vbee_segment_assets, reuse_vbee_segment_asset, store_vbee_segment_audio_asset
+    from .vbee_cache import build_audio_cache_key, set_cached_request_status
     from .vbee_store import (
         VBEE_STATUS_COMPLETE,
         VBEE_STATUS_FAILED,
@@ -35,7 +35,6 @@ except ImportError:
         VbeeNotFoundError,
         VbeeValidationError,
         create_vbee_request_record,
-        get_vbee_audio_cache,
         get_vbee_config,
         get_vbee_request,
         get_vbee_segment_by_provider_request,
@@ -44,7 +43,6 @@ except ImportError:
         list_processing_vbee_segments,
         list_queued_vbee_segments,
         mark_vbee_segment_processing,
-        save_vbee_audio_cache,
         update_vbee_segment,
     )
 
@@ -207,7 +205,7 @@ def _submit_segment_to_vbee(segment, token, config, webhook_base_url):
     provider_request_id = _provider_request_id(response_payload) or str(segment.get('id'))
     audio_url = _audio_url(response_payload)
     status = _provider_status(response_payload)
-    if audio_url or status in {'success', 'complete', 'completed', 'done'}:
+    if audio_url:
         return {'state': VBEE_STATUS_COMPLETE, 'providerRequestId': provider_request_id, 'audioUrl': audio_url, 'raw': response_payload}
     if status in {'failure', 'failed', 'fail', 'error'}:
         return {'state': VBEE_STATUS_FAILED, 'providerRequestId': provider_request_id, 'errorMessage': _provider_error(response_payload), 'raw': response_payload}
@@ -238,32 +236,40 @@ def _fetch_segment_from_vbee(segment, token, config):
     return {'state': VBEE_STATUS_PROCESSING, 'raw': payload}
 
 
-def _cache_payload_for_segment(segment, audio_url):
-    return {
-        'audioUrl': audio_url,
-        'characterCount': int(segment.get('characterCount') or len(segment.get('text') or '')),
-        'providerRequestId': segment.get('providerRequestId') or '',
-    }
+def _persist_completed_segment_audio(segment, source_audio_url, provider_request_id=''):
+    stored_asset = store_vbee_segment_audio_asset(
+        segment['cacheKey'],
+        segment.get('language') or '',
+        segment.get('voiceCode') or '',
+        source_audio_url,
+        provider_request_id or segment.get('providerRequestId') or '',
+        segment.get('characterCount') or len(segment.get('text') or ''),
+    )
+    return stored_asset.get('audioUrl') or ''
 
 
 def create_voiceover_request(user_id, subtitles, language='', voice_code='', webhook_base_url=''):
+    expire_vbee_segment_assets(limit=100)
     config = get_vbee_config()
     safe_language = str(language or config.get('defaultLanguage') or 'vi').strip()[:32]
     safe_voice_code = str(voice_code or config.get('defaultVoiceCode') or '').strip()[:80]
     segments = []
+    reusable_assets = {}
     for subtitle in normalize_subtitles(subtitles):
         cache_key = build_audio_cache_key(subtitle['text'], safe_voice_code, safe_language)
-        cached_audio = get_cached_audio(cache_key) or get_vbee_audio_cache(cache_key)
         segment = {
             **subtitle,
             'cacheKey': cache_key,
             'characterCount': len(subtitle['text']),
             'status': VBEE_STATUS_QUEUED,
         }
-        if cached_audio and cached_audio.get('audioUrl'):
+        if cache_key not in reusable_assets:
+            reusable_assets[cache_key] = reuse_vbee_segment_asset(cache_key)
+        reusable_audio = reusable_assets.get(cache_key)
+        if reusable_audio:
             segment.update({
-                'audioUrl': cached_audio['audioUrl'],
-                'providerRequestId': cached_audio.get('providerRequestId') or '',
+                'audioUrl': reusable_audio['audioUrl'],
+                'providerRequestId': reusable_audio.get('providerRequestId') or '',
                 'status': VBEE_STATUS_COMPLETE,
             })
         segments.append(segment)
@@ -313,11 +319,11 @@ def dispatch_queued_vbee_segments(limit=50, webhook_base_url=''):
 
         provider_request_id = submit_result.get('providerRequestId') or str(segment['id'])
         if submit_result.get('state') == VBEE_STATUS_COMPLETE:
-            audio_url = submit_result.get('audioUrl') or ''
-            request_record = update_vbee_segment(segment['id'], status=VBEE_STATUS_COMPLETE, token_id=token['id'], provider_request_id=provider_request_id, audio_url=audio_url)
-            if audio_url:
-                save_vbee_audio_cache(segment['cacheKey'], segment.get('language') or '', segment.get('voiceCode') or '', audio_url, provider_request_id, segment.get('characterCount'))
-                set_cached_audio(segment['cacheKey'], _cache_payload_for_segment({**segment, 'providerRequestId': provider_request_id}, audio_url))
+            try:
+                audio_url = _persist_completed_segment_audio(segment, submit_result.get('audioUrl') or '', provider_request_id)
+                request_record = update_vbee_segment(segment['id'], status=VBEE_STATUS_COMPLETE, token_id=token['id'], provider_request_id=provider_request_id, audio_url=audio_url)
+            except Exception as error:
+                request_record = update_vbee_segment(segment['id'], status=VBEE_STATUS_FAILED, token_id=token['id'], provider_request_id=provider_request_id, error_message=str(error)[:1000])
             if request_record:
                 set_cached_request_status(request_record['requestId'], request_record)
         elif submit_result.get('state') == VBEE_STATUS_FAILED:
@@ -345,11 +351,11 @@ def refresh_processing_vbee_segments(limit=50):
             if not result:
                 continue
             if result.get('state') == VBEE_STATUS_COMPLETE:
-                audio_url = result.get('audioUrl') or ''
-                request_record = update_vbee_segment(segment['id'], status=VBEE_STATUS_COMPLETE, audio_url=audio_url)
-                if audio_url:
-                    save_vbee_audio_cache(segment['cacheKey'], segment.get('language') or '', segment.get('voiceCode') or '', audio_url, segment.get('providerRequestId') or '', segment.get('characterCount'))
-                    set_cached_audio(segment['cacheKey'], _cache_payload_for_segment(segment, audio_url))
+                try:
+                    audio_url = _persist_completed_segment_audio(segment, result.get('audioUrl') or '', segment.get('providerRequestId') or '')
+                    request_record = update_vbee_segment(segment['id'], status=VBEE_STATUS_COMPLETE, audio_url=audio_url)
+                except Exception as error:
+                    request_record = update_vbee_segment(segment['id'], status=VBEE_STATUS_FAILED, error_message=str(error)[:1000])
             elif result.get('state') == VBEE_STATUS_FAILED:
                 request_record = update_vbee_segment(segment['id'], status=VBEE_STATUS_FAILED, error_message=result.get('errorMessage') or 'Vbee request failed')
             else:
@@ -367,11 +373,12 @@ def apply_vbee_webhook(payload):
     segment = get_vbee_segment_by_provider_request(provider_request_id)
     audio_url = _audio_url(payload)
     status = _provider_status(payload)
-    if audio_url or status in {'success', 'complete', 'completed', 'done'}:
-        request_record = update_vbee_segment(segment['id'], status=VBEE_STATUS_COMPLETE, audio_url=audio_url, provider_request_id=provider_request_id)
-        if audio_url:
-            save_vbee_audio_cache(segment['cacheKey'], segment.get('language') or '', segment.get('voiceCode') or '', audio_url, provider_request_id, segment.get('characterCount'))
-            set_cached_audio(segment['cacheKey'], _cache_payload_for_segment(segment, audio_url))
+    if audio_url:
+        try:
+            stored_audio_url = _persist_completed_segment_audio(segment, audio_url, provider_request_id)
+            request_record = update_vbee_segment(segment['id'], status=VBEE_STATUS_COMPLETE, audio_url=stored_audio_url, provider_request_id=provider_request_id)
+        except Exception as error:
+            request_record = update_vbee_segment(segment['id'], status=VBEE_STATUS_FAILED, provider_request_id=provider_request_id, error_message=str(error)[:1000])
     elif status in {'failure', 'failed', 'fail', 'error', 'canceled', 'cancelled'}:
         request_record = update_vbee_segment(segment['id'], status=VBEE_STATUS_FAILED, provider_request_id=provider_request_id, error_message=_provider_error(payload) or 'Vbee request failed')
     else:

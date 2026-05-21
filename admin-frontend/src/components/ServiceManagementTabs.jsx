@@ -30,7 +30,7 @@ export default function ServiceManagementTabs({ onNavigate, route }) {
         })}
       </div>
       <div className="iap-tab-content">
-        {activeTab === 'vbee' && <VbeeOperationsPanel activeSection={route?.vbeeSection} onNavigate={onNavigate} requestId={route?.vbeeRequestId} />}
+        {activeTab === 'vbee' && <VbeeOperationsPanel activeSection={route?.vbeeSection} onNavigate={onNavigate} requestId={route?.vbeeRequestId} segmentHash={route?.vbeeSegmentHash} />}
       </div>
     </section>
   )

@@ -16,7 +16,7 @@ VBEE_REDIS_DB = int(os.environ.get('VBEE_REDIS_DB') or os.environ.get('IAP_REDIS
 VBEE_REDIS_HOST = os.environ.get('VBEE_REDIS_HOST') or os.environ.get('IAP_REDIS_HOST') or os.environ.get('REDIS_HOST', 'localhost')
 VBEE_REDIS_PORT = int(os.environ.get('VBEE_REDIS_PORT') or os.environ.get('IAP_REDIS_PORT') or os.environ.get('REDIS_PORT', '6379'))
 VBEE_REQUEST_TTL_SECONDS = int(os.environ.get('VBEE_REQUEST_CACHE_TTL_SECONDS', '86400'))
-VBEE_AUDIO_CACHE_TTL_SECONDS = int(os.environ.get('VBEE_AUDIO_CACHE_TTL_SECONDS', '2592000'))
+VBEE_AUDIO_CACHE_TTL_SECONDS = int(os.environ.get('VBEE_AUDIO_CACHE_TTL_SECONDS', '259200'))
 
 _cached_client = None
 
@@ -73,6 +73,17 @@ def set_cached_audio(cache_key, payload):
         return False
 
 
+def delete_cached_audio(cache_key):
+    client = _get_client()
+    if client is None:
+        return False
+    try:
+        client.delete(_cache_key('audio', cache_key))
+        return True
+    except Exception:
+        return False
+
+
 def get_cached_request_status(request_id):
     client = _get_client()
     if client is None:
@@ -104,3 +115,16 @@ def delete_cached_request_status(request_id):
         return True
     except Exception:
         return False
+
+
+def clear_all_vbee_cached_state():
+    client = _get_client()
+    if client is None:
+        return 0
+    try:
+        deleted_count = 0
+        for cache_key in client.scan_iter(match=_cache_key('*', '*'), count=200):
+            deleted_count += int(client.delete(cache_key) or 0)
+        return deleted_count
+    except Exception:
+        return 0
