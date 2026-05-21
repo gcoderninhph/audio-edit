@@ -53,6 +53,16 @@ def register_admin_web_routes(app):
     def admin_web_iap_subpage(subpath):
         return _send_admin_app()
 
+    @app.route('/admin/service', methods=['GET'])
+    @app.route('/admin/service/', methods=['GET'])
+    def admin_web_service_page():
+        return _send_admin_app()
+
+    @app.route('/admin/service/<path:subpath>', methods=['GET'])
+    @app.route('/admin/service/<path:subpath>/', methods=['GET'])
+    def admin_web_service_subpage(subpath):
+        return _send_admin_app()
+
     @app.route('/admin/iap/bank-hook-history', methods=['GET'])
     @app.route('/admin/iap/bank-hook-history/', methods=['GET'])
     def admin_web_iap_bank_hook_history_page():

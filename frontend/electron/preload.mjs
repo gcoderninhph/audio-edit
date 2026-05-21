@@ -26,6 +26,10 @@ contextBridge.exposeInMainWorld('desktopBridge', {
       }
     },
   },
+  narratorCompose: {
+    compose: (payload) => ipcRenderer.invoke('narrator-compose:compose', payload),
+    downloadAudio: (payload) => ipcRenderer.invoke('narrator-compose:download-audio', payload),
+  },
   exportOutput: {
     getDefaultDirectory: () => ipcRenderer.invoke('export-output:get-default-directory'),
     chooseDirectory: () => ipcRenderer.invoke('export-output:choose-directory'),

@@ -4,11 +4,14 @@ import AdminLayout from './components/AdminLayout'
 import IapPage from './components/IapPage'
 import LoginPage from './components/LoginPage'
 import ManagePage from './components/ManagePage'
+import ServicePage from './components/ServicePage'
 import SetupPage from './components/SetupPage'
 import UserDetailPage from './components/UserDetailPage'
 import './App.css'
 
 const IAP_TABS = new Set(['packages', 'api-key', 'payment-tools', 'sale'])
+const SERVICE_TABS = new Set(['vbee'])
+const VBEE_SECTIONS = new Set(['tokens', 'requests', 'config'])
 
 function parseIapRoute(normalizedPath) {
   if (normalizedPath === '/admin/iap/pack-function') {
@@ -77,6 +80,25 @@ function parseAdminRoute(pathname = window.location.pathname) {
 
   const iapRoute = parseIapRoute(normalizedPath)
   if (iapRoute) return iapRoute
+
+  const serviceRequestMatch = normalizedPath.match(/^\/admin\/service\/vbee\/requests\/(.+)$/)
+  if (serviceRequestMatch) {
+    return { name: 'service', serviceTab: 'vbee', vbeeRequestId: decodeURIComponent(serviceRequestMatch[1]), vbeeSection: 'requests' }
+  }
+
+  const serviceSectionMatch = normalizedPath.match(/^\/admin\/service\/vbee\/([^/]+)$/)
+  if (serviceSectionMatch && VBEE_SECTIONS.has(serviceSectionMatch[1])) {
+    return { name: 'service', serviceTab: 'vbee', vbeeSection: serviceSectionMatch[1] }
+  }
+
+  const serviceTabMatch = normalizedPath.match(/^\/admin\/service\/([^/]+)$/)
+  if (serviceTabMatch && SERVICE_TABS.has(serviceTabMatch[1])) {
+    return { name: 'service', serviceTab: serviceTabMatch[1], vbeeSection: 'tokens' }
+  }
+
+  if (normalizedPath === '/admin/service') {
+    return { name: 'service', serviceTab: 'vbee', vbeeSection: 'tokens' }
+  }
 
   if (normalizedPath === '/admin/manage' || normalizedPath === '/console') return { name: 'manage' }
 
@@ -163,10 +185,16 @@ function App() {
       if (route.iapTab === 'sale') return 'IAP sales'
       return 'IAP packages'
     }
+    if (route.name === 'service') {
+      if (route.vbeeRequestId) return 'Vbee request'
+      if (route.vbeeSection === 'requests') return 'Vbee requests'
+      if (route.vbeeSection === 'config') return 'Vbee config'
+      return 'Vbee tokens'
+    }
     if (route.name === 'user-detail') return 'User detail'
     if (route.name === 'manage') return 'User management'
     return 'Admin login'
-  }, [route.iapTab, route.name, route.paymentToolHistoryId, route.paymentTransactionId])
+  }, [route.iapTab, route.name, route.paymentToolHistoryId, route.paymentTransactionId, route.vbeeRequestId, route.vbeeSection])
 
   const handleSessionUpdate = (nextSession) => {
     setSession(nextSession)
@@ -190,6 +218,7 @@ function App() {
       {notice && <div className="notice notice-info">{notice}</div>}
       {route.name === 'setup' && <SetupPage onComplete={handleSessionUpdate} />}
       {route.name === 'iap' && <IapPage route={route} onHeaderActionsChange={setHeaderActions} onNavigate={navigate} />}
+      {route.name === 'service' && <ServicePage route={route} onHeaderActionsChange={setHeaderActions} onNavigate={navigate} />}
       {route.name === 'manage' && <ManagePage onNavigate={navigate} onHeaderActionsChange={setHeaderActions} />}
       {route.name === 'user-detail' && <UserDetailPage userId={route.userId} onNavigate={navigate} onHeaderActionsChange={setHeaderActions} />}
       {route.name === 'login' && <LoginPage onLogin={handleSessionUpdate} initialNotice={notice} />}

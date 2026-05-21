@@ -80,7 +80,7 @@ services:
     volumes:
       - ./llm_subtrans_data:/workspace/data
       - /var/run/docker.sock:/var/run/docker.sock
-    command: ["web"]
+    command: [ "web" ]
     healthcheck:
       test:
         - CMD
@@ -109,7 +109,7 @@ services:
       MYSQL_DATABASE: ${MYSQL_DATABASE}
     volumes:
       - ./llm_subtrans_data:/workspace/data
-    command: ["cli"]
+    command: [ "cli" ]
     restart: "no"
 
   mongo:
@@ -126,7 +126,7 @@ services:
       - ./whishper_data/mongo/logs:/var/log/mongodb
     expose:
       - "27017"
-    command: ["--logpath", "/var/log/mongodb/mongod.log"]
+    command: [ "--logpath", "/var/log/mongodb/mongod.log" ]
 
   whishper:
     image: pluja/whishper:latest
@@ -139,6 +139,8 @@ services:
         condition: service_started
     expose:
       - "80"
+    ports:
+      - "8000:80"
     environment:
       PUBLIC_INTERNAL_API_HOST: http://127.0.0.1:80
       PUBLIC_TRANSLATION_API_HOST: ""

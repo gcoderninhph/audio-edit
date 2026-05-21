@@ -10,6 +10,7 @@ try:
     from iap_routes import register_iap_routes
     from logging_setup import configure_backend_logging
     from proxy_routes import register_proxy_routes
+    from vbee_routes import register_vbee_routes
 except ImportError:
     from .admin_routes import register_admin_routes
     from .admin_web_routes import register_admin_web_routes
@@ -18,6 +19,7 @@ except ImportError:
     from .iap_routes import register_iap_routes
     from .logging_setup import configure_backend_logging
     from .proxy_routes import register_proxy_routes
+    from .vbee_routes import register_vbee_routes
 
 SERVER_PORT = int(os.environ.get('SERVER_PORT', '5000'))
 
@@ -46,6 +48,7 @@ register_iap_routes(app)
 register_iap_payment_routes(app)
 register_admin_web_routes(app)
 register_proxy_routes(app)
+register_vbee_routes(app)
 
 
 if __name__ == '__main__':

@@ -4,6 +4,7 @@ import { fileURLToPath } from 'node:url'
 import { appendDebugLog, getDebugLogFilePath, registerDebugLogIpc } from './debugLog.mjs'
 import { registerNativeExportIpc } from './export/exportCoordinator.mjs'
 import { registerExportOutputIpc } from './export/exportOutputIpc.mjs'
+import { registerNarratorComposeIpc } from './narratorCompose.mjs'
 import { registerDesktopAppProtocol } from './projectMediaProtocol.mjs'
 import { registerProjectStoreIpc } from './projectStore.mjs'
 import { registerSubtitleFontIpc } from './subtitleFont.mjs'
@@ -66,6 +67,7 @@ registerDebugLogIpc(ipcMain)
 registerSubtitleFontIpc(ipcMain)
 registerNativeExportIpc(ipcMain)
 registerExportOutputIpc(ipcMain)
+registerNarratorComposeIpc(ipcMain)
 
 function logDesktopEvent(scope, message, data = {}, level = 'info') {
   void appendDebugLog({ scope, message, data, level })

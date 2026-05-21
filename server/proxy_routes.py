@@ -2,7 +2,6 @@ from flask import Response, jsonify, request
 import io
 import os
 import requests
-from urllib.parse import urlparse
 
 try:
     from auth_routes import require_access_token
@@ -11,7 +10,6 @@ try:
         build_json_success_response,
         build_local_translation_response,
         build_proxy_response,
-        build_vbee_router_url,
         first_payload_value,
         get_claim_user_id,
         read_response_payload,
@@ -34,7 +32,6 @@ except ImportError:
         build_json_success_response,
         build_local_translation_response,
         build_proxy_response,
-        build_vbee_router_url,
         first_payload_value,
         get_claim_user_id,
         read_response_payload,
@@ -53,7 +50,6 @@ except ImportError:
 
 LLM_SUBTRANS_API_URL = os.environ.get('LLM_SUBTRANS_API_URL', 'http://llm-subtrans-web:8080/api').rstrip('/')
 TRANSLATION_CREDIT_COST = 100
-VOICEOVER_CREDIT_COST = 200
 
 
 def register_proxy_routes(app):
@@ -242,154 +238,3 @@ def register_proxy_routes(app):
             print(f"LLM-Subtrans API download error: {error}")
             return jsonify({'error': 'Failed to download from LLM-Subtrans API'}), 502
 
-    @app.route('/api/voiceover/start', methods=['POST'])
-    def start_voiceover():
-        claims, auth_error = require_access_token()
-        if auth_error:
-            return auth_error
-
-        if 'file' not in request.files:
-            return jsonify({'error': 'No file part'}), 400
-
-        file = request.files['file']
-        if not file.filename or not file.filename.lower().endswith('.srt'):
-            return jsonify({'error': 'Only .srt files are supported'}), 400
-
-        file_bytes = file.read()
-        if not file_bytes:
-            return jsonify({'error': 'Subtitle file is empty'}), 400
-
-        files = {'file': (file.filename, io.BytesIO(file_bytes), file.mimetype or 'text/plain')}
-        user_id = get_claim_user_id(claims)
-        charged_user, charge_error = charge_user_credits_or_error(
-            claims,
-            VOICEOVER_CREDIT_COST,
-            'generate voiceover',
-            'voiceover_charge',
-            details={'feature': 'voiceover'},
-        )
-        if charge_error:
-            return charge_error
-
-        try:
-            response = requests.post(
-                build_vbee_router_url('/tasks'),
-                files=files,
-                timeout=30,
-            )
-            response_payload = read_response_payload(response)
-            if response.ok:
-                request_id = first_payload_value(response_payload, ('request_id', 'requestId', 'id'))
-                if not request_id:
-                    refund_credits_if_needed(
-                        user_id,
-                        VOICEOVER_CREDIT_COST,
-                        'voiceover_refund',
-                        'Refunded voiceover credits',
-                        {'feature': 'voiceover'},
-                    )
-                    return jsonify({'error': 'Vbee router did not return a request_id'}), 502
-                request_error = save_server_request(
-                    request_id,
-                    user_id,
-                    'voiceover',
-                    'vbee-router',
-                    source_file_name=file.filename,
-                    details={'contentType': file.mimetype or 'text/plain'},
-                )
-                if request_error:
-                    return request_error
-                return build_json_success_response(
-                    response_payload,
-                    response.status_code,
-                    creditBalance=charged_user.get('credits'),
-                    creditCost=VOICEOVER_CREDIT_COST,
-                )
-
-            refund_credits_if_needed(
-                user_id,
-                VOICEOVER_CREDIT_COST,
-                'voiceover_refund',
-                'Refunded voiceover credits',
-                {'feature': 'voiceover'},
-            )
-            return build_proxy_response(response, 'Failed to communicate with Vbee Router')
-        except requests.RequestException as error:
-            refund_credits_if_needed(
-                user_id,
-                VOICEOVER_CREDIT_COST,
-                'voiceover_refund',
-                'Refunded voiceover credits',
-                {'feature': 'voiceover'},
-            )
-            print(f"Vbee Router error: {error}")
-            return jsonify({'error': 'Failed to communicate with Vbee Router'}), 502
-
-    @app.route('/api/voiceover/status/<string:request_id>', methods=['GET'])
-    def get_voiceover_status(request_id):
-        claims, auth_error = require_access_token()
-        if auth_error:
-            return auth_error
-
-        stored_request, owner_error = require_request_owner(request_id, claims)
-        if owner_error:
-            return owner_error
-
-        try:
-            response = requests.get(
-                build_vbee_router_url(f'/tasks/{request_id}'),
-                timeout=15,
-            )
-            if response.ok:
-                request_error = sync_server_request_status(stored_request, read_response_payload(response), 'voiceover')
-                if request_error:
-                    return request_error
-            return build_proxy_response(response, 'Failed to communicate with Vbee Router')
-        except requests.RequestException as error:
-            print(f"Vbee Router error: {error}")
-            return jsonify({'error': 'Failed to communicate with Vbee Router'}), 502
-
-    @app.route('/api/voiceover/download', methods=['POST'])
-    def download_voiceover():
-        claims, auth_error = require_access_token()
-        if auth_error:
-            return auth_error
-
-        payload = request.get_json(silent=True) or {}
-        request_id = str(payload.get('request_id') or '').strip()
-        download_url = str(payload.get('download_url') or '').strip()
-
-        if not request_id:
-            return jsonify({'error': 'No request_id specified'}), 400
-
-        _stored_request, owner_error = require_request_owner(request_id, claims)
-        if owner_error:
-            return owner_error
-
-        if not download_url:
-            return jsonify({'error': 'No download_url specified'}), 400
-
-        parsed_url = urlparse(download_url)
-        if parsed_url.scheme not in {'http', 'https'} or not parsed_url.netloc:
-            return jsonify({'error': 'Invalid download_url'}), 400
-
-        try:
-            response = requests.get(download_url, stream=True, timeout=120)
-            if not response.ok:
-                return build_proxy_response(response, 'Failed to download from Vbee service')
-
-            file_name = parsed_url.path.rsplit('/', 1)[-1] or 'voiceover.mp3'
-            content_disposition = response.headers.get('Content-Disposition')
-            if content_disposition and 'filename=' in content_disposition:
-                file_name = content_disposition.split('filename=', 1)[1].strip().strip('"')
-
-            return Response(
-                response.iter_content(chunk_size=8192),
-                content_type=response.headers.get('Content-Type', 'audio/mpeg'),
-                headers={
-                    'Content-Disposition': f'attachment; filename="{file_name}"'
-                }
-            )
-        except requests.RequestException as error:
-            print(f"Vbee download error: {error}")
-            return jsonify({'error': 'Failed to download from Vbee service'}), 502

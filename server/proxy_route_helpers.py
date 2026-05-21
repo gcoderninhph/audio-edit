@@ -1,6 +1,5 @@
 from flask import Response, jsonify
 import json
-import os
 import time
 
 try:
@@ -9,13 +8,6 @@ try:
 except ImportError:
     from .request_store import RequestStoreError, get_request_record, save_request_record
     from .translation_fallback import create_local_translation_job
-
-
-VBEE_ROUTER_API_URL = os.environ.get('VBEE_ROUTER_API_URL', 'http://localhost:3020').rstrip('/')
-
-
-def build_vbee_router_url(path):
-    return f"{VBEE_ROUTER_API_URL}/public/{path.lstrip('/')}"
 
 
 def build_proxy_response(response, fallback_message):

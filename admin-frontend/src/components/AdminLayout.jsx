@@ -1,4 +1,4 @@
-import { LogOut, Package, RefreshCw, Shield, UserCircle, Users } from 'lucide-react'
+import { LogOut, Package, RefreshCw, ServerCog, Shield, UserCircle, Users } from 'lucide-react'
 import { useState } from 'react'
 import { getIdentityLabel, logoutCurrentSession } from '../api/adminApi'
 import DeveloperMarker from './DeveloperMarker'
@@ -19,6 +19,14 @@ const NAVIGATION_ITEMS = [
     label: 'IAP',
     matches: ['iap', 'bank-hook-history', 'bank-hook-history-detail'],
     path: '/admin/iap',
+  },
+  {
+    description: 'External service controls',
+    icon: ServerCog,
+    key: 'service',
+    label: 'Service',
+    matches: ['service'],
+    path: '/admin/service',
   },
 ]
 
