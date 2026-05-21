@@ -167,11 +167,11 @@ async function downloadNewSegments(statusData, requestId, projectId, downloadedS
   }
 }
 
-async function composeDownloadedSegments(downloadedSegments, requestId, totalDurationMs) {
+async function composeDownloadedSegments(downloadedSegments, requestId, totalDurationMs, projectId) {
   const sortedSegments = Array.from(downloadedSegments.values()).sort((a, b) => a.index - b.index)
   const narratorBridge = getNarratorBridge()
   if (narratorBridge?.compose) {
-    const result = await narratorBridge.compose({ requestId, segments: sortedSegments, totalDurationMs })
+    const result = await narratorBridge.compose({ projectId: projectId || '', requestId, segments: sortedSegments, totalDurationMs })
     const bytes = normalizeBytes(result.bytes)
     const audioBlob = new Blob([bytes], { type: result.mimeType || 'audio/wav' })
     return {
@@ -213,7 +213,7 @@ async function pollVoiceoverJob(requestId, subtitles, onProgress, options = {}) 
         throw new Error('Vbee completed the request without returning every audio URL')
       }
       onProgress?.({ phase: 'Composing narration audio...', percent: 94 })
-      const composedAudio = await composeDownloadedSegments(downloadedSegments, requestId, totalDurationMs)
+      const composedAudio = await composeDownloadedSegments(downloadedSegments, requestId, totalDurationMs, options.projectId)
       return {
         ...composedAudio,
         downloadUrl: (statusData.downloadUrls || [])[0] || '',

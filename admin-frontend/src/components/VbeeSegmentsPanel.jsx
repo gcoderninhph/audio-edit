@@ -168,7 +168,7 @@ function VbeeSegmentDetail({ onBack, onDeleted, segmentHash }) {
     <section className="panel iap-inline-detail-panel dev-host">
       <DeveloperMarker code="admin.react.service.vbee.segments.detail" title="Admin React Vbee Segment Detail" />
       <div className="section-toolbar">
-        <div className="section-heading compact"><p>Vbee segment</p><h2>{segmentHash}</h2></div>
+        <div className="section-heading compact"><p>Vbee segment</p><h2>{formatSegmentHash(segmentRecord?.hash || segmentHash)}</h2></div>
         <div className="toolbar-actions">
           <div className="button-group">
             <button type="button" className="ghost-button compact" onClick={onBack}><ArrowLeft size={17} /> Back</button>
@@ -362,7 +362,7 @@ export default function VbeeSegmentsPanel({ onNavigate, segmentHash }) {
               <tr key={segment.hash} className="clickable-row" onClick={() => onNavigate?.(getSegmentDetailPath(segment.hash))}>
                 <td>
                   <strong className="table-truncate" title={segment.text || ''}>{truncateText(segment.text || '-', 15)}</strong>
-                  <small className="table-truncate table-truncate-subtle" title={segment.hash || ''}>{formatSegmentHash(segment.hash)}</small>
+                  <small className="table-truncate table-truncate-subtle" title={formatSegmentHash(segment.hash)}>{formatSegmentHash(segment.hash)}</small>
                 </td>
                 <td>{segment.language || '-'}</td>
                 <td><span className="table-truncate" title={segment.voiceCode || ''}>{formatVoiceCode(segment.voiceCode)}</span></td>

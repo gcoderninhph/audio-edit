@@ -1,12 +1,13 @@
 import { spawn } from 'node:child_process'
 import { existsSync } from 'node:fs'
-import { mkdtemp, readFile, rm, writeFile } from 'node:fs/promises'
+import { mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises'
 import os from 'node:os'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { randomUUID } from 'node:crypto'
 import { runNativeFfmpeg } from './export/nativeFfmpeg.mjs'
 import { loadProjectVoiceoverSegmentFile, saveProjectVoiceoverSegmentFile } from './projectVoiceoverSegmentStore.mjs'
+import { assertProjectId, ensureProjectVoiceoverDirectory } from './projectStoreShared.mjs'
 
 const __filename = fileURLToPath(import.meta.url)
 const __dirname = path.dirname(__filename)
@@ -121,18 +122,46 @@ async function writeNormalizedSegment(tempDir, segment, index) {
   }
 }
 
+function sanitizeComposeWorkspaceName(value) {
+  const normalizedValue = String(value || '').trim().replace(/[^a-z0-9._-]+/gi, '-').replace(/^-+|-+$/g, '')
+  return normalizedValue || randomUUID()
+}
+
+async function createComposeWorkspace(projectId, requestId) {
+  if (!projectId) {
+    return {
+      cleanup: true,
+      directory: await mkdtemp(path.join(os.tmpdir(), `audio-edit-narrator-${randomUUID()}-`)),
+    }
+  }
+
+  const safeProjectId = assertProjectId(projectId)
+  const voiceoverDirectory = await ensureProjectVoiceoverDirectory(safeProjectId)
+  const workspaceDirectory = path.join(
+    voiceoverDirectory,
+    'narrator-compose',
+    `${sanitizeComposeWorkspaceName(requestId || 'compose')}-${Date.now()}`,
+  )
+  await mkdir(workspaceDirectory, { recursive: true })
+  return {
+    cleanup: false,
+    directory: workspaceDirectory,
+  }
+}
+
 async function composeNarration(payload = {}) {
   const segments = Array.isArray(payload.segments) ? payload.segments : []
   if (!segments.length) {
     throw new Error('No Vbee audio segments were provided for narrator compose.')
   }
-  const tempDir = await mkdtemp(path.join(os.tmpdir(), `audio-edit-narrator-${randomUUID()}-`))
+
+  const composeWorkspace = await createComposeWorkspace(payload.projectId, payload.requestId)
   try {
-    const outputPath = path.join(tempDir, 'voiceover.wav')
-    const manifestPath = path.join(tempDir, 'manifest.json')
+    const outputPath = path.join(composeWorkspace.directory, 'voiceover.wav')
+    const manifestPath = path.join(composeWorkspace.directory, 'manifest.json')
     const manifestSegments = []
     for (const [index, segment] of segments.entries()) {
-      manifestSegments.push(await writeNormalizedSegment(tempDir, segment, index))
+      manifestSegments.push(await writeNormalizedSegment(composeWorkspace.directory, segment, index))
     }
     const totalDurationMs = Math.max(toManifestMs(payload.totalDurationMs), ...manifestSegments.map((segment) => segment.end_ms || 0))
     await writeFile(manifestPath, JSON.stringify({
@@ -144,7 +173,7 @@ async function composeNarration(payload = {}) {
       segments: manifestSegments,
       total_duration_ms: totalDurationMs,
     }, null, 2))
-    await runProcess(getNarratorExecutablePath(), ['compose', '--manifest', manifestPath], { cwd: tempDir })
+    await runProcess(getNarratorExecutablePath(), ['compose', '--manifest', manifestPath], { cwd: composeWorkspace.directory })
     return {
       bytes: new Uint8Array(await readFile(outputPath)),
       duration: totalDurationMs / 1000,
@@ -152,7 +181,9 @@ async function composeNarration(payload = {}) {
       mimeType: 'audio/wav',
     }
   } finally {
-    await rm(tempDir, { force: true, recursive: true }).catch(() => undefined)
+    if (composeWorkspace.cleanup) {
+      await rm(composeWorkspace.directory, { force: true, recursive: true }).catch(() => undefined)
+    }
   }
 }
 
