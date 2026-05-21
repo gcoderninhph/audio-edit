@@ -1,0 +1,48 @@
+# Web Admin Map
+
+## admin-frontend
+- `admin-frontend/package.json` - Declares the standalone React admin frontend scripts and dependencies, including Vite, React, ESLint, and lucide icons.
+- `admin-frontend/README.md` - Documents admin frontend commands, dev proxy behavior, and Flask serving from the production build output.
+- `admin-frontend/vite.config.js` - Configures the admin React app with `/admin/` as the production base path and proxies `/api` to the local Flask server in development.
+- `admin-frontend/src/main.jsx` - Boots the standalone React admin app into the Vite root element.
+- `admin-frontend/src/App.jsx` - Owns the admin SPA route parsing, session verification, shared layout composition, and route-level header actions.
+- `admin-frontend/src/App.css` - Imports the split admin frontend style modules for layout, forms, tables, and detail views.
+- `admin-frontend/src/index.css` - Defines the dark admin theme tokens, document styles, and global reset.
+- `admin-frontend/src/api/adminApi.js` - Wraps the Flask auth and admin APIs for login, bootstrap, user management, IAP, requests, and credits.
+- `admin-frontend/src/api/adminVbeeApi.js` - Wraps the admin-only Service/Vbee APIs for tokens, requests, grouped segments, inline audio, delete, cache clear, and config.
+- `admin-frontend/src/utils/format.js` - Provides shared number, currency, and date-time formatting helpers for admin screens.
+- `admin-frontend/src/components/AdminLayout.jsx` - Renders the shared admin React shell with fixed navigation, topbar actions, and logout flow.
+- `admin-frontend/src/components/DeveloperMarker.jsx` - Renders developer-only locator markers for admin React UI sections.
+- `admin-frontend/src/components/LoginPage.jsx` - Renders the admin React login form and submits credentials to the Flask auth API.
+- `admin-frontend/src/components/SetupPage.jsx` - Renders the temporary-admin bootstrap form that creates the persisted admin account.
+- `admin-frontend/src/components/ManagePage.jsx` - Renders the admin user-management table, search, page-size controls, and detail navigation.
+- `admin-frontend/src/components/IapPage.jsx` - Wraps the dedicated admin React IAP route and passes parsed route state into the tabbed IAP shell.
+- `admin-frontend/src/components/IapManagementTabs.jsx` - Renders the route-driven admin IAP tab strip.
+- `admin-frontend/src/components/IapPackagesPanel.jsx` - Renders the admin IAP catalog panel with package create, edit, delete, and function actions.
+- `admin-frontend/src/components/IapPackageFunctionDialog.jsx` - Renders the package-function dialog for credits and timed premium behavior.
+- `admin-frontend/src/components/IapApiKeyPanel.jsx` - Renders payment-hook API key management for `/api/pay/info`.
+- `admin-frontend/src/components/IapPaymentOperationsPanel.jsx` - Renders the IAP payment-tools split layout and route-driven detail area.
+- `admin-frontend/src/components/IapBeneficiaryAccountsDialog.jsx` - Renders inline beneficiary account management and popup creation flow.
+- `admin-frontend/src/components/IapBeneficiaryAccountDetailPanel.jsx` - Renders the beneficiary account detail replacement view.
+- `admin-frontend/src/components/IapPaymentTransactionsDialog.jsx` - Renders the inline payment transaction list with row-to-detail navigation.
+- `admin-frontend/src/components/IapPaymentTransactionDetailPanel.jsx` - Renders the payment transaction detail replacement view.
+- `admin-frontend/src/components/IapRefundPendingDialog.jsx` - Renders the inline refund-pending review table and detail entrypoint.
+- `admin-frontend/src/components/IapRefundPendingDetailPanel.jsx` - Renders the refund-pending detail replacement view.
+- `admin-frontend/src/components/IapBankHookHistoryPage.jsx` - Renders the searchable bank-hook history page and embedded payment-tools history view.
+- `admin-frontend/src/components/IapBankHookHistoryDetailPage.jsx` - Renders the bank-hook transaction detail page with summary table and raw payload JSON.
+- `admin-frontend/src/components/IapSalesPanel.jsx` - Renders the sale-rule admin tab with add, list, and delete flows.
+- `admin-frontend/src/components/ServicePage.jsx` - Wraps the dedicated Service admin route and passes parsed route state into the Service tab shell.
+- `admin-frontend/src/components/ServiceManagementTabs.jsx` - Renders the Service tab shell and refresh-safe Vbee route navigation.
+- `admin-frontend/src/components/VbeeOperationsPanel.jsx` - Renders the Vbee left-nav and right-content operations layout.
+- `admin-frontend/src/components/VbeeTokensPanel.jsx` - Renders Vbee token CRUD, active-state controls, concurrency, and stats.
+- `admin-frontend/src/components/VbeeRequestsPanel.jsx` - Renders Vbee request list filters and request detail replacement views.
+- `admin-frontend/src/components/VbeeSegmentsPanel.jsx` - Renders grouped Vbee segment list and detail flows, including masked cache keys, cache clear, delete, and inline audio preview.
+- `admin-frontend/src/components/VbeeConfigPanel.jsx` - Renders the Vbee provider config form and derived webhook display.
+- `admin-frontend/src/components/UserDetailPage.jsx` - Renders the selected user detail screen with premium, lock, request, and credit history management.
+- `admin-frontend/src/components/Pagination.jsx` - Renders reusable pagination controls across admin lists.
+- `admin-frontend/src/utils/iapPackages.js` - Centralizes admin IAP package-type constants, labels, and derived behavior summaries.
+- `admin-frontend/src/styles/layout.css` - Styles the shared admin shell, sidebar, topbar, panels, and responsive layout.
+- `admin-frontend/src/styles/forms.css` - Styles admin forms, buttons, notices, search controls, and modal dialog surfaces.
+- `admin-frontend/src/styles/tables.css` - Styles admin tables, clickable rows, pills, actions, empty states, and pagination bars.
+- `admin-frontend/src/styles/detail.css` - Styles user-detail headers, compact detail grids, Vbee request summaries, and dialog sizing.
+- `admin-frontend/src/styles/iap.css` - Styles the tabbed IAP shell, payment-tools split layout, package actions, and payment detail layouts.

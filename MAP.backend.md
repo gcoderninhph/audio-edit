@@ -1,0 +1,52 @@
+# Backend Map
+
+## server
+- `server/app.py` - Flask API entrypoint with auth APIs, admin APIs, IAP APIs, backend-owned Vbee APIs, admin web serving, and background workers.
+- `server/logging_setup.py` - Configures hourly rotating backend log files and shared Flask logging setup.
+- `server/auth_routes.py` - Registers auth endpoints, JWT access or refresh flows, current-user reads, logout, and admin access guards.
+- `server/auth_identity.py` - Owns shared auth-side username normalization and public-user shaping helpers.
+- `server/auth_store.py` - Owns MySQL-backed auth persistence, schema bootstrap, and shared user or balance state.
+- `server/auth_user_record.py` - Centralizes auth-user role, lock, and premium-window normalization.
+- `server/auth_refresh_store.py` - Owns refresh-token persistence helpers split out of `auth_store.py`.
+- `server/auth_credit_store.py` - Owns the MySQL credit-history ledger and typed balance mutations.
+- `server/admin_store.py` - Owns admin-side user queries, search, summaries, and role or premium or lock mutations.
+- `server/admin_bootstrap.py` - Creates and clears the temporary bootstrap admin credentials when no persisted admin exists.
+- `server/admin_routes.py` - Registers admin-only backend APIs for bootstrap, user management, credit history, and recent requests.
+- `server/iap_store.py` - Owns MySQL-backed IAP package persistence and schema creation.
+- `server/iap_api_key_store.py` - Owns MySQL-backed payment-hook API key persistence and inbound validation settings.
+- `server/iap_admin_store.py` - Owns admin-only IAP configuration persistence for pack functions and sale rules.
+- `server/iap_cache.py` - Owns the Redis cache helper for the public client IAP package list.
+- `server/iap_routes.py` - Registers public IAP catalog reads plus admin IAP package, API key, history, function, and sale APIs.
+- `server/iap_beneficiary_store.py` - Owns MySQL-backed beneficiary account persistence for Sepay QR payment receivers.
+- `server/iap_payment_store.py` - Owns MySQL-backed QR payment tickets, refund pending records, entitlement application, and cancellation logic.
+- `server/iap_payment_records.py` - Holds shared payment ticket or refund row mappers and pagination helpers.
+- `server/iap_payment_routes.py` - Registers desktop payment ticket APIs, QR-image proxying, admin payment APIs, and payment expiry worker startup.
+- `server/iap_payment_expiry.py` - Starts the worker that expires pending payment tickets every minute.
+- `server/iap_bank_hook_history_store.py` - Owns MySQL-backed bank-hook history persistence, filtering, pagination, and detail lookup.
+- `server/admin_web_routes.py` - Serves the built standalone admin frontend and nested `/admin/...` SPA routes.
+- `server/proxy_routes.py` - Registers translation proxy endpoints and delegates transcription routes to `proxy_transcription_routes.py`.
+- `server/proxy_transcription_routes.py` - Owns the authenticated transcription proxy endpoints and downstream Whishper integration.
+- `server/proxy_credit_helpers.py` - Centralizes shared credit charge or refund helpers for proxy-backed routes.
+- `server/proxy_route_helpers.py` - Owns shared proxy-route helpers for provider shaping and request persistence.
+- `server/vbee_schema.py` - Defines Vbee statuses, validators, serializers, and MySQL schema helpers.
+- `server/vbee_token_store.py` - Owns MySQL-backed Vbee token and provider config CRUD.
+- `server/vbee_request_store.py` - Owns MySQL-backed Vbee request or segment persistence, queue lookups, refresh helpers, and cache-clear deletion paths.
+- `server/vbee_audio_cache_store.py` - Owns the MySQL-backed reusable Vbee asset registry keyed by segment cache key.
+- `server/vbee_segment_store.py` - Groups historical Vbee request segments by cache hash for admin segment list and detail reads.
+- `server/vbee_store.py` - Thin compatibility re-export for the split Vbee schema, token/config, request/segment, and grouped segment modules.
+- `server/vbee_cache.py` - Owns Redis-backed active request status and reusable audio-asset cache helpers.
+- `server/vbee_asset_service.py` - Orchestrates the Cloudflare R2-backed Vbee asset lifecycle, reuse expiry, and delete helpers.
+- `server/vbee_asset_expiry.py` - Starts the daemon worker that expires old Vbee segment assets.
+- `server/vbee_service.py` - Orchestrates Vbee voiceover creation, provider polling, webhook completion, reuse, and request summary refresh.
+- `server/vbee_routes.py` - Registers client voiceover APIs plus admin Service/Vbee token, request, segment, audio, cache-clear, delete, and config APIs.
+- `server/request_store.py` - Owns MySQL-backed persistence for server-managed transcription, translation, and voiceover request records.
+- `server/translation_fallback.py` - Runs local subtitle translation jobs and serves the fallback translation flow.
+- `server/requirements.txt` - Lists Python runtime dependencies for the subtitle-service backend.
+- `server/Dockerfile` - Builds the backend runtime image and serves Flask on port `5000`.
+
+## root
+- `.gitignore` - Excludes generated workspace artifacts, runtime data, logs, uploads, and bind-mounted service data.
+- `.dockerignore` - Keeps Docker build context small by excluding git metadata, caches, logs, projects, and installed dependencies.
+- `.env` - Stores local Docker Compose secrets and backend runtime defaults.
+- `docker-compose.yml` - Defines the containerized backend stack, internal service wiring, and published ports.
+- `TASK.md` - Tracks active work, validation state, and follow-up refactors for the repository.

@@ -1,8 +1,9 @@
-import { readdir, readFile, writeFile } from 'node:fs/promises'
+import { readdir, readFile, rm, writeFile } from 'node:fs/promises'
 import path from 'node:path'
 import {
   assertProjectId,
   ensureProjectVoiceoverSegmentDirectory,
+  getProjectVoiceoverSegmentDirectory,
   getProjectVoiceoverSegmentPath,
   getProjectsRootCandidates,
   toBuffer,
@@ -95,5 +96,16 @@ export async function saveProjectVoiceoverSegmentFile(projectId, segmentHash, pa
     fileName,
     mimeType: payload.mimeType || inferMimeType(filePath),
     storedPath: filePath,
+  }
+}
+
+export async function clearProjectVoiceoverSegmentFiles(projectId, preferredRoot) {
+  if (!projectId) {
+    return
+  }
+
+  const safeProjectId = assertProjectId(projectId)
+  for (const projectsRoot of getProjectsRootCandidates(preferredRoot)) {
+    await rm(getProjectVoiceoverSegmentDirectory(safeProjectId, projectsRoot), { force: true, recursive: true }).catch(() => undefined)
   }
 }

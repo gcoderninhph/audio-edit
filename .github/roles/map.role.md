@@ -25,16 +25,48 @@ Use this role whenever you create, rebuild, or update the repository map file at
 - Explain the file's main responsibility and, when useful, what kind of changes should be made there.
 
 Recommended format:
+# Map Files Role
+
+Use this role whenever you create, rebuild, or update the workspace map files at the repository root.
+
+## Purpose
+- `MAP.md` is the desktop app and shared workspace map.
+- `MAP.admin.md` is the standalone admin web app map.
+- `MAP.backend.md` is the backend and runtime map.
+- These files help agents and humans find the correct file to change before editing.
+- Every file description in every map file must be written in English.
+
+## Surface Ownership
+- `MAP.md` covers `.github`, `frontend/`, and shared root files that help route desktop app work.
+- `MAP.admin.md` covers `admin-frontend/`.
+- `MAP.backend.md` covers `server/` and backend runtime files at the workspace root.
+- If a task clearly spans more than one surface, update every affected map file in the same session.
+
+## When To Create Or Rebuild Map Files
+- Create the required map file immediately if it does not exist and the task creates files, adds functionality, changes file responsibilities, or needs better location accuracy on that surface.
+- Rebuild the affected sections when files are split, merged, renamed, or moved.
+- Update the relevant map file in the same session as the code change. Do not defer the map update.
+
+## Coverage Rules
+- When a map file is created for the first time, cover the whole surface that file owns, not just the touched file.
+- After a map file exists, update only the affected entries unless the structure has drifted enough that a broader cleanup is faster and safer.
+- Include source files, key configs, important scripts, and entry points.
+- Skip generated artifacts, caches, uploads, and dependency folders unless the repository intentionally edits them.
+
+## Entry Format
+- Keep one entry per file.
+- Use workspace-relative paths.
+- Use concise English.
+- Explain the file's main responsibility and, when useful, what kind of changes should be made there.
+
+Recommended format:
 
 ```md
-# Repository Map
+# Desktop App Map
 
 ## frontend
 - `frontend/src/hooks/useVideoEditor.js` - Coordinates editor state, detection, subtitles, export flow, and session restore logic.
 - `frontend/src/utils/timeMapping.js` - Maps timestamps between original video time and kept-scene timeline after deletions.
-
-## server
-- `server/app.py` - Flask entry point, persistence APIs, upload endpoints, and external transcription or translation proxies.
 ```
 
 ## Writing Rules
@@ -45,13 +77,14 @@ Recommended format:
 - If a file has become a thin wrapper, say where the real behavior lives.
 
 ## Update Rules
-- When creating a new file, add its `MAP.md` entry in the same session.
+- When creating a new file, add its entry to the map file that owns that surface in the same session.
 - When a file gains a new responsibility, rewrite the entry to reflect the new owner behavior.
 - When a file is split because of the 400-line rule, update the original entry and add entries for the new files so future edits route correctly.
 - When a file is removed or renamed, remove or rename its entry immediately.
 
 ## Agent Notes
-- Read `MAP.md` before broad search on repair or update tasks.
-- Use `MAP.md` to choose the most likely owner file, then confirm locally in code.
-- If the map is missing or stale enough to misroute the task, fix `MAP.md` as part of the same session.
-- Do not treat `MAP.md` as a substitute for verification. It is the routing index, not proof of behavior.
+- Choose the map file that matches the requested surface before broad search.
+- Use `MAP.md` for desktop app or shared workspace work, `MAP.admin.md` for web admin work, and `MAP.backend.md` for backend or runtime work.
+- If a task is ambiguous or cross-surface, read the most likely map first and then any additional map the task clearly touches.
+- If a map file is missing or stale enough to misroute the task, fix that map file as part of the same session.
+- Do not treat a map file as a substitute for verification. It is the routing index, not proof of behavior.
