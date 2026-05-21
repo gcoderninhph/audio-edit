@@ -12,9 +12,10 @@ except ImportError:  # pragma: no cover - boto3 should provide botocore
     BotoConfig = None
 
 try:
-    from vbee_cache import clear_all_vbee_cached_state, delete_cached_audio, get_cached_audio, set_cached_audio
+    from vbee_cache import clear_all_vbee_cached_state, delete_cached_audio, delete_cached_request_status, get_cached_audio, set_cached_audio
     from vbee_store import (
         clear_all_vbee_request_data,
+        clear_vbee_request_data_for_cache_key,
         clear_vbee_segment_audio_urls,
         delete_vbee_audio_cache,
         get_latest_completed_vbee_segment_for_reuse,
@@ -26,9 +27,10 @@ try:
         touch_vbee_audio_cache_expiry,
     )
 except ImportError:
-    from .vbee_cache import clear_all_vbee_cached_state, delete_cached_audio, get_cached_audio, set_cached_audio
+    from .vbee_cache import clear_all_vbee_cached_state, delete_cached_audio, delete_cached_request_status, get_cached_audio, set_cached_audio
     from .vbee_store import (
         clear_all_vbee_request_data,
+        clear_vbee_request_data_for_cache_key,
         clear_vbee_segment_audio_urls,
         delete_vbee_audio_cache,
         get_latest_completed_vbee_segment_for_reuse,
@@ -302,6 +304,42 @@ def expire_vbee_segment_assets(limit=100):
         except Exception as error:  # pragma: no cover - defensive cleanup logging
             logging.getLogger(__name__).warning('Unable to expire Vbee segment asset %s from DB: %s', asset.get('cacheKey'), error)
     return deleted_count
+
+
+def delete_vbee_segment_asset(cache_key):
+    safe_cache_key = str(cache_key or '').strip()
+    cached_asset = get_cached_audio(safe_cache_key) or {}
+    db_asset = get_vbee_audio_cache(safe_cache_key) or {}
+    asset_record = db_asset or cached_asset
+    cleared_request_counts = clear_vbee_request_data_for_cache_key(safe_cache_key)
+
+    deleted_r2_objects = 0
+    file_name = str(asset_record.get('fileName') or '').strip()
+    if file_name:
+        try:
+            config = _require_r2_config()
+            client = _get_r2_client()
+            client.delete_object(Bucket=config['bucketName'], Key=file_name)
+            deleted_r2_objects = 1
+        except Exception as error:  # pragma: no cover - defensive cleanup logging
+            logging.getLogger(__name__).warning('Unable to delete Vbee segment asset %s from R2: %s', file_name, error)
+
+    deleted_redis_keys = 0
+    if cached_asset and delete_cached_audio(safe_cache_key):
+        deleted_redis_keys += 1
+    for request_id in cleared_request_counts.get('requestIds') or []:
+        if delete_cached_request_status(request_id):
+            deleted_redis_keys += 1
+
+    deleted_asset_count = 1 if db_asset and delete_vbee_audio_cache(safe_cache_key) else 0
+    return {
+        'deletedRequestCount': int(cleared_request_counts.get('deletedRequestCount') or 0),
+        'deletedR2Objects': deleted_r2_objects,
+        'deletedRedisKeys': deleted_redis_keys,
+        'assetCount': deleted_asset_count,
+        'requestCount': int(cleared_request_counts.get('requestCount') or 0),
+        'segmentCount': int(cleared_request_counts.get('segmentCount') or 0),
+    }
 
 
 def clear_all_vbee_segment_assets():

@@ -1,4 +1,35 @@
-import { requestJson } from './adminApi'
+import { getStoredSession, mergeSessionPayload, requestJson } from './adminApi'
+
+async function requestAdminBlob(path, options = {}, allowRefresh = true) {
+  const currentSession = getStoredSession()
+  const headers = new Headers(options.headers || {})
+  if (currentSession?.accessToken) headers.set('Authorization', `Bearer ${currentSession.accessToken}`)
+
+  let response
+  try {
+    response = await fetch(path, { ...options, headers })
+  } catch (error) {
+    throw new Error(error?.message || 'Request failed', { cause: error })
+  }
+
+  if (response.status === 401 && allowRefresh && currentSession?.refreshToken) {
+    const refreshResponse = await requestJson('/api/auth/refresh', {
+      method: 'POST',
+      body: JSON.stringify({ refreshToken: currentSession.refreshToken }),
+    }, false)
+    if (refreshResponse.ok) {
+      mergeSessionPayload(refreshResponse.data || {})
+      return requestAdminBlob(path, options, false)
+    }
+  }
+
+  if (!response.ok) {
+    const payload = await response.json().catch(() => null)
+    throw new Error(payload?.error || 'Unable to load Vbee segment audio.')
+  }
+
+  return response.blob()
+}
 
 export async function fetchAdminVbeeTokens() {
   const response = await requestJson('/api/admin/services/vbee/tokens')
@@ -63,6 +94,15 @@ export async function clearAdminVbeeSegmentsCache(password) {
   return response.data || {}
 }
 
+export async function deleteAdminVbeeSegment(segmentHash, password) {
+  const response = await requestJson(`/api/admin/services/vbee/segments/${encodeURIComponent(segmentHash)}`, {
+    method: 'DELETE',
+    body: JSON.stringify({ password }),
+  })
+  if (!response.ok) throw new Error(response.data?.error || 'Unable to delete Vbee segment.')
+  return response.data || {}
+}
+
 export async function fetchAdminVbeeSegmentDetail(segmentHash) {
   const response = await requestJson(`/api/admin/services/vbee/segments/${encodeURIComponent(segmentHash)}`)
   if (!response.ok) throw new Error(response.data?.error || 'Unable to load Vbee segment.')
@@ -73,6 +113,10 @@ export async function fetchAdminVbeeSegmentAudioUrl(segmentHash) {
   const response = await requestJson(`/api/admin/services/vbee/segments/${encodeURIComponent(segmentHash)}/audio-url`)
   if (!response.ok) throw new Error(response.data?.error || 'Unable to load Vbee segment audio.')
   return response.data || {}
+}
+
+export async function fetchAdminVbeeSegmentAudioBlob(segmentHash) {
+  return requestAdminBlob(`/api/admin/services/vbee/segments/${encodeURIComponent(segmentHash)}/audio-stream`)
 }
 
 export async function fetchAdminVbeeConfig() {

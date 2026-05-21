@@ -85,11 +85,14 @@ def refresh_vbee_request_summary(request_id):
             with connection.cursor() as cursor:
                 cursor.execute('SELECT status, COUNT(*) AS count_value FROM vbee_voice_segments WHERE request_id = %s GROUP BY status', (request_id,))
                 counts = {row['status']: int(row.get('count_value') or 0) for row in cursor.fetchall() or []}
-                total = sum(counts.values())
+                cursor.execute('SELECT COUNT(*) AS total_segments, COALESCE(SUM(character_count), 0) AS character_count FROM vbee_voice_segments WHERE request_id = %s', (request_id,))
+                totals_row = cursor.fetchone() or {}
+                total = int(totals_row.get('total_segments') or 0)
                 completed = counts.get(VBEE_STATUS_COMPLETE, 0)
                 failed = counts.get(VBEE_STATUS_FAILED, 0)
                 queued = counts.get(VBEE_STATUS_QUEUED, 0)
                 processing = counts.get(VBEE_STATUS_PROCESSING, 0)
+                character_count = int(totals_row.get('character_count') or 0)
                 status = aggregate_status(total, completed, failed, queued, processing)
                 progress = int(round((completed / total) * 100)) if total else 0
                 cursor.execute('SELECT audio_url FROM vbee_voice_segments WHERE request_id = %s AND status = %s AND audio_url IS NOT NULL ORDER BY segment_index ASC', (request_id, VBEE_STATUS_COMPLETE))
@@ -97,8 +100,8 @@ def refresh_vbee_request_summary(request_id):
                 cursor.execute('SELECT COUNT(*) AS queue_position FROM vbee_voice_requests WHERE status = %s AND created_at < (SELECT created_at FROM vbee_voice_requests WHERE request_id = %s)', (VBEE_STATUS_QUEUED, request_id))
                 queue_position = int((cursor.fetchone() or {}).get('queue_position') or 0) + 1 if status == VBEE_STATUS_QUEUED else 0
                 cursor.execute(
-                    'UPDATE vbee_voice_requests SET status = %s, progress = %s, queue_position = %s, completed_segments = %s, failed_segments = %s, result_urls_json = %s, updated_at = %s WHERE request_id = %s',
-                    (status, progress, queue_position, completed, failed, json_dumps(result_urls), now_timestamp(), request_id),
+                    'UPDATE vbee_voice_requests SET status = %s, progress = %s, queue_position = %s, total_segments = %s, completed_segments = %s, failed_segments = %s, character_count = %s, result_urls_json = %s, updated_at = %s WHERE request_id = %s',
+                    (status, progress, queue_position, total, completed, failed, character_count, json_dumps(result_urls), now_timestamp(), request_id),
                 )
         finally:
             connection.close()
@@ -253,6 +256,53 @@ def update_vbee_segment(segment_id, status=None, token_id=None, provider_request
     except driver.MySQLError as error:
         raise AuthStoreError('Unable to update Vbee segment') from error
     return refresh_vbee_request_summary(row['request_id']) if row else None
+
+
+def clear_vbee_request_data_for_cache_key(cache_key):
+    ensure_vbee_schema()
+    safe_cache_key = str(cache_key or '').strip()
+    if not safe_cache_key:
+        raise VbeeNotFoundError('Vbee segment not found')
+    driver = _require_driver()
+    request_ids = []
+    refresh_request_ids = []
+    deleted_request_count = 0
+    segment_count = 0
+    try:
+        connection = _connect(MYSQL_DATABASE)
+        try:
+            with connection.cursor() as cursor:
+                cursor.execute('SELECT DISTINCT request_id FROM vbee_voice_segments WHERE cache_key = %s', (safe_cache_key,))
+                request_ids = [row.get('request_id') or '' for row in cursor.fetchall() or [] if row.get('request_id')]
+                cursor.execute('SELECT COUNT(*) AS total_items FROM vbee_voice_segments WHERE cache_key = %s', (safe_cache_key,))
+                segment_count = int((cursor.fetchone() or {}).get('total_items') or 0)
+                if segment_count <= 0:
+                    raise VbeeNotFoundError('Vbee segment not found')
+                cursor.execute('DELETE FROM vbee_voice_segments WHERE cache_key = %s', (safe_cache_key,))
+                for request_id in request_ids:
+                    cursor.execute('SELECT COUNT(*) AS total_items FROM vbee_voice_segments WHERE request_id = %s', (request_id,))
+                    remaining_segments = int((cursor.fetchone() or {}).get('total_items') or 0)
+                    if remaining_segments > 0:
+                        refresh_request_ids.append(request_id)
+                        continue
+                    cursor.execute('DELETE FROM vbee_voice_requests WHERE request_id = %s', (request_id,))
+                    deleted_request_count += int(cursor.rowcount or 0)
+        finally:
+            connection.close()
+    except VbeeNotFoundError:
+        raise
+    except driver.MySQLError as error:
+        raise AuthStoreError('Unable to clear Vbee segment request data') from error
+
+    for request_id in refresh_request_ids:
+        refresh_vbee_request_summary(request_id)
+
+    return {
+        'deletedRequestCount': deleted_request_count,
+        'requestCount': len(request_ids),
+        'requestIds': request_ids,
+        'segmentCount': segment_count,
+    }
 
 
 def clear_all_vbee_request_data():

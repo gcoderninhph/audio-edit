@@ -21,6 +21,7 @@ try:
     )
     from vbee_request_store import (
         clear_all_vbee_request_data,
+        clear_vbee_request_data_for_cache_key,
         create_vbee_request_record,
         get_vbee_request,
         get_vbee_segment_by_provider_request,
@@ -65,6 +66,7 @@ except ImportError:
     )
     from .vbee_request_store import (
         clear_all_vbee_request_data,
+        clear_vbee_request_data_for_cache_key,
         create_vbee_request_record,
         get_vbee_request,
         get_vbee_segment_by_provider_request,

@@ -65,7 +65,8 @@
 
 .button-group > .primary-button,
 .button-group > .ghost-button,
-.button-group > .icon-text-button {
+.button-group > .icon-text-button,
+.button-group > .ghost-select {
   border-radius: 0;
 }
 
@@ -93,6 +94,20 @@
   border: 1px solid var(--border-color);
   background: rgba(255, 255, 255, 0.04);
   color: var(--text-secondary);
+}
+
+.ghost-select {
+  min-height: 40px;
+  border: 1px solid var(--border-color);
+  background: rgba(255, 255, 255, 0.04);
+  color: var(--text-secondary);
+  padding: 0 13px;
+  outline: none;
+}
+
+.ghost-select:focus {
+  border-color: var(--border-active);
+  box-shadow: 0 0 0 3px rgba(124, 58, 237, 0.12);
 }
 
 .compact {
