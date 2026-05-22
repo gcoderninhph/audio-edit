@@ -9,6 +9,7 @@
 - `admin-frontend/src/App.css` - Imports the split admin frontend style modules for layout, forms, tables, and detail views.
 - `admin-frontend/src/index.css` - Defines the dark admin theme tokens, document styles, and global reset.
 - `admin-frontend/src/api/adminApi.js` - Wraps the Flask auth and admin APIs for login, bootstrap, user management, IAP, requests, and credits.
+- `admin-frontend/src/api/adminOpenAiApi.js` - Wraps the admin-only OpenAI service APIs for token CRUD, request monitoring, prompt or model configuration, and one-off `.srt` test translation uploads.
 - `admin-frontend/src/api/adminVbeeApi.js` - Wraps the admin-only Service/Vbee APIs for tokens, requests, grouped segments, inline audio, delete, cache clear, and config.
 - `admin-frontend/src/utils/format.js` - Provides shared number, currency, and date-time formatting helpers for admin screens.
 - `admin-frontend/src/components/AdminLayout.jsx` - Renders the shared admin React shell with fixed navigation, topbar actions, and logout flow.
@@ -32,7 +33,12 @@
 - `admin-frontend/src/components/IapBankHookHistoryDetailPage.jsx` - Renders the bank-hook transaction detail page with summary table and raw payload JSON.
 - `admin-frontend/src/components/IapSalesPanel.jsx` - Renders the sale-rule admin tab with add, list, and delete flows.
 - `admin-frontend/src/components/ServicePage.jsx` - Wraps the dedicated Service admin route and passes parsed route state into the Service tab shell.
-- `admin-frontend/src/components/ServiceManagementTabs.jsx` - Renders the Service tab shell and refresh-safe Vbee route navigation.
+- `admin-frontend/src/components/ServiceManagementTabs.jsx` - Renders the Service tab shell and switches between the OpenAI subtitle-translation tools and the Vbee voiceover tools.
+- `admin-frontend/src/components/OpenAiOperationsPanel.jsx` - Renders the OpenAI service left-nav and right-content layout for tokens, requests, test uploads, and config, with per-tab developer markers in the navigation.
+- `admin-frontend/src/components/OpenAiTokensPanel.jsx` - Renders OpenAI API token CRUD with active-state management and usage timestamps.
+- `admin-frontend/src/components/OpenAiRequestsPanel.jsx` - Renders paginated OpenAI translation request monitoring with status filters and saved request metadata.
+- `admin-frontend/src/components/OpenAiTestPanel.jsx` - Renders the OpenAI admin test tool for uploading one `.srt`, choosing a target language, running a direct translation call, and reviewing the translated result panel inline.
+- `admin-frontend/src/components/OpenAiConfigPanel.jsx` - Renders the OpenAI provider config form for API base URL, model, system prompt, and prompt template placeholders.
 - `admin-frontend/src/components/VbeeOperationsPanel.jsx` - Renders the Vbee left-nav and right-content operations layout.
 - `admin-frontend/src/components/VbeeTokensPanel.jsx` - Renders Vbee token CRUD, active-state controls, concurrency, and stats.
 - `admin-frontend/src/components/VbeeRequestsPanel.jsx` - Renders Vbee request list filters and request detail replacement views.

@@ -1,7 +1,7 @@
 # Backend Map
 
 ## server
-- `server/app.py` - Flask API entrypoint with auth APIs, admin APIs, IAP APIs, backend-owned Vbee APIs, admin web serving, and background workers.
+- `server/app.py` - Flask API entrypoint with auth APIs, admin APIs, IAP APIs, OpenAI translation admin APIs, backend-owned Vbee APIs, admin web serving, and background workers.
 - `server/logging_setup.py` - Configures hourly rotating backend log files and shared Flask logging setup.
 - `server/auth_routes.py` - Registers auth endpoints, JWT access or refresh flows, current-user reads, logout, and admin access guards.
 - `server/auth_identity.py` - Owns shared auth-side username normalization and public-user shaping helpers.
@@ -24,10 +24,13 @@
 - `server/iap_payment_expiry.py` - Starts the worker that expires pending payment tickets every minute.
 - `server/iap_bank_hook_history_store.py` - Owns MySQL-backed bank-hook history persistence, filtering, pagination, and detail lookup.
 - `server/admin_web_routes.py` - Serves the built standalone admin frontend and nested `/admin/...` SPA routes.
-- `server/proxy_routes.py` - Registers translation proxy endpoints and delegates transcription routes to `proxy_transcription_routes.py`.
+- `server/proxy_routes.py` - Registers transcription proxy endpoints plus the OpenAI-backed subtitle translation contract while keeping legacy `llm-subtrans` job reads for older request ids.
 - `server/proxy_transcription_routes.py` - Owns the authenticated transcription proxy endpoints and downstream Whishper integration.
 - `server/proxy_credit_helpers.py` - Centralizes shared credit charge or refund helpers for proxy-backed routes.
 - `server/proxy_route_helpers.py` - Owns shared proxy-route helpers for provider shaping and request persistence.
+- `server/openai_translation_store.py` - Owns MySQL-backed OpenAI subtitle token/config CRUD and admin request-list queries for the new Service/OpenAI surface.
+- `server/openai_translation_service.py` - Runs asynchronous OpenAI subtitle translation jobs, builds prompt payloads, normalizes SRT output, persists job state, and now powers synchronous admin `.srt` test translations.
+- `server/openai_translation_routes.py` - Registers admin-only Service/OpenAI token, request, config, and one-off test-translation upload APIs.
 - `server/vbee_schema.py` - Defines Vbee statuses, validators, serializers, and MySQL schema helpers.
 - `server/vbee_token_store.py` - Owns MySQL-backed Vbee token and provider config CRUD.
 - `server/vbee_request_store.py` - Owns MySQL-backed Vbee request or segment persistence, queue lookups, refresh helpers, and cache-clear deletion paths.
@@ -40,7 +43,7 @@
 - `server/vbee_service.py` - Orchestrates Vbee voiceover creation, provider polling, webhook completion, reuse, and request summary refresh.
 - `server/vbee_routes.py` - Registers client voiceover APIs plus admin Service/Vbee token, request, segment, audio, cache-clear, delete, and config APIs.
 - `server/request_store.py` - Owns MySQL-backed persistence for server-managed transcription, translation, and voiceover request records.
-- `server/translation_fallback.py` - Runs local subtitle translation jobs and serves the fallback translation flow.
+- `server/translation_fallback.py` - Retains the local subtitle translation helpers plus shared SRT parsing utilities used by translation job flows.
 - `server/requirements.txt` - Lists Python runtime dependencies for the subtitle-service backend.
 - `server/Dockerfile` - Builds the backend runtime image and serves Flask on port `5000`.
 

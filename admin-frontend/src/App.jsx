@@ -10,8 +10,9 @@ import UserDetailPage from './components/UserDetailPage'
 import './App.css'
 
 const IAP_TABS = new Set(['packages', 'api-key', 'payment-tools', 'sale'])
-const SERVICE_TABS = new Set(['vbee'])
+const SERVICE_TABS = new Set(['openai', 'vbee'])
 const VBEE_SECTIONS = new Set(['tokens', 'requests', 'segments', 'config'])
+const OPENAI_SECTIONS = new Set(['tokens', 'requests', 'test', 'config'])
 
 function parseIapRoute(normalizedPath) {
   if (normalizedPath === '/admin/iap/pack-function') {
@@ -96,9 +97,17 @@ function parseAdminRoute(pathname = window.location.pathname) {
     return { name: 'service', serviceTab: 'vbee', vbeeSection: serviceSectionMatch[1] }
   }
 
+  const openAiSectionMatch = normalizedPath.match(/^\/admin\/service\/openai\/([^/]+)$/)
+  if (openAiSectionMatch && OPENAI_SECTIONS.has(openAiSectionMatch[1])) {
+    return { name: 'service', serviceTab: 'openai', openAiSection: openAiSectionMatch[1] }
+  }
+
   const serviceTabMatch = normalizedPath.match(/^\/admin\/service\/([^/]+)$/)
   if (serviceTabMatch && SERVICE_TABS.has(serviceTabMatch[1])) {
-    return { name: 'service', serviceTab: serviceTabMatch[1], vbeeSection: 'tokens' }
+    if (serviceTabMatch[1] === 'openai') {
+      return { name: 'service', serviceTab: 'openai', openAiSection: 'tokens' }
+    }
+    return { name: 'service', serviceTab: 'vbee', vbeeSection: 'tokens' }
   }
 
   if (normalizedPath === '/admin/service') {
@@ -191,6 +200,12 @@ function App() {
       return 'IAP packages'
     }
     if (route.name === 'service') {
+      if (route.serviceTab === 'openai') {
+        if (route.openAiSection === 'requests') return 'OpenAI requests'
+        if (route.openAiSection === 'test') return 'OpenAI test'
+        if (route.openAiSection === 'config') return 'OpenAI config'
+        return 'OpenAI tokens'
+      }
       if (route.vbeeRequestId) return 'Vbee request'
       if (route.vbeeSegmentHash) return 'Vbee segment'
       if (route.vbeeSection === 'requests') return 'Vbee requests'
@@ -201,7 +216,7 @@ function App() {
     if (route.name === 'user-detail') return 'User detail'
     if (route.name === 'manage') return 'User management'
     return 'Admin login'
-  }, [route.iapTab, route.name, route.paymentToolHistoryId, route.paymentTransactionId, route.vbeeRequestId, route.vbeeSection, route.vbeeSegmentHash])
+  }, [route.iapTab, route.name, route.openAiSection, route.paymentToolHistoryId, route.paymentTransactionId, route.serviceTab, route.vbeeRequestId, route.vbeeSection, route.vbeeSegmentHash])
 
   const handleSessionUpdate = (nextSession) => {
     setSession(nextSession)

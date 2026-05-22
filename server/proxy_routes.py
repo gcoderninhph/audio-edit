@@ -5,17 +5,20 @@ import requests
 
 try:
     from auth_routes import require_access_token
+    from openai_translation_service import (
+        OpenAiTranslationValidationError,
+        create_openai_translation_job,
+        get_openai_translation_download,
+        get_openai_translation_status,
+        is_openai_translation_job,
+    )
+    from openai_translation_store import OpenAiTranslationError
     from proxy_credit_helpers import charge_user_credits_or_error, refund_credits_if_needed
     from proxy_route_helpers import (
-        build_json_success_response,
-        build_local_translation_response,
         build_proxy_response,
-        first_payload_value,
         get_claim_user_id,
         read_response_payload,
         require_request_owner,
-        save_server_request,
-        should_use_local_translation_fallback,
         sync_server_request_status,
     )
     from proxy_transcription_routes import register_transcription_routes
@@ -27,17 +30,20 @@ try:
     )
 except ImportError:
     from .auth_routes import require_access_token
+    from .openai_translation_service import (
+        OpenAiTranslationValidationError,
+        create_openai_translation_job,
+        get_openai_translation_download,
+        get_openai_translation_status,
+        is_openai_translation_job,
+    )
+    from .openai_translation_store import OpenAiTranslationError
     from .proxy_credit_helpers import charge_user_credits_or_error, refund_credits_if_needed
     from .proxy_route_helpers import (
-        build_json_success_response,
-        build_local_translation_response,
         build_proxy_response,
-        first_payload_value,
         get_claim_user_id,
         read_response_payload,
         require_request_owner,
-        save_server_request,
-        should_use_local_translation_fallback,
         sync_server_request_status,
     )
     from .proxy_transcription_routes import register_transcription_routes
@@ -86,58 +92,13 @@ def register_proxy_routes(app):
             return charge_error
 
         try:
-            response = requests.post(f"{LLM_SUBTRANS_API_URL}/translate", files=files, data=data)
-            if should_use_local_translation_fallback(response=response):
-                local_response = build_local_translation_response(
-                    file_bytes,
-                    file.filename,
-                    target_language,
-                    user_id,
-                    creditBalance=charged_user.get('credits'),
-                    creditCost=TRANSLATION_CREDIT_COST,
-                )
-                if local_response[1] >= 400:
-                    refund_credits_if_needed(
-                        user_id,
-                        TRANSLATION_CREDIT_COST,
-                        'translation_refund',
-                        'Refunded translation credits',
-                        {'feature': 'translation'},
-                    )
-                return local_response
-
-            response_payload = read_response_payload(response)
-            if response.ok:
-                request_id = first_payload_value(response_payload, ('requestId', 'request_id', 'id', 'jobId'))
-                output_file_name = first_payload_value(response_payload, ('outputFileName', 'output_file_name', 'fileName'))
-                if not request_id:
-                    refund_credits_if_needed(
-                        user_id,
-                        TRANSLATION_CREDIT_COST,
-                        'translation_refund',
-                        'Refunded translation credits',
-                        {'feature': 'translation'},
-                    )
-                    return jsonify({'error': 'Translation service did not return a request ID'}), 502
-                request_error = save_server_request(
-                    request_id,
-                    user_id,
-                    'translation',
-                    'llm-subtrans',
-                    source_file_name=file.filename,
-                    target_language=target_language,
-                    output_file_name=output_file_name,
-                    details={'localFallback': False},
-                )
-                if request_error:
-                    return request_error
-                return build_json_success_response(
-                    response_payload,
-                    response.status_code,
-                    creditBalance=charged_user.get('credits'),
-                    creditCost=TRANSLATION_CREDIT_COST,
-                )
-
+            response_payload = create_openai_translation_job(file_bytes, file.filename, target_language, user_id)
+            return jsonify({
+                **response_payload,
+                'creditBalance': charged_user.get('credits'),
+                'creditCost': TRANSLATION_CREDIT_COST,
+            }), 202
+        except OpenAiTranslationValidationError as error:
             refund_credits_if_needed(
                 user_id,
                 TRANSLATION_CREDIT_COST,
@@ -145,26 +106,16 @@ def register_proxy_routes(app):
                 'Refunded translation credits',
                 {'feature': 'translation'},
             )
-            return build_proxy_response(response, 'Failed to communicate with LLM-Subtrans API')
-        except requests.RequestException as error:
-            print(f"LLM-Subtrans API error: {error}")
-            local_response = build_local_translation_response(
-                file_bytes,
-                file.filename,
-                target_language,
+            return jsonify({'error': str(error)}), 400
+        except (OpenAiTranslationError, RequestStoreError) as error:
+            refund_credits_if_needed(
                 user_id,
-                creditBalance=charged_user.get('credits'),
-                creditCost=TRANSLATION_CREDIT_COST,
+                TRANSLATION_CREDIT_COST,
+                'translation_refund',
+                'Refunded translation credits',
+                {'feature': 'translation'},
             )
-            if local_response[1] >= 400:
-                refund_credits_if_needed(
-                    user_id,
-                    TRANSLATION_CREDIT_COST,
-                    'translation_refund',
-                    'Refunded translation credits',
-                    {'feature': 'translation'},
-                )
-            return local_response
+            return jsonify({'error': str(error) or 'OpenAI translation service is unavailable'}), 503
 
     @app.route('/api/translation/status/<string:job_id>', methods=['GET'])
     def get_translation_status(job_id):
@@ -179,6 +130,15 @@ def register_proxy_routes(app):
         if is_local_translation_job(job_id):
             try:
                 job_status = get_local_translation_status(job_id)
+            except RequestStoreError:
+                return jsonify({'error': 'Translation request database is unavailable'}), 503
+            if not job_status:
+                return jsonify({'error': 'Translation job not found'}), 404
+            return jsonify(job_status), 200
+
+        if is_openai_translation_job(job_id):
+            try:
+                job_status = get_openai_translation_status(job_id)
             except RequestStoreError:
                 return jsonify({'error': 'Translation request database is unavailable'}), 503
             if not job_status:
@@ -219,6 +179,22 @@ def register_proxy_routes(app):
                 content_type='text/plain; charset=utf-8',
                 headers={
                     'Content-Disposition': f'attachment; filename="{local_download["output_file_name"]}"'
+                }
+            )
+
+        if is_openai_translation_job(job_id):
+            try:
+                openai_download = get_openai_translation_download(job_id, file_name)
+            except RequestStoreError:
+                return jsonify({'error': 'Translation request database is unavailable'}), 503
+            if not openai_download:
+                return jsonify({'error': 'Translated subtitle file not found'}), 404
+
+            return Response(
+                openai_download['content'],
+                content_type='text/plain; charset=utf-8',
+                headers={
+                    'Content-Disposition': f'attachment; filename="{openai_download["output_file_name"]}"'
                 }
             )
 

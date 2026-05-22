@@ -34,6 +34,19 @@
   outline: none;
 }
 
+.field select,
+.inline-control select,
+.ghost-select {
+  background: rgba(22, 22, 34, 0.92);
+}
+
+.field select option,
+.inline-control select option,
+.ghost-select option {
+  background: #161622;
+  color: var(--text-primary);
+}
+
 .field input:focus,
 .field select:focus,
 .field textarea:focus,
@@ -47,6 +60,130 @@
   min-height: 110px;
   padding: 12px 13px;
   resize: vertical;
+}
+
+.openai-test-result-field textarea {
+  min-height: 320px;
+  font-family: Consolas, 'Courier New', monospace;
+  white-space: pre;
+}
+
+.openai-prompt-preview-dialog {
+  width: min(860px, calc(100vw - 28px));
+  max-height: calc(100vh - 28px);
+  padding: 18px;
+  display: grid;
+  gap: 14px;
+  overflow: auto;
+}
+
+.openai-prompt-preview-grid {
+  display: grid;
+  gap: 12px;
+}
+
+.openai-prompt-preview-box textarea {
+  min-height: 96px;
+  max-height: 128px;
+  resize: vertical;
+}
+
+.openai-prompt-preview-dialog .openai-test-result-field textarea {
+  min-height: 140px;
+  max-height: 180px;
+}
+
+.openai-test-result-panel {
+  position: relative;
+}
+
+.openai-test-result-preview-button {
+  position: absolute;
+  top: 14px;
+  right: 14px;
+  z-index: 2;
+}
+
+.openai-test-preview-button {
+  min-width: 40px;
+  padding-inline: 0;
+  justify-content: center;
+}
+
+.openai-test-summary-card,
+.openai-test-result-panel {
+  display: grid;
+  gap: 14px;
+}
+
+.openai-test-grid .package-description-field {
+  grid-column: 1 / -1;
+}
+
+.openai-test-upload-tile {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 70px;
+  height: 70px;
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-md);
+  background: rgba(255, 255, 255, 0.045);
+  color: var(--text-primary);
+  cursor: pointer;
+  position: relative;
+  transition: border-color 0.18s ease, background 0.18s ease, transform 0.18s ease;
+}
+
+.openai-test-upload-tile:hover {
+  border-color: var(--border-active);
+  background: rgba(255, 255, 255, 0.07);
+  transform: translateY(-1px);
+}
+
+.openai-test-upload-tile:focus-within {
+  border-color: var(--border-active);
+  box-shadow: 0 0 0 3px rgba(124, 58, 237, 0.12);
+}
+
+.openai-test-upload-tile input[type='file'] {
+  width: 1px;
+  height: 1px;
+  opacity: 0;
+  position: absolute;
+  pointer-events: none;
+}
+
+.openai-test-language-field {
+  justify-self: center;
+  width: min(360px, 100%);
+}
+
+.openai-test-summary-card {
+  justify-self: center;
+  width: min(100%, 100%);
+}
+
+.openai-test-grid {
+  grid-template-columns: 70px minmax(0, 360px);
+  align-items: start;
+}
+
+.openai-test-grid .openai-test-upload-tile {
+  grid-column: 1;
+}
+
+.openai-test-grid .openai-test-language-field {
+  grid-column: 2;
+  align-self: center;
+}
+
+.openai-test-grid .openai-test-summary-card {
+  grid-column: 1 / -1;
+}
+
+.openai-nav-button-host {
+  position: relative;
 }
 
 .primary-button,
@@ -96,10 +233,28 @@
   color: var(--text-secondary);
 }
 
+.icon-button {
+  width: 40px;
+  min-width: 40px;
+  height: 40px;
+  padding: 0;
+  justify-content: center;
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-md);
+  background: rgba(255, 255, 255, 0.04);
+  color: var(--text-secondary);
+}
+
+.icon-button:hover {
+  border-color: var(--border-active);
+  background: rgba(255, 255, 255, 0.07);
+  color: var(--text-primary);
+}
+
 .ghost-select {
   min-height: 40px;
   border: 1px solid var(--border-color);
-  background: rgba(255, 255, 255, 0.04);
+  background: rgba(22, 22, 34, 0.92);
   color: var(--text-secondary);
   padding: 0 13px;
   outline: none;
@@ -136,6 +291,10 @@ button:disabled {
   border-color: rgba(96, 165, 250, 0.28);
   background: rgba(37, 99, 235, 0.1);
   color: #bfdbfe;
+}
+
+.openai-config-template-note {
+  margin-block: 10px;
 }
 
 .account-menu {

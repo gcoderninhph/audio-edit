@@ -74,7 +74,7 @@ export async function requestJson(path, options = {}, allowRefresh = true) {
   const headers = new Headers(options.headers || {})
   const currentSession = getStoredSession()
   if (currentSession?.accessToken) headers.set('Authorization', `Bearer ${currentSession.accessToken}`)
-  if (options.body && !headers.has('Content-Type')) headers.set('Content-Type', 'application/json')
+  if (options.body && !(options.body instanceof FormData) && !headers.has('Content-Type')) headers.set('Content-Type', 'application/json')
 
   const response = await performJsonRequest(path, { ...options, headers })
   if (response.status === 401 && allowRefresh && currentSession?.refreshToken) {
