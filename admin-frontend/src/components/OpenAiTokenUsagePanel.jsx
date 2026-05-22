@@ -1,9 +1,8 @@
 import { RefreshCw } from 'lucide-react'
 import { useCallback, useEffect, useState } from 'react'
 import { fetchAdminOpenAiRequests } from '../api/adminOpenAiApi'
-import { formatDateTime } from '../utils/format'
+import { formatDateTime, formatNumber } from '../utils/format'
 import DeveloperMarker from './DeveloperMarker'
-import OpenAiRequestDetailPanel from './OpenAiRequestDetailPanel'
 import Pagination from './Pagination'
 
 const DEFAULT_PAGE_SIZE = 20
@@ -13,11 +12,12 @@ function getOpenAiRequestDetailPath(requestId) {
   return `/admin/service/openai/requests/${encodeURIComponent(requestId)}`
 }
 
-function StatusPill({ status }) {
-  return <span className={`status-pill status-${status || 'running'}`}>{status || 'running'}</span>
+function formatTokenValue(value) {
+  if (value === null || value === undefined || value === '') return '-'
+  return formatNumber(value)
 }
 
-export default function OpenAiRequestsPanel({ onNavigate, requestId = '' }) {
+export default function OpenAiTokenUsagePanel({ onNavigate }) {
   const [error, setError] = useState('')
   const [isLoading, setIsLoading] = useState(true)
   const [pagination, setPagination] = useState(null)
@@ -32,25 +32,21 @@ export default function OpenAiRequestsPanel({ onNavigate, requestId = '' }) {
       setRequests(payload.requests || [])
       setPagination(payload.pagination || null)
     } catch (loadError) {
-      setError(loadError.message || 'Unable to load OpenAI requests.')
+      setError(loadError.message || 'Unable to load OpenAI token usage.')
     } finally {
       setIsLoading(false)
     }
   }, [status])
 
   useEffect(() => {
-    if (!requestId) void loadRequests(1, status)
-  }, [loadRequests, requestId, status])
-
-  if (requestId) {
-    return <OpenAiRequestDetailPanel requestId={requestId} onBack={() => onNavigate?.('/admin/service/openai/requests')} />
-  }
+    void loadRequests(1, status)
+  }, [loadRequests, status])
 
   return (
     <section className="panel iap-inline-detail-panel dev-host">
-      <DeveloperMarker code="admin.react.service.openai.requests" title="Admin React OpenAI Requests" />
+      <DeveloperMarker code="admin.react.service.openai.token-usage" title="Admin React OpenAI Token Usage" />
       <div className="section-toolbar">
-        <div className="section-heading compact"><p>OpenAI</p><h2>Requests</h2></div>
+        <div className="section-heading compact"><p>OpenAI</p><h2>Token usage</h2></div>
         <div className="toolbar-actions">
           <select className="ghost-select" value={status} onChange={(event) => setStatus(event.target.value)}>
             {STATUS_OPTIONS.map((option) => <option key={option || 'all'} value={option}>{option || 'all'}</option>)}
@@ -59,12 +55,13 @@ export default function OpenAiRequestsPanel({ onNavigate, requestId = '' }) {
         </div>
       </div>
 
-      <div className="notice notice-info">Each row reflects the OpenAI-backed translation job stored by the backend. Prompt template, model, and token metadata come from the saved request snapshot.</div>
+      <div className="notice notice-info">This table tracks the saved OpenAI token usage snapshot for each translation request, including input, output, and total tokens returned by the provider.</div>
       {error && <div className="notice notice-error">{error}</div>}
 
-      <div className="table-wrap">
+      <div className="table-wrap dev-host">
+        <DeveloperMarker code="admin.react.service.openai.token-usage.table" title="Admin React OpenAI Token Usage Table" />
         <table className="admin-table compact-table">
-          <thead><tr><th>Request</th><th>User</th><th>Model</th><th>Status</th><th>Target</th><th>Updated</th></tr></thead>
+          <thead><tr><th>Request</th><th>User</th><th>Model</th><th>Input</th><th>Output</th><th>Total</th><th>Updated</th></tr></thead>
           <tbody>
             {requests.map((record) => (
               <tr key={record.requestId} className="clickable-row" onClick={() => onNavigate?.(getOpenAiRequestDetailPath(record.requestId))}>
@@ -74,12 +71,13 @@ export default function OpenAiRequestsPanel({ onNavigate, requestId = '' }) {
                 </td>
                 <td>{record.userId || '-'}</td>
                 <td>{record.details?.model || '-'}</td>
-                <td><StatusPill status={record.status} /></td>
-                <td>{record.targetLanguage || '-'}</td>
+                <td>{formatTokenValue(record.details?.inputTokens)}</td>
+                <td>{formatTokenValue(record.details?.outputTokens)}</td>
+                <td>{formatTokenValue(record.details?.totalTokens)}</td>
                 <td>{formatDateTime(record.updatedAt || record.createdAt)}</td>
               </tr>
             ))}
-            {!requests.length && <tr><td colSpan="6" className="empty-cell">{isLoading ? 'Loading OpenAI requests...' : 'No OpenAI requests yet.'}</td></tr>}
+            {!requests.length && <tr><td colSpan="7" className="empty-cell">{isLoading ? 'Loading OpenAI token usage...' : 'No OpenAI token usage yet.'}</td></tr>}
           </tbody>
         </table>
       </div>

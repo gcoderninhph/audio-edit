@@ -1,6 +1,12 @@
 import { useState, useEffect, useRef, useMemo } from 'react';
 import DeveloperLocator from '../DeveloperLocator/DeveloperLocator';
-import { DEFAULT_SUBTITLE_LANGUAGE_KEY, isVoiceoverSubtitleLanguageSupported } from '../../utils/subtitleTracks';
+import SubtitleProgressPanel from './SubtitleProgressPanel';
+import {
+  DEFAULT_SUBTITLE_LANGUAGE_KEY,
+  getVoiceoverLanguageCode,
+  isVoiceoverSubtitleLanguageSupported,
+} from '../../utils/subtitleTracks';
+import { fetchVoiceoverClientConfig } from '../../utils/voiceoverUtils';
 import './SubtitlePanel.css';
 
 function formatTime(seconds) {
@@ -37,6 +43,7 @@ export default function SubtitlePanel({
   const [editingId, setEditingId] = useState(null);
   const [editingText, setEditingText] = useState('');
   const [toolsExpanded, setToolsExpanded] = useState(false);
+  const [enabledVoiceoverLanguageCodes, setEnabledVoiceoverLanguageCodes] = useState(null);
   const listRef = useRef(null);
   const activeItemRef = useRef(null);
 
@@ -47,8 +54,12 @@ export default function SubtitlePanel({
   const hasOriginalSubtitles = Boolean(subtitleLanguageOptions?.find((option) => option.id === DEFAULT_SUBTITLE_LANGUAGE_KEY)?.hasSubtitles);
   const isOriginalLanguageSelected = selectedLanguageOption.id === DEFAULT_SUBTITLE_LANGUAGE_KEY;
   const canTranslateSelectedLanguage = hasOriginalSubtitles && selectedLanguageOption.translatable;
+  const voiceoverLanguageCode = getVoiceoverLanguageCode(activeSubtitleLanguage);
   const isVoiceoverSupportedLanguage = isVoiceoverSubtitleLanguageSupported(activeSubtitleLanguage);
-  const canGenerateVoiceover = isVoiceoverSupportedLanguage && hasVisibleSubs;
+  const isVoiceoverEnabledByConfig = enabledVoiceoverLanguageCodes === null
+    ? true
+    : Boolean(voiceoverLanguageCode) && enabledVoiceoverLanguageCodes.includes(voiceoverLanguageCode);
+  const canGenerateVoiceover = isVoiceoverSupportedLanguage && isVoiceoverEnabledByConfig && hasVisibleSubs;
   const authRequiredLabel = 'Login required';
   const creditBalance = Math.max(0, Number(authCredits) || 0);
   const transcriptionCreditCost = 20;
@@ -77,6 +88,31 @@ export default function SubtitlePanel({
       });
     }
   }, [activeSubIndex, editingId]);
+
+  useEffect(() => {
+    let isDisposed = false;
+
+    const loadVoiceoverConfig = async () => {
+      try {
+        const payload = await fetchVoiceoverClientConfig();
+        if (isDisposed) return;
+        const nextCodes = Array.isArray(payload?.config?.enabledLanguageCodes)
+          ? payload.config.enabledLanguageCodes.map((code) => String(code || '').trim()).filter(Boolean)
+          : null;
+        setEnabledVoiceoverLanguageCodes(nextCodes);
+      } catch {
+        if (!isDisposed) {
+          setEnabledVoiceoverLanguageCodes(null);
+        }
+      }
+    };
+
+    void loadVoiceoverConfig();
+
+    return () => {
+      isDisposed = true;
+    };
+  }, []);
 
   const handleEditClick = (sub) => {
     setEditingId(sub.id);
@@ -120,61 +156,46 @@ export default function SubtitlePanel({
       onRequireAuth?.();
       return;
     }
-    onStartVoiceover?.();
+    onStartVoiceover?.(activeSubtitleLanguage);
   };
 
   // ── Transcribing / Translating progress screens ──
   if (isTranscribing) {
     return (
-      <div className="subtitle-panel-container dev-locator-host">
-        <DeveloperLocator code="panel.subtitle.transcribing" title="Subtitle Progress Panel" />
-        <div className="subtitle-panel-progress">
-          <div className="detecting-spinner" style={{ borderTopColor: '#10b981' }} />
-          <div className="subtitle-progress-text">{transcribeProgress?.phase || 'Generating subtitles...'}</div>
-          {transcribeProgress?.percent !== undefined && (
-            <div className="progress-bar" style={{ width: '80%' }}>
-              <div className="progress-bar-fill" style={{ width: `${transcribeProgress.percent}%`, background: '#10b981' }} />
-            </div>
-          )}
-          <div className="subtitle-progress-hint">This may take a few minutes</div>
-        </div>
-      </div>
+      <SubtitleProgressPanel
+        code="panel.subtitle.transcribing"
+        title="Subtitle Progress Panel"
+        color="#10b981"
+        phase={transcribeProgress?.phase || 'Generating subtitles...'}
+        percent={transcribeProgress?.percent}
+        hint="This may take a few minutes"
+      />
     );
   }
 
   if (isTranslating) {
     return (
-      <div className="subtitle-panel-container dev-locator-host">
-        <DeveloperLocator code="panel.subtitle.translating" title="Translation Progress Panel" />
-        <div className="subtitle-panel-progress">
-          <div className="detecting-spinner" style={{ borderTopColor: '#3b82f6' }} />
-          <div className="subtitle-progress-text">{translateProgress?.phase || 'Translating subtitles...'}</div>
-          {translateProgress?.percent !== undefined && (
-            <div className="progress-bar" style={{ width: '80%' }}>
-              <div className="progress-bar-fill" style={{ width: `${translateProgress.percent}%`, background: '#3b82f6' }} />
-            </div>
-          )}
-          <div className="subtitle-progress-hint">The model is processing...</div>
-        </div>
-      </div>
+      <SubtitleProgressPanel
+        code="panel.subtitle.translating"
+        title="Translation Progress Panel"
+        color="#3b82f6"
+        phase={translateProgress?.phase || 'Translating subtitles...'}
+        percent={translateProgress?.percent}
+        hint="The model is processing..."
+      />
     );
   }
 
   if (isGeneratingVoiceover) {
     return (
-      <div className="subtitle-panel-container dev-locator-host">
-        <DeveloperLocator code="panel.subtitle.voiceover" title="Voiceover Progress Panel" />
-        <div className="subtitle-panel-progress">
-          <div className="detecting-spinner" style={{ borderTopColor: '#f59e0b' }} />
-          <div className="subtitle-progress-text">{voiceoverProgress?.phase || 'Generating voiceover...'}</div>
-          {voiceoverProgress?.percent !== undefined && (
-            <div className="progress-bar" style={{ width: '80%' }}>
-              <div className="progress-bar-fill" style={{ width: `${voiceoverProgress.percent}%`, background: '#f59e0b' }} />
-            </div>
-          )}
-          <div className="subtitle-progress-hint">Polling the service every 0.5 seconds</div>
-        </div>
-      </div>
+      <SubtitleProgressPanel
+        code="panel.subtitle.voiceover"
+        title="Voiceover Progress Panel"
+        color="#f59e0b"
+        phase={voiceoverProgress?.phase || 'Generating voiceover...'}
+        percent={voiceoverProgress?.percent}
+        hint="Polling the service every 0.5 seconds"
+      />
     );
   }
 
@@ -257,29 +278,55 @@ export default function SubtitlePanel({
                 </div>
               )}
 
-              <button
-                className="btn btn-primary btn-sm subtitle-tool-btn subtitle-voiceover-btn"
-                style={{ background: '#f59e0b' }}
-                onClick={handleStartVoiceover}
-                disabled={!canGenerateVoiceover}
-              >
-                {!isAuthenticated
-                  ? authRequiredLabel
-                  : isVoiceoverSupportedLanguage
-                    ? `🔊 Generate voiceover · ${voiceoverCreditCost} credits`
-                    : '🔒 Voiceover only for Vietnamese'}
-              </button>
+              {!missingSelectedTranslation && (
+                <>
+                  <button
+                    className="btn btn-primary btn-sm subtitle-tool-btn subtitle-voiceover-btn"
+                    style={{ background: '#f59e0b' }}
+                    onClick={handleStartVoiceover}
+                    disabled={!canGenerateVoiceover}
+                  >
+                    {!isAuthenticated
+                      ? authRequiredLabel
+                      : !isVoiceoverSupportedLanguage
+                        ? '🔒 Unsupported language for voiceover'
+                        : !isVoiceoverEnabledByConfig
+                          ? '🔒 Disabled in Vbee config'
+                          : canGenerateVoiceover
+                            ? `🔊 Generate voiceover · ${voiceoverCreditCost} credits`
+                            : '🔒 Translate this display language first'}
+                  </button>
 
-              {!isVoiceoverSupportedLanguage && (
-                <div className="subtitle-tool-note subtitle-tool-warning">
-                  Voiceover is temporarily available only for Vietnamese subtitles. Switch Display language to Vietnamese to generate and show narration.
-                </div>
-              )}
+                  {!isOriginalLanguageSelected && isVoiceoverSupportedLanguage && !isVoiceoverEnabledByConfig && (
+                    <div className="subtitle-tool-note subtitle-tool-warning">
+                      Voiceover is disabled for <strong>{selectedLanguageOption.label}</strong> in Service/Vbee config.
+                    </div>
+                  )}
 
-              {lastVoiceoverAudioName && (
-                <div className="subtitle-tool-note">
-                  Latest internal audio: <strong>{lastVoiceoverAudioName}</strong> • stored in the project and attached to the timeline from 00:00
-                </div>
+                  {!selectedLanguageOption.hasSubtitles && selectedLanguageOption.translatable && (
+                    <div className="subtitle-tool-note subtitle-tool-warning">
+                      {selectedLanguageOption.label} subtitles are not available yet. Translate this display language first, then generate voiceover.
+                    </div>
+                  )}
+
+                  {!isOriginalLanguageSelected && selectedLanguageOption.hasSubtitles && isVoiceoverSupportedLanguage && isVoiceoverEnabledByConfig && (
+                    <div className="subtitle-tool-note">
+                      Voiceover will use the current Display language: <strong>{selectedLanguageOption.label}</strong>.
+                    </div>
+                  )}
+
+                  {isOriginalLanguageSelected && hasOriginalSubtitles && (
+                    <div className="subtitle-tool-note subtitle-tool-warning">
+                      Voiceover needs a specific translated language. Switch Display language away from Original before generating narration.
+                    </div>
+                  )}
+
+                  {lastVoiceoverAudioName && (
+                    <div className="subtitle-tool-note">
+                      Latest internal audio: <strong>{lastVoiceoverAudioName}</strong> • stored in the project and attached to the timeline from 00:00
+                    </div>
+                  )}
+                </>
               )}
             </>
           )}

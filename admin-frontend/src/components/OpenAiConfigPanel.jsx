@@ -5,7 +5,7 @@ import DeveloperMarker from './DeveloperMarker'
 
 const DEFAULT_CONFIG = {
   apiBaseUrl: 'https://api.openai.com/v1',
-  model: 'gpt-4.1-mini',
+  model: 'gpt-5.4-mini',
   promptTemplate: 'Translate this subtitle file into <TARGET_LANGUAGE>. Return only valid SRT content.\n\n<SRT_FILE_CONTENT>',
   systemPrompt: 'You translate subtitle files. Return only valid SRT content.',
   temperature: 0.2,
@@ -13,14 +13,9 @@ const DEFAULT_CONFIG = {
 }
 
 const MODEL_OPTIONS = [
-  { value: 'gpt-5', label: 'GPT-5' },
-  { value: 'gpt-5-mini', label: 'GPT-5 mini' },
-  { value: 'gpt-5-nano', label: 'GPT-5 nano' },
-  { value: 'gpt-4.1-mini', label: 'GPT-4.1 mini' },
-  { value: 'gpt-4.1', label: 'GPT-4.1' },
-  { value: 'gpt-4o-mini', label: 'GPT-4o mini' },
-  { value: 'gpt-4o', label: 'GPT-4o' },
-  { value: 'gpt-4.1-nano', label: 'GPT-4.1 nano' },
+  { value: 'gpt-5.5', label: 'GPT-5.5' },
+  { value: 'gpt-5.4', label: 'GPT-5.4' },
+  { value: 'gpt-5.4-mini', label: 'GPT-5.4 mini' },
 ]
 
 export default function OpenAiConfigPanel() {

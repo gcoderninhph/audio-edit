@@ -5,6 +5,7 @@ export function useVideoEditorSubtitleActions({
   activeSubtitleLanguage,
   deletedSceneIds,
   getCurrentSnapshot,
+  keptScenes,
   originalSubtitles,
   performAutoSave,
   pushState,
@@ -28,7 +29,6 @@ export function useVideoEditorSubtitleActions({
   updateActiveSubtitle,
   videoDuration,
   videoFile,
-  voiceoverSubtitles,
 }) {
   const startTranscription = useCallback(async () => {
     await runTranscriptionJob({
@@ -72,17 +72,22 @@ export function useVideoEditorSubtitleActions({
     })
   }, [activeSubtitleLanguage, deletedSceneIds, getCurrentSnapshot, originalSubtitles, performAutoSave, pushState, scenes, setActiveSubtitleLanguage, setIsTranslating, setSubtitleTracks, setTranslateProgress, setTranslationJobId, sessionIdRef, subtitleTracks, transcriptionJobId])
 
-  const startVoiceover = useCallback(async () => {
+  const startVoiceover = useCallback(async (targetLanguageKey) => {
     await runVoiceoverJob({
       activeSubtitleLanguage,
-      subtitles: voiceoverSubtitles,
+      deletedSceneIds,
+      keptScenes,
+      scenes,
       sessionIdRef,
+      setActiveSubtitleLanguage,
       setIsGeneratingVoiceover,
       setVoiceoverProgress,
       setLastVoiceoverAudioName,
       setVoiceoverTrack,
+      subtitleTracks,
+      targetLanguageKey,
     })
-  }, [activeSubtitleLanguage, sessionIdRef, setIsGeneratingVoiceover, setLastVoiceoverAudioName, setVoiceoverProgress, setVoiceoverTrack, voiceoverSubtitles])
+  }, [activeSubtitleLanguage, deletedSceneIds, keptScenes, scenes, sessionIdRef, setActiveSubtitleLanguage, setIsGeneratingVoiceover, setLastVoiceoverAudioName, setVoiceoverProgress, setVoiceoverTrack, subtitleTracks])
 
   const updateSubtitle = useCallback((id, newText) => {
     pushState(getCurrentSnapshot())

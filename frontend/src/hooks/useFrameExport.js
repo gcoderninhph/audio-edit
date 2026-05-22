@@ -282,7 +282,7 @@ export function useFrameExport({ videoFile, keptScenes, filteredSubtitles, video
     setVideoVolumeState(effectiveVideoVolume > 0 ? 0 : 1)
   }, [currentAudioTrackKey, effectiveVideoVolume])
 
-  const startExport = useCallback(async () => {
+  const startExport = useCallback(async (exportOptions = {}) => {
     if (!videoFile || effectiveKeptScenes.length === 0) {
       void logExportDebug('Export request ignored because no video or kept scenes were available', {
         hasVideoFile: Boolean(videoFile),
@@ -292,6 +292,8 @@ export function useFrameExport({ videoFile, keptScenes, filteredSubtitles, video
       return
     }
 
+    const hideWatermark = Boolean(exportOptions?.hideWatermark)
+
     const startedAt = Date.now()
     void logExportDebug('Export requested from UI', {
       exportFileName: getExportFileNameLabel(exportFileName),
@@ -299,6 +301,7 @@ export function useFrameExport({ videoFile, keptScenes, filteredSubtitles, video
       exportQualityProfileId,
       frameBackground: describeFrameBackground(frameBackground),
       framePresetId,
+      hideWatermark,
       subtitleSettings,
       hasVoiceoverTrack,
       keptSceneCount: effectiveKeptScenes.length,
@@ -343,12 +346,14 @@ export function useFrameExport({ videoFile, keptScenes, filteredSubtitles, video
           frameSettings: {
             presetId: framePresetId,
             backgroundColor: frameBackground,
+            hideWatermark,
           },
           subtitleSettings,
           audioMix: {
             videoVolume: effectiveVideoVolume,
             voiceoverVolume: hasVoiceoverTrack ? effectiveVoiceoverVolume : 0,
           },
+          hideWatermark,
           voiceoverTrack,
         },
         handleExportProgress,

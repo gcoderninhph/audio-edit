@@ -13,6 +13,7 @@ FROM python:3.12-slim AS runtime
 
 ENV PYTHONDONTWRITEBYTECODE=1 \
     PYTHONUNBUFFERED=1 \
+    PYTHONPATH=/app/server \
     SERVER_PORT=5000
 
 WORKDIR /app

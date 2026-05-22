@@ -17,6 +17,12 @@ async function readApiErrorMessage(response, fallbackMessage) {
   }
 }
 
+export async function fetchVoiceoverClientConfig() {
+  const response = await apiFetch('/api/voiceover/config')
+  if (!response.ok) throw new Error(await readApiErrorMessage(response, 'Unable to load voiceover config'))
+  return response.json()
+}
+
 async function fetchVoiceoverStatus(requestId) {
   const statusResponse = await apiFetch(`/api/voiceover/status/${requestId}`, {
     headers: getAuthRequestHeaders(),
@@ -237,13 +243,23 @@ export async function createVoiceoverFromSubtitles(subtitles, onProgress, option
   }
 
   onProgress?.({ phase: 'Preparing subtitle payload...', percent: 0 })
+  const requestPayload = { subtitles: subtitlePayload }
+  if (options.language) {
+    requestPayload.language = String(options.language)
+  }
+  if (options.languageCode) {
+    requestPayload.languageCode = String(options.languageCode)
+  }
+  if (options.voiceCode) {
+    requestPayload.voiceCode = String(options.voiceCode)
+  }
   const startResponse = await apiFetch('/api/voiceover/start', {
     method: 'POST',
     headers: {
       ...getAuthRequestHeaders(),
       'Content-Type': 'application/json',
     },
-    body: JSON.stringify({ subtitles: subtitlePayload }),
+    body: JSON.stringify(requestPayload),
   })
 
   if (!startResponse.ok) {

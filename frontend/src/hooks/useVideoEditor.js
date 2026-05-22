@@ -69,7 +69,7 @@ export function useVideoEditor() {
   const keptDuration = useMemo(() => getKeptDuration(keptScenes), [keptScenes]);
   const currentScene = useMemo(() => getCurrentSceneAtTime(scenes, currentTime), [scenes, currentTime]);
   const filteredSubtitles = useMemo(() => filterVisibleSubtitles(subtitles, scenes, deletedSceneIds), [subtitles, scenes, deletedSceneIds]);
-  const { localizedVoiceoverAudioName, localizedVoiceoverTrack, voiceoverSubtitles } = useVideoEditorVoiceoverState({ activeSubtitleLanguage, filteredSubtitles, keptScenes, lastVoiceoverAudioName, voiceoverTrack });
+  const { localizedVoiceoverAudioName, localizedVoiceoverTrack } = useVideoEditorVoiceoverState({ activeSubtitleLanguage, filteredSubtitles, keptScenes, lastVoiceoverAudioName, voiceoverTrack });
 
   const {
     framePresetId,
@@ -335,6 +335,7 @@ export function useVideoEditor() {
     activeSubtitleLanguage,
     deletedSceneIds,
     getCurrentSnapshot,
+    keptScenes,
     originalSubtitles,
     performAutoSave,
     pushState,
@@ -359,7 +360,6 @@ export function useVideoEditor() {
     voiceoverTrack,
     videoDuration,
     videoFile,
-    voiceoverSubtitles,
   })
 
   const performUndo = useCallback(() => {

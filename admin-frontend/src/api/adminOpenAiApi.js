@@ -40,6 +40,12 @@ export async function fetchAdminOpenAiRequests({ page = 1, pageSize = 20, status
   return response.data || {}
 }
 
+export async function fetchAdminOpenAiRequestDetail(requestId) {
+  const response = await requestJson(`/api/admin/services/openai/requests/${encodeURIComponent(requestId)}`)
+  if (!response.ok) throw new Error(response.data?.error || 'Unable to load OpenAI request.')
+  return response.data || {}
+}
+
 export async function fetchAdminOpenAiConfig() {
   const response = await requestJson('/api/admin/services/openai/config')
   if (!response.ok) throw new Error(response.data?.error || 'Unable to load OpenAI config.')

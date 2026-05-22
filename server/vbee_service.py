@@ -6,6 +6,7 @@ import requests
 try:
     from vbee_asset_service import expire_vbee_segment_assets, reuse_vbee_segment_asset, store_vbee_segment_audio_asset
     from vbee_cache import build_audio_cache_key, set_cached_request_status
+    from vbee_voice_catalog import find_vbee_voice_code, get_vbee_language_label, normalize_vbee_enabled_language_codes, normalize_vbee_language_code
     from vbee_store import (
         VBEE_STATUS_COMPLETE,
         VBEE_STATUS_FAILED,
@@ -27,6 +28,7 @@ try:
 except ImportError:
     from .vbee_asset_service import expire_vbee_segment_assets, reuse_vbee_segment_asset, store_vbee_segment_audio_asset
     from .vbee_cache import build_audio_cache_key, set_cached_request_status
+    from .vbee_voice_catalog import find_vbee_voice_code, get_vbee_language_label, normalize_vbee_enabled_language_codes, normalize_vbee_language_code
     from .vbee_store import (
         VBEE_STATUS_COMPLETE,
         VBEE_STATUS_FAILED,
@@ -175,9 +177,16 @@ def _submit_segment_to_vbee(segment, token, config, webhook_base_url):
     api_base_url = str(config.get('apiBaseUrl') or '').strip().rstrip('/')
     if not api_base_url:
         raise VbeeValidationError('Vbee API base URL is not configured')
-    voice_code = segment.get('voiceCode') or config.get('defaultVoiceCode') or ''
+    requested_language = normalize_vbee_language_code(segment.get('language') or config.get('defaultLanguage') or 'vi')
+    default_language = normalize_vbee_language_code(config.get('defaultLanguage') or requested_language or 'vi')
+    configured_default_voice_code = str(config.get('defaultVoiceCode') or '').strip()
+    voice_code = str(segment.get('voiceCode') or '').strip()
+    if not voice_code and requested_language == default_language:
+        voice_code = configured_default_voice_code
     if not voice_code:
-        raise VbeeValidationError('Vbee voice code is not configured')
+        voice_code = find_vbee_voice_code(api_base_url, token.get('token') or '', app_id=(token.get('clientId') or ''), requested_language_code=requested_language)
+    if not voice_code:
+        raise VbeeValidationError(f'No Vbee voice is available for {get_vbee_language_label(requested_language)}.')
     callback_url = _build_callback_url(config, webhook_base_url)
     if not callback_url:
         raise VbeeValidationError('Vbee webhook host is not configured')
@@ -206,10 +215,10 @@ def _submit_segment_to_vbee(segment, token, config, webhook_base_url):
     audio_url = _audio_url(response_payload)
     status = _provider_status(response_payload)
     if audio_url:
-        return {'state': VBEE_STATUS_COMPLETE, 'providerRequestId': provider_request_id, 'audioUrl': audio_url, 'raw': response_payload}
+        return {'state': VBEE_STATUS_COMPLETE, 'providerRequestId': provider_request_id, 'audioUrl': audio_url, 'raw': response_payload, 'voiceCode': voice_code, 'language': requested_language}
     if status in {'failure', 'failed', 'fail', 'error'}:
-        return {'state': VBEE_STATUS_FAILED, 'providerRequestId': provider_request_id, 'errorMessage': _provider_error(response_payload), 'raw': response_payload}
-    return {'state': VBEE_STATUS_PROCESSING, 'providerRequestId': provider_request_id, 'raw': response_payload}
+        return {'state': VBEE_STATUS_FAILED, 'providerRequestId': provider_request_id, 'errorMessage': _provider_error(response_payload), 'raw': response_payload, 'voiceCode': voice_code, 'language': requested_language}
+    return {'state': VBEE_STATUS_PROCESSING, 'providerRequestId': provider_request_id, 'raw': response_payload, 'voiceCode': voice_code, 'language': requested_language}
 
 
 def _fetch_segment_from_vbee(segment, token, config):
@@ -251,16 +260,30 @@ def _persist_completed_segment_audio(segment, source_audio_url, provider_request
 def create_voiceover_request(user_id, subtitles, language='', voice_code='', webhook_base_url=''):
     expire_vbee_segment_assets(limit=100)
     config = get_vbee_config()
-    safe_language = str(language or config.get('defaultLanguage') or 'vi').strip()[:32]
-    safe_voice_code = str(voice_code or config.get('defaultVoiceCode') or '').strip()[:80]
+    try:
+        safe_language = normalize_vbee_language_code(language or config.get('defaultLanguage') or 'vi')[:32]
+    except ValueError as error:
+        raise VbeeValidationError(str(error)) from error
+    enabled_language_codes = normalize_vbee_enabled_language_codes(config.get('enabledLanguageCodes'), allow_empty=True)
+    if safe_language not in enabled_language_codes:
+        raise VbeeValidationError(f'Voiceover is disabled for {get_vbee_language_label(safe_language)}.')
+    try:
+        configured_default_language = normalize_vbee_language_code(config.get('defaultLanguage') or safe_language)
+    except ValueError:
+        configured_default_language = safe_language
+    configured_default_voice_code = str(config.get('defaultVoiceCode') or '').strip()[:80]
+    safe_voice_code = str(voice_code or '').strip()[:80]
+    cache_voice_code = safe_voice_code or (configured_default_voice_code if safe_language == configured_default_language else '')
     segments = []
     reusable_assets = {}
     for subtitle in normalize_subtitles(subtitles):
-        cache_key = build_audio_cache_key(subtitle['text'], safe_voice_code, safe_language)
+        cache_key = build_audio_cache_key(subtitle['text'], cache_voice_code, safe_language)
         segment = {
             **subtitle,
             'cacheKey': cache_key,
             'characterCount': len(subtitle['text']),
+            'language': safe_language,
+            'voiceCode': cache_voice_code,
             'status': VBEE_STATUS_QUEUED,
         }
         if cache_key not in reusable_assets:
@@ -318,22 +341,28 @@ def dispatch_queued_vbee_segments(limit=50, webhook_base_url=''):
             continue
 
         provider_request_id = submit_result.get('providerRequestId') or str(segment['id'])
+        resolved_voice_code = submit_result.get('voiceCode') or segment.get('voiceCode') or ''
+        resolved_language = submit_result.get('language') or segment.get('language') or ''
+        segment['voiceCode'] = resolved_voice_code
+        segment['language'] = resolved_language
         if submit_result.get('state') == VBEE_STATUS_COMPLETE:
             try:
                 audio_url = _persist_completed_segment_audio(segment, submit_result.get('audioUrl') or '', provider_request_id)
-                request_record = update_vbee_segment(segment['id'], status=VBEE_STATUS_COMPLETE, token_id=token['id'], provider_request_id=provider_request_id, audio_url=audio_url)
+                request_record = update_vbee_segment(segment['id'], status=VBEE_STATUS_COMPLETE, token_id=token['id'], provider_request_id=provider_request_id, audio_url=audio_url, language=resolved_language, voice_code=resolved_voice_code)
             except Exception as error:
-                request_record = update_vbee_segment(segment['id'], status=VBEE_STATUS_FAILED, token_id=token['id'], provider_request_id=provider_request_id, error_message=str(error)[:1000])
+                request_record = update_vbee_segment(segment['id'], status=VBEE_STATUS_FAILED, token_id=token['id'], provider_request_id=provider_request_id, error_message=str(error)[:1000], language=resolved_language, voice_code=resolved_voice_code)
             if request_record:
                 set_cached_request_status(request_record['requestId'], request_record)
         elif submit_result.get('state') == VBEE_STATUS_FAILED:
-            request_record = update_vbee_segment(segment['id'], status=VBEE_STATUS_FAILED, token_id=token['id'], provider_request_id=provider_request_id, error_message=submit_result.get('errorMessage') or 'Vbee request failed')
+            request_record = update_vbee_segment(segment['id'], status=VBEE_STATUS_FAILED, token_id=token['id'], provider_request_id=provider_request_id, error_message=submit_result.get('errorMessage') or 'Vbee request failed', language=resolved_language, voice_code=resolved_voice_code)
             if request_record:
                 set_cached_request_status(request_record['requestId'], request_record)
         elif submit_result.get('state') == 'queued':
             break
         else:
-            request_record = mark_vbee_segment_processing(segment['id'], token['id'], provider_request_id)
+            request_record = mark_vbee_segment_processing(segment['id'], token['id'], provider_request_id, voice_code=resolved_voice_code)
+            if request_record and resolved_language:
+                request_record = update_vbee_segment(segment['id'], language=resolved_language)
             if request_record:
                 set_cached_request_status(request_record['requestId'], request_record)
         dispatched += 1

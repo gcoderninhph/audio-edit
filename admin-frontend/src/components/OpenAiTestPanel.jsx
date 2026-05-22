@@ -29,7 +29,7 @@ export default function OpenAiTestPanel() {
   const fileInputId = 'openai-test-srt-upload'
   const defaultConfig = useMemo(() => ({
     apiBaseUrl: 'https://api.openai.com/v1',
-    model: 'gpt-4.1-mini',
+    model: 'gpt-5.4-mini',
     promptTemplate: 'Translate this subtitle file into <TARGET_LANGUAGE>. Return only valid SRT content.\n\n<SRT_FILE_CONTENT>',
     systemPrompt: 'You translate subtitle files. Return only valid SRT content.',
   }), [])

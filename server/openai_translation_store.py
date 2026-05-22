@@ -25,7 +25,8 @@ MYSQL_DATABASE = os.environ.get('OPENAI_MYSQL_DATABASE') or os.environ.get('REQU
 OPENAI_REQUEST_PROVIDER = 'openai-chatgpt'
 OPENAI_REQUEST_TYPE = 'translation'
 DEFAULT_API_BASE_URL = os.environ.get('OPENAI_TRANSLATION_API_BASE_URL', 'https://api.openai.com/v1')
-DEFAULT_MODEL = os.environ.get('OPENAI_TRANSLATION_MODEL', 'gpt-4.1-mini')
+LEGACY_DEFAULT_MODEL = 'gpt-4.1-mini'
+DEFAULT_MODEL = os.environ.get('OPENAI_TRANSLATION_MODEL', 'gpt-5.4-mini')
 DEFAULT_SYSTEM_PROMPT = os.environ.get(
     'OPENAI_TRANSLATION_SYSTEM_PROMPT',
     'You translate subtitle files. Return only valid SRT content. Keep subtitle order, numbering, and timestamps stable.',
@@ -145,14 +146,42 @@ def _serialize_config(row):
     defaults = _defaults()
     if not row:
         return defaults
+    model_value = str(row.get('model') or defaults['model']).strip() or defaults['model']
+    if model_value == LEGACY_DEFAULT_MODEL:
+        model_value = defaults['model']
     return {
         'apiBaseUrl': str(row.get('api_base_url') or defaults['apiBaseUrl']).strip() or defaults['apiBaseUrl'],
-        'model': str(row.get('model') or defaults['model']).strip() or defaults['model'],
+        'model': model_value,
         'systemPrompt': str(row.get('system_prompt') or defaults['systemPrompt']),
         'promptTemplate': str(row.get('prompt_template') or defaults['promptTemplate']),
         'temperature': _safe_float(row.get('temperature'), defaults['temperature']),
         'timeoutSeconds': max(10, min(600, _safe_int(row.get('timeout_seconds'), defaults['timeoutSeconds']))),
     }
+
+
+def _sanitize_openai_request_details(details):
+    safe_details = dict(details or {})
+    removed = 'systemPrompt' in safe_details
+    if removed:
+        safe_details.pop('systemPrompt', None)
+    return safe_details, removed
+
+
+def _scrub_openai_request_detail_row(connection, row):
+    safe_details, removed = _sanitize_openai_request_details(json.loads(row.get('details_json') or '{}') if str(row.get('details_json') or '').strip() else {})
+    if not removed:
+        return safe_details
+    with connection.cursor() as cursor:
+        cursor.execute(
+            'UPDATE server_requests SET details_json = %s WHERE request_id = %s AND request_type = %s AND provider = %s',
+            (
+                json.dumps(safe_details, ensure_ascii=False, separators=(',', ':')),
+                row.get('request_id') or '',
+                OPENAI_REQUEST_TYPE,
+                OPENAI_REQUEST_PROVIDER,
+            ),
+        )
+    return safe_details
 
 
 def _row_to_request_record(row):
@@ -163,6 +192,7 @@ def _row_to_request_record(row):
         details = json.loads(details_json) if details_json else {}
     except json.JSONDecodeError:
         details = {}
+    details, _removed = _sanitize_openai_request_details(details)
     return {
         'request_id': row.get('request_id') or '',
         'user_id': row.get('user_id') or '',
@@ -471,8 +501,17 @@ def list_openai_request_records_page(status='', page=1, page_size=20):
                     f'SELECT * FROM server_requests WHERE {where_sql} ORDER BY updated_at DESC, created_at DESC LIMIT %s OFFSET %s',
                     tuple(query_params + [safe_page_size, (current_page - 1) * safe_page_size]),
                 )
+                rows = cursor.fetchall() or []
+                sanitized_records = []
+                for row in rows:
+                    if row:
+                        try:
+                            row['details_json'] = json.dumps(_scrub_openai_request_detail_row(connection, row), ensure_ascii=False, separators=(',', ':'))
+                        except json.JSONDecodeError:
+                            row['details_json'] = '{}'
+                    sanitized_records.append(_row_to_request_record(row))
                 return {
-                    'requests': [_row_to_request_record(row) for row in cursor.fetchall() or []],
+                    'requests': sanitized_records,
                     'pagination': {
                         'page': current_page,
                         'pageSize': safe_page_size,
@@ -502,7 +541,13 @@ def get_openai_request_record(request_id):
                     'SELECT * FROM server_requests WHERE request_id = %s AND request_type = %s AND provider = %s LIMIT 1',
                     (safe_request_id, OPENAI_REQUEST_TYPE, OPENAI_REQUEST_PROVIDER),
                 )
-                record = _row_to_request_record(cursor.fetchone())
+                row = cursor.fetchone()
+                if row:
+                    try:
+                        row['details_json'] = json.dumps(_scrub_openai_request_detail_row(connection, row), ensure_ascii=False, separators=(',', ':'))
+                    except json.JSONDecodeError:
+                        row['details_json'] = '{}'
+                record = _row_to_request_record(row)
                 if not record:
                     raise OpenAiTranslationNotFoundError('OpenAI request not found')
                 return record

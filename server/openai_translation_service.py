@@ -1,11 +1,10 @@
 from concurrent.futures import ThreadPoolExecutor
-import re
 import time
+import re
 import uuid
 
-import requests
-
 try:
+    from openai_translation_client import prepare_openai_request_context, translate_srt_with_openai
     from openai_translation_store import (
         OPENAI_REQUEST_PROVIDER,
         OpenAiTranslationValidationError,
@@ -14,8 +13,9 @@ try:
         touch_openai_translation_token,
     )
     from request_store import RequestStoreError, get_translation_job, save_request_record, save_translation_job
-    from translation_fallback import normalize_target_language, parse_srt_entries, rebuild_srt, sanitize_file_name
+    from translation_fallback import sanitize_file_name
 except ImportError:
+    from .openai_translation_client import prepare_openai_request_context, translate_srt_with_openai
     from .openai_translation_store import (
         OPENAI_REQUEST_PROVIDER,
         OpenAiTranslationValidationError,
@@ -24,144 +24,97 @@ except ImportError:
         touch_openai_translation_token,
     )
     from .request_store import RequestStoreError, get_translation_job, save_request_record, save_translation_job
-    from .translation_fallback import normalize_target_language, parse_srt_entries, rebuild_srt, sanitize_file_name
+    from .translation_fallback import sanitize_file_name
 
 
 OPENAI_TRANSLATION_JOB_PREFIX = 'openai-translation-'
+OPENAI_TRANSLATION_TEST_REQUEST_PREFIX = 'openai-test-'
 OPENAI_TRANSLATION_EXECUTOR = ThreadPoolExecutor(max_workers=2, thread_name_prefix='openai-translation')
-CODE_FENCE_PATTERN = re.compile(r'^```(?:[a-zA-Z0-9_-]+)?\s*([\s\S]*?)\s*```$', re.DOTALL)
+OPENAI_TARGET_LANGUAGE_ALIASES = {
+    'vi': 'Vietnamese',
+    'vietnamese': 'Vietnamese',
+    'en': 'English',
+    'english': 'English',
+    'es': 'Spanish',
+    'spanish': 'Spanish',
+    'fr': 'French',
+    'french': 'French',
+    'de': 'German',
+    'german': 'German',
+    'it': 'Italian',
+    'italian': 'Italian',
+    'pt': 'Portuguese',
+    'portuguese': 'Portuguese',
+    'ru': 'Russian',
+    'russian': 'Russian',
+    'zh': 'Chinese',
+    'zh-cn': 'Chinese',
+    'chinese': 'Chinese',
+    'ja': 'Japanese',
+    'japanese': 'Japanese',
+    'ko': 'Korean',
+    'korean': 'Korean',
+    'th': 'Thai',
+    'thai': 'Thai',
+    'id': 'Indonesian',
+    'indonesian': 'Indonesian',
+    'ms': 'Malay',
+    'malay': 'Malay',
+    'fil': 'Filipino',
+    'tl': 'Filipino',
+    'filipino': 'Filipino',
+    'hi': 'Hindi',
+    'hindi': 'Hindi',
+    'ar': 'Arabic',
+    'arabic': 'Arabic',
+    'bn': 'Bengali',
+    'bengali': 'Bengali',
+    'tr': 'Turkish',
+    'turkish': 'Turkish',
+    'nl': 'Dutch',
+    'dutch': 'Dutch',
+    'pl': 'Polish',
+    'polish': 'Polish',
+    'uk': 'Ukrainian',
+    'ukrainian': 'Ukrainian',
+    'ro': 'Romanian',
+    'romanian': 'Romanian',
+    'cs': 'Czech',
+    'czech': 'Czech',
+    'el': 'Greek',
+    'greek': 'Greek',
+    'he': 'Hebrew',
+    'iw': 'Hebrew',
+    'hebrew': 'Hebrew',
+    'sv': 'Swedish',
+    'swedish': 'Swedish',
+    'da': 'Danish',
+    'danish': 'Danish',
+    'no': 'Norwegian',
+    'nb': 'Norwegian',
+    'norwegian': 'Norwegian',
+    'fi': 'Finnish',
+    'finnish': 'Finnish',
+}
+
+
+def normalize_openai_target_language(target_language):
+    normalized = re.sub(r'\s+', ' ', str(target_language or '').strip())
+    if not normalized:
+        raise OpenAiTranslationValidationError('Target language is required.')
+
+    canonical_language = OPENAI_TARGET_LANGUAGE_ALIASES.get(normalized.lower())
+    if canonical_language:
+        return canonical_language
+
+    if re.fullmatch(r"[A-Za-z][A-Za-z\s()'/-]{1,63}", normalized):
+        return normalized
+
+    raise OpenAiTranslationValidationError(f'Unsupported target language: {target_language}')
 
 
 def is_openai_translation_job(job_id):
     return str(job_id or '').startswith(OPENAI_TRANSLATION_JOB_PREFIX)
-
-
-def _resolve_chat_completions_url(api_base_url):
-    normalized_base = str(api_base_url or '').strip().rstrip('/')
-    if not normalized_base:
-        raise OpenAiTranslationValidationError('OpenAI API base URL is not configured.')
-    if normalized_base.endswith('/chat/completions'):
-        return normalized_base
-    if normalized_base.endswith('/v1'):
-        return f'{normalized_base}/chat/completions'
-    return f'{normalized_base}/v1/chat/completions'
-
-
-def _build_prompt(srt_text, target_language, source_file_name, prompt_template):
-    normalized_template = str(prompt_template or '').strip()
-    if not normalized_template:
-        normalized_template = 'Translate this subtitle file into <TARGET_LANGUAGE>. Return only valid SRT content.\n\n<SRT_FILE_CONTENT>'
-    prompt_body = normalized_template.replace('<TARGET_LANGUAGE>', str(target_language or '').strip())
-    if '<SRT_FILE_CONTENT>' in prompt_body:
-        prompt_body = prompt_body.replace('<SRT_FILE_CONTENT>', srt_text)
-    else:
-        prompt_body = f'{prompt_body}\n\n<SRT_FILE_CONTENT>\n{srt_text}'
-    return (
-        f'Target language: {target_language}.\n'
-        'Preserve subtitle order and timing alignment. Return only SRT text.\n\n'
-        f'{prompt_body}'
-    )
-
-
-def _extract_error_message(payload, default_message):
-    if isinstance(payload, dict):
-        error_value = payload.get('error')
-        if isinstance(error_value, dict):
-            return str(error_value.get('message') or error_value.get('code') or default_message)
-        if error_value:
-            return str(error_value)
-    return default_message
-
-
-def _extract_response_text(payload):
-    if not isinstance(payload, dict):
-        raise RuntimeError('OpenAI returned an invalid response payload.')
-    choices = payload.get('choices') or []
-    if not choices:
-        raise RuntimeError('OpenAI did not return any completion choices.')
-    first_choice = choices[0] or {}
-    message = first_choice.get('message') or {}
-    content = message.get('content')
-    if isinstance(content, list):
-        parts = []
-        for item in content:
-            if isinstance(item, dict):
-                parts.append(str(item.get('text') or item.get('content') or ''))
-            else:
-                parts.append(str(item or ''))
-        content = ''.join(parts)
-    text = str(content or '').strip()
-    if not text:
-        raise RuntimeError('OpenAI did not return translated subtitle content.')
-    return text
-
-
-def _strip_code_fences(text):
-    normalized_text = str(text or '').strip()
-    match = CODE_FENCE_PATTERN.match(normalized_text)
-    if match:
-        return match.group(1).strip()
-    return normalized_text
-
-
-def _normalize_output_srt(original_entries, translated_text):
-    cleaned_text = _strip_code_fences(translated_text)
-    translated_entries = parse_srt_entries(cleaned_text)
-    if len(translated_entries) != len(original_entries):
-        raise RuntimeError('OpenAI did not return the same number of subtitle blocks as the source SRT.')
-    normalized_entries = []
-    for original_entry, translated_entry in zip(original_entries, translated_entries):
-        normalized_entries.append({
-            'timing_line': original_entry['timing_line'],
-            'text': str(translated_entry.get('text') or original_entry.get('text') or '').strip() or original_entry.get('text') or '',
-        })
-    return rebuild_srt(normalized_entries)
-
-
-def _translate_srt_with_openai(file_bytes, source_file_name, target_language, token_record, config_snapshot):
-    srt_text = bytes(file_bytes or b'').decode('utf-8-sig', errors='replace')
-    original_entries = parse_srt_entries(srt_text)
-    if not original_entries:
-        raise RuntimeError('Subtitle file is empty or not a valid SRT file.')
-
-    response = requests.post(
-        _resolve_chat_completions_url(config_snapshot.get('apiBaseUrl')),
-        headers={
-            'Authorization': f"Bearer {token_record.get('token') or ''}",
-            'Content-Type': 'application/json',
-        },
-        json={
-            'model': config_snapshot.get('model'),
-            'temperature': config_snapshot.get('temperature'),
-            'messages': [
-                {'role': 'system', 'content': config_snapshot.get('systemPrompt') or ''},
-                {
-                    'role': 'user',
-                    'content': _build_prompt(
-                        srt_text,
-                        target_language,
-                        source_file_name,
-                        config_snapshot.get('promptTemplate'),
-                    ),
-                },
-            ],
-        },
-        timeout=max(10, int(config_snapshot.get('timeoutSeconds') or 120)),
-    )
-    payload = response.json()
-    if not response.ok:
-        raise RuntimeError(_extract_error_message(payload, 'OpenAI translation request failed.'))
-    translated_text = _extract_response_text(payload)
-    normalized_output = _normalize_output_srt(original_entries, translated_text)
-    return {
-        'translatedContent': normalized_output,
-        'subtitleCount': len(original_entries),
-        'model': config_snapshot.get('model') or '',
-        'tokenId': token_record.get('id') or 0,
-        'tokenName': token_record.get('name') or '',
-        'sourceFileName': source_file_name,
-        'targetLanguage': target_language,
-    }
 
 
 def _save_openai_job_state(job_id, user_id, source_file_name, target_language, output_file_name, status, created_at, details, error_message=None, output_content=None):
@@ -197,17 +150,59 @@ def _save_openai_job_state(job_id, user_id, source_file_name, target_language, o
     })
 
 
-def _run_openai_translation_job(job_id, file_bytes, user_id, source_file_name, target_language, output_file_name, created_at, token_record, config_snapshot):
-    request_details = {
-        'model': config_snapshot.get('model') or '',
-        'tokenId': token_record.get('id') or 0,
-        'tokenName': token_record.get('name') or '',
-        'promptTemplate': config_snapshot.get('promptTemplate') or '',
-        'temperature': config_snapshot.get('temperature'),
-        'timeoutSeconds': config_snapshot.get('timeoutSeconds'),
+def _save_openai_test_request_state(request_id, user_id, source_file_name, target_language, output_file_name, status, created_at, details, error_message=None):
+    updated_at = time.time()
+    request_details = dict(details or {})
+    request_details['requestMode'] = 'admin-test'
+    if error_message:
+        request_details['error'] = error_message
+    else:
+        request_details.pop('error', None)
+    save_request_record({
+        'request_id': request_id,
+        'user_id': user_id,
+        'request_type': 'translation',
+        'provider': OPENAI_REQUEST_PROVIDER,
+        'status': status,
+        'source_file_name': source_file_name,
+        'target_language': target_language,
+        'output_file_name': output_file_name,
+        'details': request_details,
+        'created_at': created_at,
+        'updated_at': updated_at,
+    })
+
+
+def _build_openai_request_details(config_snapshot=None, token_record=None, request_context=None, result=None):
+    usage_source = result or {}
+    prepared_context = request_context or {}
+    return {
+        'model': (config_snapshot or {}).get('model') or '',
+        'tokenId': (token_record or {}).get('id') or 0,
+        'tokenName': (token_record or {}).get('name') or '',
+        'userPrompt': str(usage_source.get('userPrompt') or prepared_context.get('userPrompt') or ''),
+        'inputTokens': usage_source.get('inputTokens'),
+        'outputTokens': usage_source.get('outputTokens'),
+        'totalTokens': usage_source.get('totalTokens'),
+        'temperature': (config_snapshot or {}).get('temperature'),
+        'timeoutSeconds': (config_snapshot or {}).get('timeoutSeconds'),
     }
+
+
+def _run_openai_translation_job(job_id, file_bytes, user_id, source_file_name, target_language, output_file_name, created_at, token_record, config_snapshot):
+    request_context = None
+    request_details = _build_openai_request_details(config_snapshot, token_record)
     try:
-        result = _translate_srt_with_openai(file_bytes, source_file_name, target_language, token_record, config_snapshot)
+        request_context = prepare_openai_request_context(file_bytes, source_file_name, target_language, config_snapshot)
+        request_details = _build_openai_request_details(config_snapshot, token_record, request_context=request_context)
+        result = translate_srt_with_openai(
+            file_bytes,
+            source_file_name,
+            target_language,
+            token_record,
+            config_snapshot,
+            request_context=request_context,
+        )
         touch_openai_translation_token(token_record.get('id'))
         _save_openai_job_state(
             job_id,
@@ -217,7 +212,7 @@ def _run_openai_translation_job(job_id, file_bytes, user_id, source_file_name, t
             output_file_name,
             'finished',
             created_at,
-            request_details,
+            _build_openai_request_details(config_snapshot, token_record, request_context=request_context, result=result),
             output_content=result['translatedContent'],
         )
     except Exception as error:
@@ -236,27 +231,20 @@ def _run_openai_translation_job(job_id, file_bytes, user_id, source_file_name, t
 
 def create_openai_translation_job(file_bytes, original_file_name, target_language, user_id):
     try:
-        normalized_target_language = normalize_target_language(target_language)
-    except ValueError as error:
-        raise OpenAiTranslationValidationError(str(error)) from error
+        normalized_target_language = normalize_openai_target_language(target_language)
+    except OpenAiTranslationValidationError:
+        raise
     source_file_name = str(original_file_name or 'subtitles.srt').strip() or 'subtitles.srt'
-    srt_text = bytes(file_bytes or b'').decode('utf-8-sig', errors='replace')
-    if not parse_srt_entries(srt_text):
-        raise OpenAiTranslationValidationError('Subtitle file is empty or not a valid SRT file.')
-
     token_record = choose_openai_translation_token()
     config_snapshot = get_openai_translation_config()
     job_id = f'{OPENAI_TRANSLATION_JOB_PREFIX}{uuid.uuid4()}'
     created_at = time.time()
     output_file_name = sanitize_file_name(f'translated_{source_file_name}')
-    request_details = {
-        'model': config_snapshot.get('model') or '',
-        'tokenId': token_record.get('id') or 0,
-        'tokenName': token_record.get('name') or '',
-        'promptTemplate': config_snapshot.get('promptTemplate') or '',
-        'temperature': config_snapshot.get('temperature'),
-        'timeoutSeconds': config_snapshot.get('timeoutSeconds'),
-    }
+    try:
+        request_context = prepare_openai_request_context(file_bytes, source_file_name, normalized_target_language, config_snapshot)
+    except RuntimeError as error:
+        raise OpenAiTranslationValidationError(str(error)) from error
+    request_details = _build_openai_request_details(config_snapshot, token_record, request_context=request_context)
     _save_openai_job_state(
         job_id,
         user_id,
@@ -287,27 +275,93 @@ def create_openai_translation_job(file_bytes, original_file_name, target_languag
     }
 
 
-def run_openai_translation_test(file_bytes, original_file_name, target_language):
+def run_openai_translation_test(file_bytes, original_file_name, target_language, user_id=''):
+    request_id = f'{OPENAI_TRANSLATION_TEST_REQUEST_PREFIX}{uuid.uuid4()}'
+    created_at = time.time()
+    source_file_name = str(original_file_name or 'subtitles.srt').strip() or 'subtitles.srt'
+    output_file_name = sanitize_file_name(f'test_translated_{source_file_name}')
+    raw_target_language = str(target_language or '').strip()
     try:
-        normalized_target_language = normalize_target_language(target_language)
-    except ValueError as error:
+        normalized_target_language = normalize_openai_target_language(target_language)
+    except OpenAiTranslationValidationError as error:
+        _save_openai_test_request_state(
+            request_id,
+            user_id,
+            source_file_name,
+            raw_target_language,
+            output_file_name,
+            'failed',
+            created_at,
+            {},
+            error_message=str(error),
+        )
         raise OpenAiTranslationValidationError(str(error)) from error
 
-    source_file_name = str(original_file_name or 'subtitles.srt').strip() or 'subtitles.srt'
     if not source_file_name.lower().endswith('.srt'):
+        _save_openai_test_request_state(
+            request_id,
+            user_id,
+            source_file_name,
+            normalized_target_language,
+            output_file_name,
+            'failed',
+            created_at,
+            {},
+            error_message='Only .srt subtitle files are supported for OpenAI test translation.',
+        )
         raise OpenAiTranslationValidationError('Only .srt subtitle files are supported for OpenAI test translation.')
 
-    token_record = choose_openai_translation_token()
-    config_snapshot = get_openai_translation_config()
-    result = _translate_srt_with_openai(file_bytes, source_file_name, normalized_target_language, token_record, config_snapshot)
-    touch_openai_translation_token(token_record.get('id'))
-    return {
-        **result,
-        'provider': OPENAI_REQUEST_PROVIDER,
-        'promptTemplate': config_snapshot.get('promptTemplate') or '',
-        'temperature': config_snapshot.get('temperature'),
-        'timeoutSeconds': config_snapshot.get('timeoutSeconds'),
-    }
+    token_record = None
+    config_snapshot = None
+    request_context = None
+    try:
+        token_record = choose_openai_translation_token()
+        config_snapshot = get_openai_translation_config()
+        try:
+            request_context = prepare_openai_request_context(file_bytes, source_file_name, normalized_target_language, config_snapshot)
+        except RuntimeError as error:
+            raise OpenAiTranslationValidationError(str(error)) from error
+        request_details = _build_openai_request_details(config_snapshot, token_record, request_context=request_context)
+        result = translate_srt_with_openai(
+            file_bytes,
+            source_file_name,
+            normalized_target_language,
+            token_record,
+            config_snapshot,
+            request_context=request_context,
+        )
+        touch_openai_translation_token(token_record.get('id'))
+        _save_openai_test_request_state(
+            request_id,
+            user_id,
+            source_file_name,
+            normalized_target_language,
+            output_file_name,
+            'success',
+            created_at,
+            _build_openai_request_details(config_snapshot, token_record, request_context=request_context, result=result),
+        )
+        return {
+            **result,
+            'requestId': request_id,
+            'provider': OPENAI_REQUEST_PROVIDER,
+            'promptTemplate': config_snapshot.get('promptTemplate') or '',
+            'temperature': config_snapshot.get('temperature'),
+            'timeoutSeconds': config_snapshot.get('timeoutSeconds'),
+        }
+    except Exception as error:
+        _save_openai_test_request_state(
+            request_id,
+            user_id,
+            source_file_name,
+            normalized_target_language,
+            output_file_name,
+            'failed',
+            created_at,
+            _build_openai_request_details(config_snapshot, token_record, request_context=request_context),
+            error_message=str(error),
+        )
+        raise
 
 
 def get_openai_translation_status(job_id):

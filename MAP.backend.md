@@ -24,24 +24,26 @@
 - `server/iap_payment_expiry.py` - Starts the worker that expires pending payment tickets every minute.
 - `server/iap_bank_hook_history_store.py` - Owns MySQL-backed bank-hook history persistence, filtering, pagination, and detail lookup.
 - `server/admin_web_routes.py` - Serves the built standalone admin frontend and nested `/admin/...` SPA routes.
-- `server/proxy_routes.py` - Registers transcription proxy endpoints plus the OpenAI-backed subtitle translation contract while keeping legacy `llm-subtrans` job reads for older request ids.
+- `server/proxy_routes.py` - Registers transcription proxy endpoints plus the OpenAI-backed subtitle translation contract and local request ownership checks.
 - `server/proxy_transcription_routes.py` - Owns the authenticated transcription proxy endpoints and downstream Whishper integration.
 - `server/proxy_credit_helpers.py` - Centralizes shared credit charge or refund helpers for proxy-backed routes.
 - `server/proxy_route_helpers.py` - Owns shared proxy-route helpers for provider shaping and request persistence.
-- `server/openai_translation_store.py` - Owns MySQL-backed OpenAI subtitle token/config CRUD and admin request-list queries for the new Service/OpenAI surface.
-- `server/openai_translation_service.py` - Runs asynchronous OpenAI subtitle translation jobs, builds prompt payloads, normalizes SRT output, persists job state, and now powers synchronous admin `.srt` test translations.
+- `server/openai_translation_store.py` - Owns MySQL-backed OpenAI subtitle token/config CRUD, admin request-list queries for the new Service/OpenAI surface, and sanitizes legacy OpenAI request records so hidden fields like saved system prompts are removed from returned detail payloads.
+- `server/openai_translation_client.py` - Owns the low-level OpenAI request-building, prompt assembly, usage extraction, and SRT-response normalization helpers split out of the service module.
+- `server/openai_translation_service.py` - Runs asynchronous OpenAI subtitle translation jobs, persists job state, powers synchronous admin `.srt` test translations, records those admin test runs in the shared OpenAI request history, and delegates OpenAI request/response shaping to `openai_translation_client.py` while storing the concrete user prompt plus input/output/total token usage in request snapshots without persisting the configured system prompt.
 - `server/openai_translation_routes.py` - Registers admin-only Service/OpenAI token, request, config, and one-off test-translation upload APIs.
 - `server/vbee_schema.py` - Defines Vbee statuses, validators, serializers, and MySQL schema helpers.
-- `server/vbee_token_store.py` - Owns MySQL-backed Vbee token and provider config CRUD.
+- `server/vbee_token_store.py` - Owns MySQL-backed Vbee token and provider config CRUD, including the persisted `enabledLanguageCodes` list that controls which narration languages desktop clients may generate.
 - `server/vbee_request_store.py` - Owns MySQL-backed Vbee request or segment persistence, queue lookups, refresh helpers, and cache-clear deletion paths.
 - `server/vbee_audio_cache_store.py` - Owns the MySQL-backed reusable Vbee asset registry keyed by segment cache key.
-- `server/vbee_segment_store.py` - Groups historical Vbee request segments by cache hash for admin segment list and detail reads.
+- `server/vbee_segment_store.py` - Groups historical Vbee request segments by cache hash for admin segment list and detail reads, now anchoring summary fields to the latest usage row and deriving structured failure-detail payloads for failed segment inspection.
 - `server/vbee_store.py` - Thin compatibility re-export for the split Vbee schema, token/config, request/segment, and grouped segment modules.
 - `server/vbee_cache.py` - Owns Redis-backed active request status and reusable audio-asset cache helpers.
 - `server/vbee_asset_service.py` - Orchestrates the Cloudflare R2-backed Vbee asset lifecycle, reuse expiry, and delete helpers.
 - `server/vbee_asset_expiry.py` - Starts the daemon worker that expires old Vbee segment assets.
-- `server/vbee_service.py` - Orchestrates Vbee voiceover creation, provider polling, webhook completion, reuse, and request summary refresh.
-- `server/vbee_routes.py` - Registers client voiceover APIs plus admin Service/Vbee token, request, segment, audio, cache-clear, delete, and config APIs.
+- `server/vbee_service.py` - Orchestrates Vbee voiceover creation, provider polling, webhook completion, reuse, request summary refresh, language-aware Vbee voice selection when the desktop requests narration in different languages, and rejects client requests for languages disabled in Vbee config.
+- `server/vbee_voice_catalog.py` - Normalizes the supported 30-language voiceover codes, exposes the derived supported-language metadata plus enabled-language normalization helpers, resolves a matching Vbee `voice_code` from the provider's public voice catalog for a requested language, and includes the provider's required `voiceOwnership=VBEE` filter plus readable validation details when lookup fails.
+- `server/vbee_routes.py` - Registers client voiceover APIs plus admin Service/Vbee token, request, segment, audio, cache-clear, delete, and config APIs, including the public desktop `voiceover/config` payload used to gate narration buttons by enabled language and language-aware desktop voiceover start payloads.
 - `server/request_store.py` - Owns MySQL-backed persistence for server-managed transcription, translation, and voiceover request records.
 - `server/translation_fallback.py` - Retains the local subtitle translation helpers plus shared SRT parsing utilities used by translation job flows.
 - `server/requirements.txt` - Lists Python runtime dependencies for the subtitle-service backend.
@@ -51,5 +53,5 @@
 - `.gitignore` - Excludes generated workspace artifacts, runtime data, logs, uploads, and bind-mounted service data.
 - `.dockerignore` - Keeps Docker build context small by excluding git metadata, caches, logs, projects, and installed dependencies.
 - `.env` - Stores local Docker Compose secrets and backend runtime defaults.
-- `docker-compose.yml` - Defines the containerized backend stack, internal service wiring, and published ports.
+- `docker-compose.yml` - Defines the containerized backend stack, internal service wiring, and published ports for the Flask backend, MySQL, Redis, Whishper, and related runtime services.
 - `TASK.md` - Tracks active work, validation state, and follow-up refactors for the repository.

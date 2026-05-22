@@ -1,10 +1,35 @@
 const BUILTIN_SUBTITLE_LANGUAGE_OPTIONS = Object.freeze([
-  { id: 'original', label: 'Original', source: 'original', translatable: false },
-  { id: 'vietnamese', label: 'Vietnamese', source: 'translation', translatable: true },
-  { id: 'english', label: 'English', source: 'translation', translatable: true },
-  { id: 'japanese', label: 'Japanese', source: 'translation', translatable: true },
-  { id: 'korean', label: 'Korean', source: 'translation', translatable: true },
-  { id: 'chinese', label: 'Chinese', source: 'translation', translatable: true },
+  { id: 'original', label: 'Original', source: 'original', translatable: false, voiceoverCode: '' },
+  { id: 'vietnamese', label: 'Vietnamese', source: 'translation', translatable: true, voiceoverCode: 'vi' },
+  { id: 'english', label: 'English', source: 'translation', translatable: true, voiceoverCode: 'en' },
+  { id: 'spanish', label: 'Spanish', source: 'translation', translatable: true, voiceoverCode: 'es' },
+  { id: 'french', label: 'French', source: 'translation', translatable: true, voiceoverCode: 'fr' },
+  { id: 'german', label: 'German', source: 'translation', translatable: true, voiceoverCode: 'de' },
+  { id: 'italian', label: 'Italian', source: 'translation', translatable: true, voiceoverCode: 'it' },
+  { id: 'portuguese', label: 'Portuguese', source: 'translation', translatable: true, voiceoverCode: 'pt' },
+  { id: 'russian', label: 'Russian', source: 'translation', translatable: true, voiceoverCode: 'ru' },
+  { id: 'chinese', label: 'Chinese', source: 'translation', translatable: true, voiceoverCode: 'zh' },
+  { id: 'japanese', label: 'Japanese', source: 'translation', translatable: true, voiceoverCode: 'ja' },
+  { id: 'korean', label: 'Korean', source: 'translation', translatable: true, voiceoverCode: 'ko' },
+  { id: 'thai', label: 'Thai', source: 'translation', translatable: true, voiceoverCode: 'th' },
+  { id: 'indonesian', label: 'Indonesian', source: 'translation', translatable: true, voiceoverCode: 'id' },
+  { id: 'malay', label: 'Malay', source: 'translation', translatable: true, voiceoverCode: 'ms' },
+  { id: 'filipino', label: 'Filipino', source: 'translation', translatable: true, voiceoverCode: 'fil' },
+  { id: 'hindi', label: 'Hindi', source: 'translation', translatable: true, voiceoverCode: 'hi' },
+  { id: 'arabic', label: 'Arabic', source: 'translation', translatable: true, voiceoverCode: 'ar' },
+  { id: 'bengali', label: 'Bengali', source: 'translation', translatable: true, voiceoverCode: 'bn' },
+  { id: 'turkish', label: 'Turkish', source: 'translation', translatable: true, voiceoverCode: 'tr' },
+  { id: 'dutch', label: 'Dutch', source: 'translation', translatable: true, voiceoverCode: 'nl' },
+  { id: 'polish', label: 'Polish', source: 'translation', translatable: true, voiceoverCode: 'pl' },
+  { id: 'ukrainian', label: 'Ukrainian', source: 'translation', translatable: true, voiceoverCode: 'uk' },
+  { id: 'romanian', label: 'Romanian', source: 'translation', translatable: true, voiceoverCode: 'ro' },
+  { id: 'czech', label: 'Czech', source: 'translation', translatable: true, voiceoverCode: 'cs' },
+  { id: 'greek', label: 'Greek', source: 'translation', translatable: true, voiceoverCode: 'el' },
+  { id: 'hebrew', label: 'Hebrew', source: 'translation', translatable: true, voiceoverCode: 'he' },
+  { id: 'swedish', label: 'Swedish', source: 'translation', translatable: true, voiceoverCode: 'sv' },
+  { id: 'danish', label: 'Danish', source: 'translation', translatable: true, voiceoverCode: 'da' },
+  { id: 'norwegian', label: 'Norwegian', source: 'translation', translatable: true, voiceoverCode: 'no' },
+  { id: 'finnish', label: 'Finnish', source: 'translation', translatable: true, voiceoverCode: 'fi' },
 ])
 
 export const DEFAULT_SUBTITLE_LANGUAGE_KEY = 'original'
@@ -14,8 +39,16 @@ export const DEFAULT_VOICEOVER_LANGUAGE_KEY = DEFAULT_TRANSLATION_LANGUAGE_KEY
 const LANGUAGE_KEY_ALIASES = BUILTIN_SUBTITLE_LANGUAGE_OPTIONS.reduce((aliases, option) => {
   aliases.set(option.id, option.id)
   aliases.set(option.label.toLowerCase(), option.id)
+  if (option.voiceoverCode) {
+    aliases.set(option.voiceoverCode.toLowerCase(), option.id)
+  }
   return aliases
 }, new Map())
+
+function getBuiltinSubtitleLanguageOption(languageKey) {
+  const normalizedLanguageKey = normalizeSubtitleLanguageKey(languageKey)
+  return BUILTIN_SUBTITLE_LANGUAGE_OPTIONS.find((option) => option.id === normalizedLanguageKey) || null
+}
 
 function buildFallbackSubtitleLanguageLabel(languageKey) {
   return String(languageKey || '')
@@ -84,8 +117,16 @@ export function normalizeVoiceoverLanguageKey(languageKey) {
   return normalizeSubtitleLanguageKey(languageKey, DEFAULT_VOICEOVER_LANGUAGE_KEY)
 }
 
+export function getVoiceoverLanguageCode(languageKey) {
+  return getBuiltinSubtitleLanguageOption(normalizeVoiceoverLanguageKey(languageKey))?.voiceoverCode || ''
+}
+
 export function isVoiceoverSubtitleLanguageSupported(languageKey) {
-  return normalizeVoiceoverLanguageKey(languageKey) === DEFAULT_VOICEOVER_LANGUAGE_KEY
+  return Boolean(getVoiceoverLanguageCode(languageKey))
+}
+
+export function getVoiceoverLanguageOptions(subtitleTracks = null) {
+  return getSubtitleLanguageOptions(subtitleTracks).filter((option) => isVoiceoverSubtitleLanguageSupported(option.id))
 }
 
 export function getVoiceoverTrackForLanguage(voiceoverTrack, activeLanguageKey) {

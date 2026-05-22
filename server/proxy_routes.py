@@ -1,7 +1,4 @@
 from flask import Response, jsonify, request
-import io
-import os
-import requests
 
 try:
     from auth_routes import require_access_token
@@ -14,13 +11,7 @@ try:
     )
     from openai_translation_store import OpenAiTranslationError
     from proxy_credit_helpers import charge_user_credits_or_error, refund_credits_if_needed
-    from proxy_route_helpers import (
-        build_proxy_response,
-        get_claim_user_id,
-        read_response_payload,
-        require_request_owner,
-        sync_server_request_status,
-    )
+    from proxy_route_helpers import get_claim_user_id, require_request_owner
     from proxy_transcription_routes import register_transcription_routes
     from translation_fallback import (
         get_local_translation_download,
@@ -39,13 +30,7 @@ except ImportError:
     )
     from .openai_translation_store import OpenAiTranslationError
     from .proxy_credit_helpers import charge_user_credits_or_error, refund_credits_if_needed
-    from .proxy_route_helpers import (
-        build_proxy_response,
-        get_claim_user_id,
-        read_response_payload,
-        require_request_owner,
-        sync_server_request_status,
-    )
+    from proxy_route_helpers import get_claim_user_id, require_request_owner
     from .proxy_transcription_routes import register_transcription_routes
     from .translation_fallback import (
         get_local_translation_download,
@@ -54,7 +39,6 @@ except ImportError:
         RequestStoreError,
     )
 
-LLM_SUBTRANS_API_URL = os.environ.get('LLM_SUBTRANS_API_URL', 'http://llm-subtrans-web:8080/api').rstrip('/')
 TRANSLATION_CREDIT_COST = 100
 
 
@@ -78,8 +62,6 @@ def register_proxy_routes(app):
         if not file_bytes:
             return jsonify({'error': 'Subtitle file is empty'}), 400
 
-        files = {'subtitle_file': (file.filename, io.BytesIO(file_bytes), file.mimetype or 'text/plain')}
-        data = {'target_language': target_language}
         user_id = get_claim_user_id(claims)
         charged_user, charge_error = charge_user_credits_or_error(
             claims,
@@ -123,7 +105,7 @@ def register_proxy_routes(app):
         if auth_error:
             return auth_error
 
-        stored_request, owner_error = require_request_owner(job_id, claims)
+        _stored_request, owner_error = require_request_owner(job_id, claims)
         if owner_error:
             return owner_error
 
@@ -145,16 +127,7 @@ def register_proxy_routes(app):
                 return jsonify({'error': 'Translation job not found'}), 404
             return jsonify(job_status), 200
 
-        try:
-            response = requests.get(f"{LLM_SUBTRANS_API_URL}/jobs/{job_id}")
-            if response.ok:
-                request_error = sync_server_request_status(stored_request, read_response_payload(response), 'translation')
-                if request_error:
-                    return request_error
-            return build_proxy_response(response, 'Failed to communicate with LLM-Subtrans API')
-        except requests.RequestException as error:
-            print(f"LLM-Subtrans API error: {error}")
-            return jsonify({'error': 'Failed to communicate with LLM-Subtrans API'}), 502
+        return jsonify({'error': 'Translation job not found'}), 404
 
     @app.route('/api/translation/download/<string:job_id>/<string:file_name>', methods=['GET'])
     def download_translation(job_id, file_name):
@@ -198,19 +171,5 @@ def register_proxy_routes(app):
                 }
             )
 
-        try:
-            response = requests.get(f"{LLM_SUBTRANS_API_URL}/download/{job_id}/{file_name}", stream=True)
-            if not response.ok:
-                return build_proxy_response(response, 'Failed to download from LLM-Subtrans API')
-
-            return Response(
-                response.iter_content(chunk_size=8192),
-                content_type=response.headers.get('Content-Type', 'text/plain'),
-                headers={
-                    'Content-Disposition': f'attachment; filename="{file_name}"'
-                }
-            )
-        except requests.RequestException as error:
-            print(f"LLM-Subtrans API download error: {error}")
-            return jsonify({'error': 'Failed to download from LLM-Subtrans API'}), 502
+        return jsonify({'error': 'Translated subtitle file not found'}), 404
 

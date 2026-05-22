@@ -42,6 +42,13 @@
   max-width: 220px;
 }
 
+.table-prewrap-value {
+  display: block;
+  margin: 0;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
 .clickable-row {
   cursor: pointer;
 }

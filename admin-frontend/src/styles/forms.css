@@ -221,6 +221,55 @@
   border-bottom-right-radius: var(--radius-md);
 }
 
+.vbee-language-config-field {
+  grid-column: 1 / -1;
+}
+
+.vbee-language-config-toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.vbee-language-config-count {
+  color: var(--text-tertiary);
+  font-size: 0.8rem;
+}
+
+.vbee-language-checkbox-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+  gap: 10px;
+}
+
+.vbee-language-checkbox {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  gap: 4px 10px;
+  align-items: center;
+  min-height: 56px;
+  padding: 10px 12px;
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-md);
+  background: rgba(255, 255, 255, 0.04);
+  color: var(--text-primary);
+}
+
+.vbee-language-checkbox input {
+  width: 16px;
+  height: 16px;
+  margin: 0;
+  accent-color: #22c55e;
+}
+
+.vbee-language-checkbox small {
+  grid-column: 2;
+  color: var(--text-tertiary);
+  font-size: 0.76rem;
+}
+
 .primary-button {
   background: var(--accent-gradient);
   color: white;

@@ -2,10 +2,12 @@ from urllib.parse import urlparse
 
 try:
     from auth_store import AuthStoreError, MYSQL_DATABASE, _connect, _require_driver
-    from vbee_schema import ensure_vbee_schema, mask_secret, normalize_bool, normalize_positive_int, normalize_text, now_timestamp, VBEE_STATUS_COMPLETE, VBEE_STATUS_PROCESSING, VbeeNotFoundError
+    from vbee_schema import ensure_vbee_schema, json_dumps, json_loads, mask_secret, normalize_bool, normalize_positive_int, normalize_text, now_timestamp, VBEE_STATUS_COMPLETE, VBEE_STATUS_PROCESSING, VbeeNotFoundError
+    from vbee_voice_catalog import get_default_vbee_enabled_language_codes, normalize_vbee_enabled_language_codes
 except ImportError:
     from .auth_store import AuthStoreError, MYSQL_DATABASE, _connect, _require_driver
-    from .vbee_schema import ensure_vbee_schema, mask_secret, normalize_bool, normalize_positive_int, normalize_text, now_timestamp, VBEE_STATUS_COMPLETE, VBEE_STATUS_PROCESSING, VbeeNotFoundError
+    from .vbee_schema import ensure_vbee_schema, json_dumps, json_loads, mask_secret, normalize_bool, normalize_positive_int, normalize_text, now_timestamp, VBEE_STATUS_COMPLETE, VBEE_STATUS_PROCESSING, VbeeNotFoundError
+    from .vbee_voice_catalog import get_default_vbee_enabled_language_codes, normalize_vbee_enabled_language_codes
 
 
 def _row_to_token(row, include_secret=False, stats=None):
@@ -156,6 +158,7 @@ def get_vbee_config():
         'audioType': 'wav',
         'defaultLanguage': 'vi',
         'defaultVoiceCode': '',
+        'enabledLanguageCodes': get_default_vbee_enabled_language_codes(),
         'webhookHost': '',
         'webhookSecret': '',
     }
@@ -166,7 +169,13 @@ def get_vbee_config():
             with connection.cursor() as cursor:
                 cursor.execute('SELECT config_key, config_value FROM vbee_configs')
                 for row in cursor.fetchall() or []:
-                    config[row['config_key']] = row.get('config_value') or ''
+                    config_key = row['config_key']
+                    config_value = row.get('config_value') or ''
+                    if config_key == 'enabledLanguageCodes':
+                        parsed_value = json_loads(config_value, config_value)
+                        config[config_key] = normalize_vbee_enabled_language_codes(parsed_value, fallback=get_default_vbee_enabled_language_codes(), allow_empty=True)
+                        continue
+                    config[config_key] = config_value
         finally:
             connection.close()
     except driver.MySQLError as error:
@@ -175,7 +184,7 @@ def get_vbee_config():
 
 
 def update_vbee_config(payload):
-    allowed_keys = {'apiBaseUrl', 'audioType', 'defaultLanguage', 'defaultVoiceCode', 'webhookHost', 'webhookSecret'}
+    allowed_keys = {'apiBaseUrl', 'audioType', 'defaultLanguage', 'defaultVoiceCode', 'enabledLanguageCodes', 'webhookHost', 'webhookSecret'}
     now = now_timestamp()
     driver = _require_driver()
     ensure_vbee_schema()
@@ -186,7 +195,11 @@ def update_vbee_config(payload):
                 for key in allowed_keys:
                     if key not in payload:
                         continue
-                    config_value = str(payload.get(key) or '').strip()
+                    if key == 'enabledLanguageCodes':
+                        normalized_codes = normalize_vbee_enabled_language_codes(payload.get(key), allow_empty=True)
+                        config_value = json_dumps(normalized_codes)
+                    else:
+                        config_value = str(payload.get(key) or '').strip()
                     if key == 'webhookHost' and config_value:
                         parsed_host = urlparse(config_value if '://' in config_value else f'https://{config_value}')
                         config_value = f'{parsed_host.scheme}://{parsed_host.netloc}'.rstrip('/')

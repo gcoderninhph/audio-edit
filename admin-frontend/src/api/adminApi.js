@@ -3,11 +3,18 @@ const SESSION_STORAGE_KEY = 'videoforge-admin-web-session'
 async function performJsonRequest(path, options = {}) {
   try {
     const response = await fetch(path, options)
+    const rawText = await response.text()
+    const trimmedText = rawText.trim()
     let data = null
-    try {
-      data = await response.json()
-    } catch {
-      data = null
+    if (trimmedText) {
+      try {
+        data = JSON.parse(trimmedText)
+      } catch {
+        data = { error: trimmedText.slice(0, 400) }
+      }
+    }
+    if (!response.ok && !data) {
+      data = { error: `Request failed with status ${response.status}` }
     }
     return { ok: response.ok, status: response.status, data }
   } catch (error) {

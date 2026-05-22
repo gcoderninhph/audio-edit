@@ -1,13 +1,19 @@
 import { RefreshCw, Save } from 'lucide-react'
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useEffect, useMemo, useState } from 'react'
 import { fetchAdminVbeeConfig, updateAdminVbeeConfig } from '../api/adminVbeeApi'
 import DeveloperMarker from './DeveloperMarker'
 
+const EMPTY_LIST = []
+
 export default function VbeeConfigPanel() {
-  const [config, setConfig] = useState({ apiBaseUrl: '', audioType: 'wav', defaultLanguage: 'vi', defaultVoiceCode: '', webhookHost: '', webhookPath: '/api/vbee/webhook', webhookSecret: '', webhookUrl: '' })
+  const [config, setConfig] = useState({ apiBaseUrl: '', audioType: 'wav', defaultLanguage: 'vi', defaultVoiceCode: '', enabledLanguageCodes: [], supportedLanguages: [], webhookHost: '', webhookPath: '/api/vbee/webhook', webhookSecret: '', webhookUrl: '' })
   const [error, setError] = useState('')
   const [isLoading, setIsLoading] = useState(true)
   const [isSaving, setIsSaving] = useState(false)
+  const supportedLanguages = Array.isArray(config.supportedLanguages) ? config.supportedLanguages : EMPTY_LIST
+  const supportedLanguageCodes = useMemo(() => supportedLanguages.map((language) => language.code), [supportedLanguages])
+  const enabledLanguageCodes = Array.isArray(config.enabledLanguageCodes) ? config.enabledLanguageCodes : EMPTY_LIST
+  const enabledLanguageSet = useMemo(() => new Set(enabledLanguageCodes), [enabledLanguageCodes])
 
   const loadConfig = useCallback(async () => {
     setIsLoading(true)
@@ -25,6 +31,22 @@ export default function VbeeConfigPanel() {
   useEffect(() => {
     void loadConfig()
   }, [loadConfig])
+
+  const updateEnabledLanguageCodes = useCallback((nextCodes) => {
+    const nextCodeSet = new Set((nextCodes || []).map((code) => String(code || '').trim()).filter(Boolean))
+    setConfig((current) => ({
+      ...current,
+      enabledLanguageCodes: supportedLanguageCodes.filter((code) => nextCodeSet.has(code)),
+    }))
+  }, [supportedLanguageCodes])
+
+  const handleLanguageToggle = useCallback((languageCode) => {
+    if (enabledLanguageSet.has(languageCode)) {
+      updateEnabledLanguageCodes(enabledLanguageCodes.filter((code) => code !== languageCode))
+      return
+    }
+    updateEnabledLanguageCodes([...enabledLanguageCodes, languageCode])
+  }, [enabledLanguageCodes, enabledLanguageSet, updateEnabledLanguageCodes])
 
   const handleSubmit = async (event) => {
     event.preventDefault()
@@ -57,9 +79,36 @@ export default function VbeeConfigPanel() {
           <label className="field"><span>Audio type</span><select value={config.audioType} onChange={(event) => setConfig((current) => ({ ...current, audioType: event.target.value }))}><option value="wav">wav</option><option value="mp3">mp3</option></select></label>
           <label className="field"><span>Default language</span><input value={config.defaultLanguage} onChange={(event) => setConfig((current) => ({ ...current, defaultLanguage: event.target.value }))} /></label>
           <label className="field"><span>Default voice</span><input value={config.defaultVoiceCode} onChange={(event) => setConfig((current) => ({ ...current, defaultVoiceCode: event.target.value }))} /></label>
-          <label className="field"><span>Webhook secret</span><input type="password" value={config.webhookSecret} onChange={(event) => setConfig((current) => ({ ...current, webhookSecret: event.target.value }))} /></label>
           <label className="field"><span>Webhook host</span><input value={config.webhookHost || ''} placeholder="https://audio-test.accstore.pro.vn" onChange={(event) => setConfig((current) => ({ ...current, webhookHost: event.target.value }))} /></label>
           <label className="field"><span>Webhook path</span><input value={config.webhookPath || '/api/vbee/webhook'} readOnly /></label>
+          <div className="field vbee-language-config-field">
+            <span>Enabled voiceover languages</span>
+            <div className="subtitle-tool-note">
+              Desktop voiceover buttons use this list to enable or disable narration for each translated display language.
+            </div>
+            <div className="vbee-language-config-toolbar">
+              <div className="button-group">
+                <button type="button" className="ghost-button compact" onClick={() => updateEnabledLanguageCodes(supportedLanguageCodes)} disabled={!supportedLanguages.length || isLoading || isSaving}>Enable all</button>
+                <button type="button" className="ghost-button compact" onClick={() => updateEnabledLanguageCodes([])} disabled={!supportedLanguages.length || isLoading || isSaving}>Disable all</button>
+              </div>
+              <span className="vbee-language-config-count">{enabledLanguageCodes.length}/{supportedLanguages.length || 0} enabled</span>
+            </div>
+            <div className="vbee-language-checkbox-grid">
+              {supportedLanguages.map((language) => (
+                <label key={language.code} className="vbee-language-checkbox">
+                  <input
+                    type="checkbox"
+                    checked={enabledLanguageSet.has(language.code)}
+                    onChange={() => handleLanguageToggle(language.code)}
+                    disabled={isLoading || isSaving}
+                  />
+                  <span>{language.label}</span>
+                  <small>{language.code}</small>
+                </label>
+              ))}
+              {!supportedLanguages.length && <div className="empty-cell">No supported Vbee languages were returned.</div>}
+            </div>
+          </div>
         </div>
       </form>
     </section>

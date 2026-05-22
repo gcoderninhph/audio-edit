@@ -9,6 +9,7 @@ try:
     from auth_routes import AuthStoreError, require_access_token, require_admin_access, verify_password
     from proxy_credit_helpers import charge_user_credits_or_error, refund_credits_if_needed
     from vbee_service import apply_vbee_webhook, create_voiceover_request, get_voiceover_request_status, normalize_srt_subtitles, normalize_subtitles, refresh_processing_vbee_segments
+    from vbee_voice_catalog import list_vbee_supported_languages
     from vbee_store import (
         VbeeNotFoundError,
         VbeeValidationError,
@@ -30,6 +31,7 @@ except ImportError:
     from .auth_routes import AuthStoreError, require_access_token, require_admin_access, verify_password
     from .proxy_credit_helpers import charge_user_credits_or_error, refund_credits_if_needed
     from .vbee_service import apply_vbee_webhook, create_voiceover_request, get_voiceover_request_status, normalize_srt_subtitles, normalize_subtitles, refresh_processing_vbee_segments
+    from .vbee_voice_catalog import list_vbee_supported_languages
     from .vbee_store import (
         VbeeNotFoundError,
         VbeeValidationError,
@@ -71,9 +73,20 @@ def _config_payload():
     webhook_path = '/api/vbee/webhook'
     return {
         **config,
+        'supportedLanguages': list_vbee_supported_languages(),
         'webhookHost': webhook_host,
         'webhookPath': webhook_path,
         'webhookUrl': f'{webhook_host}{webhook_path}' if webhook_host else webhook_path,
+    }
+
+
+def _public_config_payload():
+    config = get_vbee_config()
+    return {
+        'audioType': config.get('audioType') or 'wav',
+        'defaultLanguage': config.get('defaultLanguage') or 'vi',
+        'enabledLanguageCodes': config.get('enabledLanguageCodes') or [],
+        'supportedLanguages': list_vbee_supported_languages(),
     }
 
 
@@ -133,7 +146,10 @@ def _read_start_payload():
     if not subtitle_file:
         raise VbeeValidationError('subtitle_file is required.')
     subtitles = normalize_srt_subtitles(subtitle_file.read().decode('utf-8', errors='replace'))
-    return {'language': form.get('language') or form.get('target_language'), 'voiceCode': form.get('voiceCode') or form.get('voice_code')}, subtitles
+    return {
+        'language': form.get('languageCode') or form.get('language') or form.get('target_language'),
+        'voiceCode': form.get('voiceCode') or form.get('voice_code'),
+    }, subtitles
 
 
 def _webhook_authorized(payload):
@@ -150,6 +166,13 @@ def _webhook_authorized(payload):
 
 
 def register_vbee_routes(app):
+    @app.route('/api/voiceover/config', methods=['GET'])
+    def get_voiceover_config_route():
+        try:
+            return jsonify({'config': _public_config_payload()})
+        except AuthStoreError:
+            return _store_error_response()
+
     @app.route('/api/voiceover/start', methods=['POST'])
     def start_voiceover_route():
         claims, auth_error = require_access_token()
@@ -169,7 +192,7 @@ def register_vbee_routes(app):
             request_record = create_voiceover_request(
                 claims.get('sub'),
                 subtitles,
-                language=payload.get('language'),
+                language=payload.get('languageCode') or payload.get('language'),
                 voice_code=payload.get('voiceCode') or payload.get('voice_code'),
                 webhook_base_url=_request_base_url(),
             )

@@ -12,7 +12,7 @@ import './App.css'
 const IAP_TABS = new Set(['packages', 'api-key', 'payment-tools', 'sale'])
 const SERVICE_TABS = new Set(['openai', 'vbee'])
 const VBEE_SECTIONS = new Set(['tokens', 'requests', 'segments', 'config'])
-const OPENAI_SECTIONS = new Set(['tokens', 'requests', 'test', 'config'])
+const OPENAI_SECTIONS = new Set(['tokens', 'requests', 'usage', 'test', 'config'])
 
 function parseIapRoute(normalizedPath) {
   if (normalizedPath === '/admin/iap/pack-function') {
@@ -90,6 +90,16 @@ function parseAdminRoute(pathname = window.location.pathname) {
   const serviceSegmentMatch = normalizedPath.match(/^\/admin\/service\/vbee\/segments\/(.+)$/)
   if (serviceSegmentMatch) {
     return { name: 'service', serviceTab: 'vbee', vbeeSegmentHash: decodeURIComponent(serviceSegmentMatch[1]), vbeeSection: 'segments' }
+  }
+
+  const openAiRequestMatch = normalizedPath.match(/^\/admin\/service\/openai\/requests\/(.+)$/)
+  if (openAiRequestMatch) {
+    return {
+      name: 'service',
+      serviceTab: 'openai',
+      openAiRequestId: decodeURIComponent(openAiRequestMatch[1]),
+      openAiSection: 'requests',
+    }
   }
 
   const serviceSectionMatch = normalizedPath.match(/^\/admin\/service\/vbee\/([^/]+)$/)
@@ -201,7 +211,9 @@ function App() {
     }
     if (route.name === 'service') {
       if (route.serviceTab === 'openai') {
+        if (route.openAiRequestId) return 'OpenAI request'
         if (route.openAiSection === 'requests') return 'OpenAI requests'
+        if (route.openAiSection === 'usage') return 'OpenAI token usage'
         if (route.openAiSection === 'test') return 'OpenAI test'
         if (route.openAiSection === 'config') return 'OpenAI config'
         return 'OpenAI tokens'
@@ -216,7 +228,7 @@ function App() {
     if (route.name === 'user-detail') return 'User detail'
     if (route.name === 'manage') return 'User management'
     return 'Admin login'
-  }, [route.iapTab, route.name, route.openAiSection, route.paymentToolHistoryId, route.paymentTransactionId, route.serviceTab, route.vbeeRequestId, route.vbeeSection, route.vbeeSegmentHash])
+  }, [route.iapTab, route.name, route.openAiRequestId, route.openAiSection, route.paymentToolHistoryId, route.paymentTransactionId, route.serviceTab, route.vbeeRequestId, route.vbeeSection, route.vbeeSegmentHash])
 
   const handleSessionUpdate = (nextSession) => {
     setSession(nextSession)

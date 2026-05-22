@@ -2,7 +2,7 @@ from flask import jsonify, request
 
 try:
     from auth_routes import AuthStoreError, require_admin_access
-    from openai_translation_service import run_openai_translation_test
+    from openai_translation_service import RequestStoreError, run_openai_translation_test
     from openai_translation_store import (
         OpenAiTranslationError,
         OpenAiTranslationNotFoundError,
@@ -19,7 +19,7 @@ try:
     )
 except ImportError:
     from .auth_routes import AuthStoreError, require_admin_access
-    from .openai_translation_service import run_openai_translation_test
+    from .openai_translation_service import RequestStoreError, run_openai_translation_test
     from .openai_translation_store import (
         OpenAiTranslationError,
         OpenAiTranslationNotFoundError,
@@ -147,11 +147,12 @@ def register_openai_translation_routes(app):
                 upload.read(),
                 upload.filename or 'subtitles.srt',
                 target_language,
+                user_id=str((_claims or {}).get('sub') or ''),
             )
             return jsonify({'result': result})
         except OpenAiTranslationValidationError as error:
             return jsonify({'error': str(error)}), 400
-        except (AuthStoreError, OpenAiTranslationError):
+        except (AuthStoreError, OpenAiTranslationError, RequestStoreError):
             return _store_error_response()
         except Exception as error:
             return jsonify({'error': str(error) or 'OpenAI test translation failed.'}), 502

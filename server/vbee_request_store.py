@@ -219,11 +219,11 @@ def list_processing_vbee_segments(limit=50):
         raise AuthStoreError('Unable to list processing Vbee segments') from error
 
 
-def mark_vbee_segment_processing(segment_id, token_id, provider_request_id):
-    return update_vbee_segment(segment_id, status=VBEE_STATUS_PROCESSING, token_id=token_id, provider_request_id=provider_request_id)
+def mark_vbee_segment_processing(segment_id, token_id, provider_request_id, voice_code=None):
+    return update_vbee_segment(segment_id, status=VBEE_STATUS_PROCESSING, token_id=token_id, provider_request_id=provider_request_id, voice_code=voice_code)
 
 
-def update_vbee_segment(segment_id, status=None, token_id=None, provider_request_id=None, audio_url=None, error_message=None):
+def update_vbee_segment(segment_id, status=None, token_id=None, provider_request_id=None, audio_url=None, error_message=None, language=None, voice_code=None):
     ensure_vbee_schema()
     driver = _require_driver()
     assignments = ['updated_at = %s']
@@ -243,6 +243,12 @@ def update_vbee_segment(segment_id, status=None, token_id=None, provider_request
     if error_message is not None:
         assignments.append('error_message = %s')
         params.append(error_message)
+    if language is not None:
+        assignments.append('language = %s')
+        params.append(language)
+    if voice_code is not None:
+        assignments.append('voice_code = %s')
+        params.append(voice_code)
     params.append(int(segment_id))
     try:
         connection = _connect(MYSQL_DATABASE)
@@ -251,6 +257,17 @@ def update_vbee_segment(segment_id, status=None, token_id=None, provider_request
                 cursor.execute(f'UPDATE vbee_voice_segments SET {", ".join(assignments)} WHERE id = %s', tuple(params))
                 cursor.execute('SELECT request_id FROM vbee_voice_segments WHERE id = %s LIMIT 1', (int(segment_id),))
                 row = cursor.fetchone()
+                if row and (language is not None or voice_code is not None):
+                    request_assignments = ['updated_at = %s']
+                    request_params = [now_timestamp()]
+                    if language is not None:
+                        request_assignments.append('language = %s')
+                        request_params.append(language)
+                    if voice_code is not None:
+                        request_assignments.append('voice_code = %s')
+                        request_params.append(voice_code)
+                    request_params.append(row['request_id'])
+                    cursor.execute(f'UPDATE vbee_voice_requests SET {", ".join(request_assignments)} WHERE request_id = %s', tuple(request_params))
         finally:
             connection.close()
     except driver.MySQLError as error:

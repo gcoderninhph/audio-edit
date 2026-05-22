@@ -13,7 +13,8 @@ except ImportError:
 
 
 LOCAL_TRANSLATION_JOB_PREFIX = 'local-translation-'
-SRT_TIMING_PATTERN = re.compile(r'^\d{2}:\d{2}:\d{2},\d{3}\s*-->\s*\d{2}:\d{2}:\d{2},\d{3}$')
+SRT_TIMESTAMP_PATTERN = r'\d{2}:\d{2}:\d{2}[,.]\d{3}'
+SRT_TIMING_PATTERN = re.compile(rf'^{SRT_TIMESTAMP_PATTERN}\s*-->\s*{SRT_TIMESTAMP_PATTERN}(?:\s+.+)?$')
 LOCAL_TRANSLATION_JOBS = {}
 LOCAL_TRANSLATION_LOCK = threading.Lock()
 LOCAL_TRANSLATION_EXECUTOR = ThreadPoolExecutor(max_workers=2, thread_name_prefix='subtitle-translation')

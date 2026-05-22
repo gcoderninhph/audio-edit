@@ -24,25 +24,43 @@ except ImportError:
 
 SUMMARY_SELECT = """
 SELECT
-    s.cache_key,
-    MAX(s.text_content) AS text_content,
-    MAX(s.language) AS language,
-    MAX(s.voice_code) AS voice_code,
-    COUNT(*) AS request_count,
-    COALESCE(MAX(c.audio_url), MAX(s.audio_url)) AS audio_url,
-    MAX(c.expires_at) AS expires_at,
-    MAX(s.provider_request_id) AS provider_request_id,
-    MAX(s.token_id) AS token_id,
-    MAX(s.character_count) AS character_count,
-    MAX(s.error_message) AS error_message,
-    MAX(s.created_at) AS created_at,
-    MAX(s.updated_at) AS updated_at,
-    SUM(CASE WHEN s.status = %s THEN 1 ELSE 0 END) AS queued_count,
-    SUM(CASE WHEN s.status = %s THEN 1 ELSE 0 END) AS processing_count,
-    SUM(CASE WHEN s.status = %s THEN 1 ELSE 0 END) AS complete_count,
-    SUM(CASE WHEN s.status = %s THEN 1 ELSE 0 END) AS failed_count
-FROM vbee_voice_segments s
-LEFT JOIN vbee_audio_cache c ON c.cache_key = s.cache_key
+    latest.cache_key,
+    latest.text_content,
+    latest.language,
+    latest.voice_code,
+    counts.request_count,
+    COALESCE(c.audio_url, latest.audio_url) AS audio_url,
+    c.expires_at AS expires_at,
+    latest.provider_request_id,
+    latest.token_id,
+    latest.character_count,
+    latest.error_message,
+    latest.created_at,
+    latest.updated_at,
+    counts.queued_count,
+    counts.processing_count,
+    counts.complete_count,
+    counts.failed_count
+FROM (
+    SELECT
+        s.cache_key,
+        COUNT(*) AS request_count,
+        SUM(CASE WHEN s.status = %s THEN 1 ELSE 0 END) AS queued_count,
+        SUM(CASE WHEN s.status = %s THEN 1 ELSE 0 END) AS processing_count,
+        SUM(CASE WHEN s.status = %s THEN 1 ELSE 0 END) AS complete_count,
+        SUM(CASE WHEN s.status = %s THEN 1 ELSE 0 END) AS failed_count
+    FROM vbee_voice_segments s
+    GROUP BY s.cache_key
+) counts
+INNER JOIN vbee_voice_segments latest
+    ON latest.id = (
+        SELECT s2.id
+        FROM vbee_voice_segments s2
+        WHERE s2.cache_key = counts.cache_key
+        ORDER BY s2.updated_at DESC, s2.id DESC
+        LIMIT 1
+    )
+LEFT JOIN vbee_audio_cache c ON c.cache_key = counts.cache_key
 """
 
 
@@ -79,8 +97,78 @@ def _row_to_segment_summary(row):
     }
 
 
+def _failure_stage(usage):
+    error_message = str(usage.get('errorMessage') or '').strip().lower()
+    provider_request_id = usage.get('providerRequestId') or ''
+    if 'voices' in error_message or 'voiceownership' in error_message or 'voice lookup' in error_message:
+        return 'voice-lookup'
+    if not provider_request_id:
+        return 'submit'
+    if usage.get('audioUrl'):
+        return 'asset-store'
+    return 'provider-processing'
+
+
+def _failure_stage_label(stage):
+    return {
+        'voice-lookup': 'Voice lookup',
+        'submit': 'Submit request',
+        'provider-processing': 'Provider processing',
+        'asset-store': 'Store audio asset',
+    }.get(stage, 'Unknown')
+
+
+def _build_failure_details(summary, usages):
+    failed_usages = [usage for usage in usages if usage.get('status') == VBEE_STATUS_FAILED]
+    if not failed_usages and not summary.get('errorMessage'):
+        return None
+    latest_failed_usage = failed_usages[0] if failed_usages else summary
+    latest_stage = _failure_stage(latest_failed_usage)
+    recent_failures = []
+    seen_failure_keys = set()
+    for usage in failed_usages:
+        failure_key = (
+            usage.get('requestId') or '',
+            int(usage.get('index') or 0),
+            int(usage.get('updatedAt') or usage.get('createdAt') or 0),
+            usage.get('errorMessage') or '',
+        )
+        if failure_key in seen_failure_keys:
+            continue
+        seen_failure_keys.add(failure_key)
+        stage = _failure_stage(usage)
+        recent_failures.append({
+            'requestId': usage.get('requestId') or '',
+            'segmentIndex': int(usage.get('index') or 0),
+            'providerRequestId': usage.get('providerRequestId') or '',
+            'tokenId': usage.get('tokenId'),
+            'language': usage.get('language') or summary.get('language') or '',
+            'voiceCode': usage.get('voiceCode') or summary.get('voiceCode') or '',
+            'updatedAt': int(usage.get('updatedAt') or usage.get('createdAt') or 0),
+            'errorMessage': usage.get('errorMessage') or summary.get('errorMessage') or 'Vbee request failed',
+            'stage': stage,
+            'stageLabel': _failure_stage_label(stage),
+        })
+        if len(recent_failures) >= 5:
+            break
+    return {
+        'summary': latest_failed_usage.get('errorMessage') or summary.get('errorMessage') or 'Vbee request failed',
+        'stage': latest_stage,
+        'stageLabel': _failure_stage_label(latest_stage),
+        'failedUsageCount': len(failed_usages),
+        'failedRequestCount': len({usage.get('requestId') or '' for usage in failed_usages if usage.get('requestId')}),
+        'latestFailureAt': int(latest_failed_usage.get('updatedAt') or latest_failed_usage.get('createdAt') or summary.get('updatedAt') or 0),
+        'latestRequestId': latest_failed_usage.get('requestId') or '',
+        'latestProviderRequestId': latest_failed_usage.get('providerRequestId') or summary.get('providerRequestId') or '',
+        'latestTokenId': latest_failed_usage.get('tokenId') or summary.get('tokenId'),
+        'latestLanguage': latest_failed_usage.get('language') or summary.get('language') or '',
+        'latestVoiceCode': latest_failed_usage.get('voiceCode') or summary.get('voiceCode') or '',
+        'recentFailures': recent_failures,
+    }
+
+
 def _summary_query_tail(where_clause=''):
-    return f"{SUMMARY_SELECT}{where_clause} GROUP BY s.cache_key ORDER BY MAX(s.updated_at) DESC, MAX(s.created_at) DESC"
+    return f"{SUMMARY_SELECT}{where_clause} ORDER BY latest.updated_at DESC, latest.created_at DESC"
 
 
 def _summary_query_params(*extra_params):
@@ -135,7 +223,7 @@ def get_vbee_segment_detail(cache_key):
         connection = _connect(MYSQL_DATABASE)
         try:
             with connection.cursor() as cursor:
-                cursor.execute(_summary_query_tail('WHERE s.cache_key = %s'), _summary_query_params(safe_cache_key))
+                cursor.execute(_summary_query_tail('WHERE counts.cache_key = %s'), _summary_query_params(safe_cache_key))
                 summary_row = cursor.fetchone()
                 if not summary_row:
                     raise VbeeNotFoundError('Vbee segment not found')
@@ -148,7 +236,9 @@ def get_vbee_segment_detail(cache_key):
     except driver.MySQLError as error:
         raise AuthStoreError('Unable to load Vbee segment detail') from error
 
+    summary = _row_to_segment_summary(summary_row)
     return {
-        **_row_to_segment_summary(summary_row),
+        **summary,
+        'failureDetails': _build_failure_details(summary, usages),
         'usages': usages,
     }

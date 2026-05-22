@@ -1,4 +1,6 @@
+import { filterVisibleSubtitles } from '../utils/editorSelectors';
 import { getFFmpeg } from '../utils/ffmpegManager';
+import { buildExportSubtitles } from '../utils/frameComposer';
 import { transcribeVideo } from '../utils/audioExtractor';
 import { saveLocalProjectVoiceoverAudio } from '../utils/projectStorage';
 import { buildTranslationJobId, translateSubtitles } from '../utils/subtitleUtils';
@@ -6,6 +8,8 @@ import { createVoiceoverFromSubtitles } from '../utils/voiceoverUtils';
 import {
   DEFAULT_SUBTITLE_LANGUAGE_KEY,
   getSubtitleLanguageLabel,
+  getSubtitlesForLanguage,
+  getVoiceoverLanguageCode,
   isVoiceoverSubtitleLanguageSupported,
   isTranslatableSubtitleLanguage,
   normalizeVoiceoverLanguageKey,
@@ -210,18 +214,32 @@ export async function runTranslationJob({
 
 export async function runVoiceoverJob({
   activeSubtitleLanguage,
-  subtitles,
+  deletedSceneIds,
+  keptScenes,
+  scenes,
   sessionIdRef,
+  setActiveSubtitleLanguage,
   setIsGeneratingVoiceover,
   setVoiceoverProgress,
   setLastVoiceoverAudioName,
   setVoiceoverTrack,
+  subtitleTracks,
+  targetLanguageKey,
 }) {
-  if (!Array.isArray(subtitles) || subtitles.length === 0 || !isVoiceoverSubtitleLanguageSupported(activeSubtitleLanguage)) {
+  const voiceoverLanguageKey = normalizeVoiceoverLanguageKey(targetLanguageKey || activeSubtitleLanguage)
+  if (!isVoiceoverSubtitleLanguageSupported(voiceoverLanguageKey)) {
     return;
   }
 
-  const voiceoverLanguageKey = normalizeVoiceoverLanguageKey(activeSubtitleLanguage)
+  const selectedTrackSubtitles = getSubtitlesForLanguage(subtitleTracks, voiceoverLanguageKey)
+  const visibleSubtitles = filterVisibleSubtitles(selectedTrackSubtitles, scenes || [], deletedSceneIds || new Set())
+  const subtitles = Array.isArray(keptScenes) && keptScenes.length > 0
+    ? buildExportSubtitles(visibleSubtitles, keptScenes)
+    : visibleSubtitles
+
+  if (!Array.isArray(subtitles) || subtitles.length === 0) {
+    return;
+  }
 
   const currentSessionId = sessionIdRef.current;
   if (!currentSessionId) {
@@ -241,7 +259,11 @@ export async function runVoiceoverJob({
   setLastVoiceoverAudioName('');
 
   try {
-    const result = await createVoiceoverFromSubtitles(subtitles, updateVoiceoverProgress, { projectId: currentSessionId });
+    const result = await createVoiceoverFromSubtitles(subtitles, updateVoiceoverProgress, {
+      language: getSubtitleLanguageLabel(voiceoverLanguageKey),
+      languageCode: getVoiceoverLanguageCode(voiceoverLanguageKey),
+      projectId: currentSessionId,
+    });
     if (sessionIdRef.current !== currentSessionId) {
       return;
     }
@@ -263,10 +285,12 @@ export async function runVoiceoverJob({
     const previewUrl = result.audioBlob ? URL.createObjectURL(result.audioBlob) : null;
 
     setLastVoiceoverAudioName(fileName);
+    setActiveSubtitleLanguage?.(voiceoverLanguageKey);
     setVoiceoverTrack(previewUrl ? {
       duration: savedVoiceover.duration || result.duration || 0,
       fileName,
       languageKey: savedVoiceover.languageKey || voiceoverLanguageKey,
+      mimeType: savedVoiceover.mimeType || result.mimeType || 'audio/mpeg',
       previewUrl,
       startTime: 0,
       storedFileName: savedVoiceover.storedFileName || '',

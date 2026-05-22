@@ -9,7 +9,7 @@ function normalizeTranslationErrorMessage(message, fallbackMessage) {
   }
 
   if (/No available managed worker/i.test(normalizedMessage)) {
-    return 'No translation worker is available. Create or start a managed worker in the LLM-Subtrans web admin panel before submitting a translation job.';
+    return 'No translation worker is available. Check the Service/OpenAI admin panel before submitting a translation job.';
   }
 
   return normalizedMessage;
@@ -118,7 +118,7 @@ export function parseTranslationJobId(jobId) {
   }
 }
 
-// Quản lý tiến trình dịch với LLM-Subtrans
+// Quản lý tiến trình dịch với dịch vụ OpenAI
 export async function translateSubtitles(subtitles, targetLanguage, onProgress, onJobCreated) {
   if (!subtitles || subtitles.length === 0) {
     throw new Error('No subtitles available to translate');
@@ -156,7 +156,7 @@ export async function translateSubtitles(subtitles, targetLanguage, onProgress, 
     const outputFileName = startData.outputFileName;
 
     if (!requestId) {
-      throw new Error('LLM-Subtrans did not return a request ID');
+      throw new Error('Translation service did not return a request ID');
     }
 
     if (onJobCreated) {
@@ -196,7 +196,7 @@ export async function getTranslationJobSnapshot(requestId) {
   if (statusData.status === 'failed') {
     return {
       state: 'failed',
-      message: statusData.message || 'Translation failed (LLM-Subtrans error)',
+      message: statusData.message || 'Translation failed (OpenAI translation error)',
     };
   }
 
@@ -245,7 +245,7 @@ async function pollTranslationJob(requestId, outputFileName, onProgress, { initi
     if (statusData.status === 'finished') {
       isFinished = true;
     } else if (statusData.status === 'failed') {
-      throw new Error('Translation failed (LLM-Subtrans error)');
+      throw new Error('Translation failed (OpenAI translation error)');
     } else if (statusData.status === 'running') {
       onProgress({ phase: 'AI is processing the translation...', percent: 60 });
     }
