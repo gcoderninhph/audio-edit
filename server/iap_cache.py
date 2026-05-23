@@ -2,19 +2,17 @@ import json
 import os
 
 try:
-    import redis
-except ImportError as import_error:
-    redis = None
-    REDIS_IMPORT_ERROR = import_error
-else:
-    REDIS_IMPORT_ERROR = None
+    from redis_connection import get_cached_redis_client, load_redis_settings
+except ImportError:
+    from .redis_connection import get_cached_redis_client, load_redis_settings
 
 
-IAP_CACHE_PREFIX = os.environ.get('IAP_REDIS_PREFIX') or os.environ.get('REDIS_PREFIX', 'audio_editor')
+_REDIS_SETTINGS = load_redis_settings(['IAP'])
+IAP_CACHE_PREFIX = _REDIS_SETTINGS['prefix']
 IAP_CACHE_TTL_SECONDS = int(os.environ.get('IAP_CACHE_TTL_SECONDS', '120'))
-IAP_REDIS_DB = int(os.environ.get('IAP_REDIS_DB', '0'))
-IAP_REDIS_HOST = os.environ.get('IAP_REDIS_HOST') or os.environ.get('REDIS_HOST', 'localhost')
-IAP_REDIS_PORT = int(os.environ.get('IAP_REDIS_PORT') or os.environ.get('REDIS_PORT', '6379'))
+IAP_REDIS_DB = _REDIS_SETTINGS['db']
+IAP_REDIS_HOST = _REDIS_SETTINGS['host']
+IAP_REDIS_PORT = _REDIS_SETTINGS['port']
 PUBLIC_IAP_PACKAGES_CACHE_KEY = f'{IAP_CACHE_PREFIX}:iap:packages:public'
 
 _cached_client = None
@@ -22,17 +20,7 @@ _cached_client = None
 
 def _get_cache_client():
     global _cached_client
-    if redis is None:
-        return None
-    if _cached_client is None:
-        _cached_client = redis.Redis(
-            host=IAP_REDIS_HOST,
-            port=IAP_REDIS_PORT,
-            db=IAP_REDIS_DB,
-            decode_responses=True,
-            socket_connect_timeout=1,
-            socket_timeout=1,
-        )
+    _cached_client = get_cached_redis_client(_cached_client, _REDIS_SETTINGS)
     return _cached_client
 
 

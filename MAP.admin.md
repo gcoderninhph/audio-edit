@@ -11,6 +11,7 @@
 - `admin-frontend/src/api/adminApi.js` - Wraps the Flask auth and admin APIs for login, bootstrap, user management, IAP, requests, and credits.
 - `admin-frontend/src/api/adminOpenAiApi.js` - Wraps the admin-only OpenAI service APIs for token CRUD, request monitoring, prompt or model configuration, and one-off `.srt` test translation uploads.
 - `admin-frontend/src/api/adminVbeeApi.js` - Wraps the admin-only Service/Vbee APIs for tokens, requests, grouped segments, inline audio, delete, cache clear, and config.
+- `admin-frontend/src/api/adminWhisperApi.js` - Wraps the admin-only Service/Whisper APIs for request monitoring and provider config.
 - `admin-frontend/src/utils/format.js` - Provides shared number, currency, and date-time formatting helpers for admin screens.
 - `admin-frontend/src/components/AdminLayout.jsx` - Renders the shared admin React shell with fixed navigation, topbar actions, and logout flow.
 - `admin-frontend/src/components/DeveloperMarker.jsx` - Renders developer-only locator markers for admin React UI sections.
@@ -33,7 +34,7 @@
 - `admin-frontend/src/components/IapBankHookHistoryDetailPage.jsx` - Renders the bank-hook transaction detail page with summary table and raw payload JSON.
 - `admin-frontend/src/components/IapSalesPanel.jsx` - Renders the sale-rule admin tab with add, list, and delete flows.
 - `admin-frontend/src/components/ServicePage.jsx` - Wraps the dedicated Service admin route and passes parsed route state into the Service tab shell.
-- `admin-frontend/src/components/ServiceManagementTabs.jsx` - Renders the Service tab shell and switches between the OpenAI subtitle-translation tools and the Vbee voiceover tools.
+- `admin-frontend/src/components/ServiceManagementTabs.jsx` - Renders the Service tab shell and switches between the OpenAI subtitle-translation, Vbee voiceover, and Whisper speech-to-text tools.
 - `admin-frontend/src/components/OpenAiOperationsPanel.jsx` - Renders the OpenAI service left-nav and right-content layout for tokens, requests, token-usage analytics, test uploads, and config, with per-tab developer markers in the navigation and route-driven request-detail forwarding.
 - `admin-frontend/src/components/OpenAiTokensPanel.jsx` - Renders OpenAI API token CRUD with active-state management and usage timestamps.
 - `admin-frontend/src/components/OpenAiRequestsPanel.jsx` - Renders paginated OpenAI translation request monitoring with status filters, saved request metadata, and clickable row navigation into the dedicated request-detail view.
@@ -47,6 +48,9 @@
 - `admin-frontend/src/components/VbeeSegmentsPanel.jsx` - Renders the grouped Vbee segment list, status filter, cache-clear flow, and route handoff into the dedicated Vbee segment detail component while keeping the list surface under the 400-line guardrail.
 - `admin-frontend/src/components/VbeeSegmentDetailPanel.jsx` - Renders the Service/Vbee segment detail view with top-level failure reasons, a structured failure-detail section showing the latest failed stage and recent failure events, usage-level error visibility, delete confirmation, and inline audio preview for completed assets.
 - `admin-frontend/src/components/VbeeConfigPanel.jsx` - Renders the Vbee provider config form, shows webhook host/path info above the checkbox grid that enables or disables supported narration languages for desktop voiceover, and no longer exposes the saved webhook secret for inline editing.
+- `admin-frontend/src/components/WhisperOperationsPanel.jsx` - Renders the Whisper left-nav and right-content operations layout for requests and config.
+- `admin-frontend/src/components/WhisperRequestsPanel.jsx` - Renders paginated Whisper transcription request monitoring with status filters and metadata.
+- `admin-frontend/src/components/WhisperConfigPanel.jsx` - Renders the Whisper provider config placeholder (empty body until backend config is ready).
 - `admin-frontend/src/components/UserDetailPage.jsx` - Renders the selected user detail screen with premium, lock, request, and credit history management.
 - `admin-frontend/src/components/Pagination.jsx` - Renders reusable pagination controls across admin lists.
 - `admin-frontend/src/utils/iapPackages.js` - Centralizes admin IAP package-type constants, labels, and derived behavior summaries.

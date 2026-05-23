@@ -3,18 +3,16 @@ import json
 import os
 
 try:
-    import redis
-except ImportError as import_error:
-    redis = None
-    REDIS_IMPORT_ERROR = import_error
-else:
-    REDIS_IMPORT_ERROR = None
+    from redis_connection import get_cached_redis_client, load_redis_settings
+except ImportError:
+    from .redis_connection import get_cached_redis_client, load_redis_settings
 
 
-VBEE_CACHE_PREFIX = os.environ.get('VBEE_REDIS_PREFIX') or os.environ.get('IAP_REDIS_PREFIX') or os.environ.get('REDIS_PREFIX', 'audio_editor')
-VBEE_REDIS_DB = int(os.environ.get('VBEE_REDIS_DB') or os.environ.get('IAP_REDIS_DB') or os.environ.get('REDIS_DB', '0'))
-VBEE_REDIS_HOST = os.environ.get('VBEE_REDIS_HOST') or os.environ.get('IAP_REDIS_HOST') or os.environ.get('REDIS_HOST', 'localhost')
-VBEE_REDIS_PORT = int(os.environ.get('VBEE_REDIS_PORT') or os.environ.get('IAP_REDIS_PORT') or os.environ.get('REDIS_PORT', '6379'))
+_REDIS_SETTINGS = load_redis_settings(['VBEE', 'IAP'])
+VBEE_CACHE_PREFIX = _REDIS_SETTINGS['prefix']
+VBEE_REDIS_DB = _REDIS_SETTINGS['db']
+VBEE_REDIS_HOST = _REDIS_SETTINGS['host']
+VBEE_REDIS_PORT = _REDIS_SETTINGS['port']
 VBEE_REQUEST_TTL_SECONDS = int(os.environ.get('VBEE_REQUEST_CACHE_TTL_SECONDS', '86400'))
 VBEE_AUDIO_CACHE_TTL_SECONDS = int(os.environ.get('VBEE_AUDIO_CACHE_TTL_SECONDS', '259200'))
 
@@ -23,17 +21,7 @@ _cached_client = None
 
 def _get_client():
     global _cached_client
-    if redis is None:
-        return None
-    if _cached_client is None:
-        _cached_client = redis.Redis(
-            host=VBEE_REDIS_HOST,
-            port=VBEE_REDIS_PORT,
-            db=VBEE_REDIS_DB,
-            decode_responses=True,
-            socket_connect_timeout=1,
-            socket_timeout=1,
-        )
+    _cached_client = get_cached_redis_client(_cached_client, _REDIS_SETTINGS)
     return _cached_client
 
 

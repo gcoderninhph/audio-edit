@@ -1,4 +1,4 @@
-import { getStoredSession, mergeSessionPayload, requestJson } from './adminApi'
+import { clearStoredSession, getStoredSession, mergeSessionPayload, requestJson } from './adminApi'
 
 async function requestAdminBlob(path, options = {}, allowRefresh = true) {
   const currentSession = getStoredSession()
@@ -21,6 +21,8 @@ async function requestAdminBlob(path, options = {}, allowRefresh = true) {
       mergeSessionPayload(refreshResponse.data || {})
       return requestAdminBlob(path, options, false)
     }
+    clearStoredSession()
+    window.dispatchEvent(new CustomEvent('admin-session-expired'))
   }
 
   if (!response.ok) {

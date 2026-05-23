@@ -10,9 +10,10 @@ import UserDetailPage from './components/UserDetailPage'
 import './App.css'
 
 const IAP_TABS = new Set(['packages', 'api-key', 'payment-tools', 'sale'])
-const SERVICE_TABS = new Set(['openai', 'vbee'])
+const SERVICE_TABS = new Set(['openai', 'vbee', 'whisper'])
 const VBEE_SECTIONS = new Set(['tokens', 'requests', 'segments', 'config'])
 const OPENAI_SECTIONS = new Set(['tokens', 'requests', 'usage', 'test', 'config'])
+const WHISPER_SECTIONS = new Set(['requests', 'config'])
 
 function parseIapRoute(normalizedPath) {
   if (normalizedPath === '/admin/iap/pack-function') {
@@ -112,10 +113,18 @@ function parseAdminRoute(pathname = window.location.pathname) {
     return { name: 'service', serviceTab: 'openai', openAiSection: openAiSectionMatch[1] }
   }
 
+  const whisperSectionMatch = normalizedPath.match(/^\/admin\/service\/whisper\/([^/]+)$/)
+  if (whisperSectionMatch && WHISPER_SECTIONS.has(whisperSectionMatch[1])) {
+    return { name: 'service', serviceTab: 'whisper', whisperSection: whisperSectionMatch[1] }
+  }
+
   const serviceTabMatch = normalizedPath.match(/^\/admin\/service\/([^/]+)$/)
   if (serviceTabMatch && SERVICE_TABS.has(serviceTabMatch[1])) {
     if (serviceTabMatch[1] === 'openai') {
       return { name: 'service', serviceTab: 'openai', openAiSection: 'tokens' }
+    }
+    if (serviceTabMatch[1] === 'whisper') {
+      return { name: 'service', serviceTab: 'whisper', whisperSection: 'requests' }
     }
     return { name: 'service', serviceTab: 'vbee', vbeeSection: 'tokens' }
   }
@@ -177,6 +186,18 @@ function App() {
     setHeaderActions(null)
   }, [route.name])
 
+  // Listen for session-expired events dispatched by the API layer on 401+refresh-failure
+  useEffect(() => {
+    function handleSessionExpired() {
+      clearStoredSession()
+      setSession(null)
+      setNotice('Session expired. Please sign in again.')
+      navigate('/admin/login')
+    }
+    window.addEventListener('admin-session-expired', handleSessionExpired)
+    return () => window.removeEventListener('admin-session-expired', handleSessionExpired)
+  }, [navigate])
+
   useEffect(() => {
     if (sessionStatus !== 'ready') return
     if (!session && route.name !== 'login') {
@@ -218,6 +239,10 @@ function App() {
         if (route.openAiSection === 'config') return 'OpenAI config'
         return 'OpenAI tokens'
       }
+      if (route.serviceTab === 'whisper') {
+        if (route.whisperSection === 'config') return 'Whisper config'
+        return 'Whisper requests'
+      }
       if (route.vbeeRequestId) return 'Vbee request'
       if (route.vbeeSegmentHash) return 'Vbee segment'
       if (route.vbeeSection === 'requests') return 'Vbee requests'
@@ -228,7 +253,7 @@ function App() {
     if (route.name === 'user-detail') return 'User detail'
     if (route.name === 'manage') return 'User management'
     return 'Admin login'
-  }, [route.iapTab, route.name, route.openAiRequestId, route.openAiSection, route.paymentToolHistoryId, route.paymentTransactionId, route.serviceTab, route.vbeeRequestId, route.vbeeSection, route.vbeeSegmentHash])
+  }, [route.iapTab, route.name, route.openAiRequestId, route.openAiSection, route.paymentToolHistoryId, route.paymentTransactionId, route.serviceTab, route.vbeeRequestId, route.vbeeSection, route.vbeeSegmentHash, route.whisperSection])
 
   const handleSessionUpdate = (nextSession) => {
     setSession(nextSession)

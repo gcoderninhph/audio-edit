@@ -3,24 +3,39 @@ import os
 import time
 
 try:
-    import pymysql
-except ImportError as import_error:
-    pymysql = None
-    PYMYSQL_IMPORT_ERROR = import_error
-else:
-    PYMYSQL_IMPORT_ERROR = None
+    from mysql_connection import connect_mysql, load_mysql_settings, quote_mysql_identifier, require_mysql_driver
+    from openai_translation_record_utils import (
+        row_to_request_record as _row_to_request_record,
+        safe_bool as _safe_bool,
+        safe_float as _safe_float,
+        safe_int as _safe_int,
+        scrub_openai_request_detail_row as _scrub_openai_request_detail_row_impl,
+        serialize_config as _serialize_config_impl,
+        serialize_token as _serialize_token,
+    )
+except ImportError:
+    from .mysql_connection import connect_mysql, load_mysql_settings, quote_mysql_identifier, require_mysql_driver
+    from .openai_translation_record_utils import (
+        row_to_request_record as _row_to_request_record,
+        safe_bool as _safe_bool,
+        safe_float as _safe_float,
+        safe_int as _safe_int,
+        scrub_openai_request_detail_row as _scrub_openai_request_detail_row_impl,
+        serialize_config as _serialize_config_impl,
+        serialize_token as _serialize_token,
+    )
 
 try:
     from request_store import RequestStoreError, ensure_request_schema
 except ImportError:
     from .request_store import RequestStoreError, ensure_request_schema
 
-
-MYSQL_HOST = os.environ.get('OPENAI_MYSQL_HOST') or os.environ.get('REQUEST_MYSQL_HOST') or os.environ.get('AUTH_MYSQL_HOST') or os.environ.get('MYSQL_HOST', 'localhost')
-MYSQL_PORT = int(os.environ.get('OPENAI_MYSQL_PORT') or os.environ.get('REQUEST_MYSQL_PORT') or os.environ.get('AUTH_MYSQL_PORT') or os.environ.get('MYSQL_PORT', '3306'))
-MYSQL_USER = os.environ.get('OPENAI_MYSQL_USER') or os.environ.get('REQUEST_MYSQL_USER') or os.environ.get('AUTH_MYSQL_USER') or os.environ.get('MYSQL_USER', 'root')
-MYSQL_PASSWORD = os.environ.get('OPENAI_MYSQL_PASSWORD') or os.environ.get('REQUEST_MYSQL_PASSWORD') or os.environ.get('AUTH_MYSQL_PASSWORD') or os.environ.get('MYSQL_PASSWORD', '12345678')
-MYSQL_DATABASE = os.environ.get('OPENAI_MYSQL_DATABASE') or os.environ.get('REQUEST_MYSQL_DATABASE') or os.environ.get('AUTH_MYSQL_DATABASE') or os.environ.get('MYSQL_DATABASE', 'audio_studio')
+_MYSQL_SETTINGS = load_mysql_settings(['OPENAI', 'REQUEST', 'AUTH'])
+MYSQL_HOST = _MYSQL_SETTINGS['host']
+MYSQL_PORT = _MYSQL_SETTINGS['port']
+MYSQL_USER = _MYSQL_SETTINGS['user']
+MYSQL_PASSWORD = _MYSQL_SETTINGS['password']
+MYSQL_DATABASE = _MYSQL_SETTINGS['database']
 
 OPENAI_REQUEST_PROVIDER = 'openai-chatgpt'
 OPENAI_REQUEST_TYPE = 'translation'
@@ -40,78 +55,23 @@ DEFAULT_TIMEOUT_SECONDS = int(os.environ.get('OPENAI_TRANSLATION_TIMEOUT_SECONDS
 
 _schema_ready = False
 
-
 class OpenAiTranslationError(RuntimeError):
     pass
 
-
 class OpenAiTranslationNotFoundError(OpenAiTranslationError):
     pass
-
-
 class OpenAiTranslationValidationError(OpenAiTranslationError):
     pass
-
-
 def _require_driver():
-    if pymysql is None:
-        raise OpenAiTranslationError('PyMySQL is not installed') from PYMYSQL_IMPORT_ERROR
-    return pymysql
+    return require_mysql_driver(OpenAiTranslationError)
 
 
 def _quote_identifier(identifier):
-    safe_identifier = ''.join(ch for ch in str(identifier or '') if ch.isalnum() or ch == '_')
-    if not safe_identifier:
-        raise OpenAiTranslationError('Invalid MySQL database name')
-    return f'`{safe_identifier}`'
+    return quote_mysql_identifier(identifier, OpenAiTranslationError)
 
 
 def _connect(database=None):
-    driver = _require_driver()
-    try:
-        return driver.connect(
-            host=MYSQL_HOST,
-            port=MYSQL_PORT,
-            user=MYSQL_USER,
-            password=MYSQL_PASSWORD,
-            database=database,
-            charset='utf8mb4',
-            cursorclass=driver.cursors.DictCursor,
-            autocommit=True,
-        )
-    except driver.MySQLError as error:
-        raise OpenAiTranslationError('Unable to connect to MySQL') from error
-
-
-def _safe_bool(value, default_value=True):
-    if value is None:
-        return bool(default_value)
-    if isinstance(value, bool):
-        return value
-    return str(value).strip().lower() not in {'0', 'false', 'off', 'no', ''}
-
-
-def _safe_float(value, default_value):
-    try:
-        return float(value)
-    except (TypeError, ValueError):
-        return float(default_value)
-
-
-def _safe_int(value, default_value):
-    try:
-        return int(value)
-    except (TypeError, ValueError):
-        return int(default_value)
-
-
-def _token_preview(secret):
-    text = str(secret or '').strip()
-    if not text:
-        return ''
-    if len(text) <= 8:
-        return '*' * len(text)
-    return f"{text[:3]}...{text[-5:]}"
+    return connect_mysql(_MYSQL_SETTINGS, error_cls=OpenAiTranslationError, database=database)
 
 
 def _defaults():
@@ -125,87 +85,12 @@ def _defaults():
     }
 
 
-def _serialize_token(row, include_secret=False):
-    if not row:
-        return None
-    payload = {
-        'id': int(row.get('id') or 0),
-        'name': row.get('name') or '',
-        'isActive': bool(row.get('is_active')),
-        'tokenPreview': _token_preview(row.get('api_key')),
-        'createdAt': float(row.get('created_at') or 0),
-        'updatedAt': float(row.get('updated_at') or 0),
-        'lastUsedAt': float(row.get('last_used_at') or 0),
-    }
-    if include_secret:
-        payload['token'] = row.get('api_key') or ''
-    return payload
-
-
 def _serialize_config(row):
-    defaults = _defaults()
-    if not row:
-        return defaults
-    model_value = str(row.get('model') or defaults['model']).strip() or defaults['model']
-    if model_value == LEGACY_DEFAULT_MODEL:
-        model_value = defaults['model']
-    return {
-        'apiBaseUrl': str(row.get('api_base_url') or defaults['apiBaseUrl']).strip() or defaults['apiBaseUrl'],
-        'model': model_value,
-        'systemPrompt': str(row.get('system_prompt') or defaults['systemPrompt']),
-        'promptTemplate': str(row.get('prompt_template') or defaults['promptTemplate']),
-        'temperature': _safe_float(row.get('temperature'), defaults['temperature']),
-        'timeoutSeconds': max(10, min(600, _safe_int(row.get('timeout_seconds'), defaults['timeoutSeconds']))),
-    }
-
-
-def _sanitize_openai_request_details(details):
-    safe_details = dict(details or {})
-    removed = 'systemPrompt' in safe_details
-    if removed:
-        safe_details.pop('systemPrompt', None)
-    return safe_details, removed
+    return _serialize_config_impl(row, defaults=_defaults(), legacy_default_model=LEGACY_DEFAULT_MODEL)
 
 
 def _scrub_openai_request_detail_row(connection, row):
-    safe_details, removed = _sanitize_openai_request_details(json.loads(row.get('details_json') or '{}') if str(row.get('details_json') or '').strip() else {})
-    if not removed:
-        return safe_details
-    with connection.cursor() as cursor:
-        cursor.execute(
-            'UPDATE server_requests SET details_json = %s WHERE request_id = %s AND request_type = %s AND provider = %s',
-            (
-                json.dumps(safe_details, ensure_ascii=False, separators=(',', ':')),
-                row.get('request_id') or '',
-                OPENAI_REQUEST_TYPE,
-                OPENAI_REQUEST_PROVIDER,
-            ),
-        )
-    return safe_details
-
-
-def _row_to_request_record(row):
-    if not row:
-        return None
-    details_json = row.get('details_json')
-    try:
-        details = json.loads(details_json) if details_json else {}
-    except json.JSONDecodeError:
-        details = {}
-    details, _removed = _sanitize_openai_request_details(details)
-    return {
-        'request_id': row.get('request_id') or '',
-        'user_id': row.get('user_id') or '',
-        'request_type': row.get('request_type') or '',
-        'provider': row.get('provider') or '',
-        'status': row.get('status') or '',
-        'source_file_name': row.get('source_file_name') or '',
-        'target_language': row.get('target_language') or '',
-        'output_file_name': row.get('output_file_name') or '',
-        'details': details,
-        'created_at': float(row.get('created_at') or 0),
-        'updated_at': float(row.get('updated_at') or 0),
-    }
+    return _scrub_openai_request_detail_row_impl(connection, row, request_type=OPENAI_REQUEST_TYPE, provider=OPENAI_REQUEST_PROVIDER)
 
 
 def ensure_openai_translation_schema():

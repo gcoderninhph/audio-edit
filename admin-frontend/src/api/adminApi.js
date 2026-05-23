@@ -71,10 +71,15 @@ async function refreshSession() {
     body: JSON.stringify({ refreshToken: currentSession.refreshToken }),
   })
   if (!response.ok) {
-    clearStoredSession()
+    expireSession()
     return null
   }
   return mergeSessionPayload(response.data || {})
+}
+
+function expireSession() {
+  clearStoredSession()
+  window.dispatchEvent(new CustomEvent('admin-session-expired'))
 }
 
 export async function requestJson(path, options = {}, allowRefresh = true) {
@@ -87,6 +92,7 @@ export async function requestJson(path, options = {}, allowRefresh = true) {
   if (response.status === 401 && allowRefresh && currentSession?.refreshToken) {
     const refreshedSession = await refreshSession()
     if (refreshedSession) return requestJson(path, options, false)
+    expireSession()
   }
   return response
 }

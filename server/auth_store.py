@@ -3,6 +3,11 @@ import os
 import time
 
 try:
+    from mysql_connection import connect_mysql, load_mysql_settings, quote_mysql_identifier, require_mysql_driver
+except ImportError:
+    from .mysql_connection import connect_mysql, load_mysql_settings, quote_mysql_identifier, require_mysql_driver
+
+try:
     from auth_user_record import (
         _normalize_is_locked,
         _normalize_is_premium,
@@ -21,20 +26,12 @@ except ImportError:
         normalize_premium_window,
     )
 
-try:
-    import pymysql
-except ImportError as import_error:
-    pymysql = None
-    PYMYSQL_IMPORT_ERROR = import_error
-else:
-    PYMYSQL_IMPORT_ERROR = None
-
-
-MYSQL_HOST = os.environ.get('AUTH_MYSQL_HOST') or os.environ.get('MYSQL_HOST', 'localhost')
-MYSQL_PORT = int(os.environ.get('AUTH_MYSQL_PORT') or os.environ.get('MYSQL_PORT', '3306'))
-MYSQL_USER = os.environ.get('AUTH_MYSQL_USER') or os.environ.get('MYSQL_USER', 'root')
-MYSQL_PASSWORD = os.environ.get('AUTH_MYSQL_PASSWORD') or os.environ.get('MYSQL_PASSWORD', '12345678')
-MYSQL_DATABASE = os.environ.get('AUTH_MYSQL_DATABASE') or os.environ.get('MYSQL_DATABASE', 'audio_studio')
+_MYSQL_SETTINGS = load_mysql_settings(['AUTH'])
+MYSQL_HOST = _MYSQL_SETTINGS['host']
+MYSQL_PORT = _MYSQL_SETTINGS['port']
+MYSQL_USER = _MYSQL_SETTINGS['user']
+MYSQL_PASSWORD = _MYSQL_SETTINGS['password']
+MYSQL_DATABASE = _MYSQL_SETTINGS['database']
 DEFAULT_INITIAL_CREDITS = int(os.environ.get('AUTH_INITIAL_CREDITS', '1000'))
 DEFAULT_USER_ROLE = 'user'
 ADMIN_USER_ROLE = 'admin'
@@ -65,33 +62,15 @@ class InsufficientCreditsError(AuthStoreError):
 
 
 def _require_driver():
-    if pymysql is None:
-        raise AuthStoreError('PyMySQL is not installed') from PYMYSQL_IMPORT_ERROR
-    return pymysql
+    return require_mysql_driver(AuthStoreError)
 
 
 def _quote_identifier(identifier):
-    safe_identifier = ''.join(ch for ch in str(identifier or '') if ch.isalnum() or ch == '_')
-    if not safe_identifier:
-        raise AuthStoreError('Invalid MySQL database name')
-    return f'`{safe_identifier}`'
+    return quote_mysql_identifier(identifier, AuthStoreError)
 
 
 def _connect(database=None):
-    driver = _require_driver()
-    try:
-        return driver.connect(
-            host=MYSQL_HOST,
-            port=MYSQL_PORT,
-            user=MYSQL_USER,
-            password=MYSQL_PASSWORD,
-            database=database,
-            charset='utf8mb4',
-            cursorclass=driver.cursors.DictCursor,
-            autocommit=True,
-        )
-    except driver.MySQLError as error:
-        raise AuthStoreError('Unable to connect to MySQL') from error
+    return connect_mysql(_MYSQL_SETTINGS, error_cls=AuthStoreError, database=database)
 
 
 def _read_legacy_json_users():

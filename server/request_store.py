@@ -4,19 +4,16 @@ import time
 from pathlib import Path
 
 try:
-    import pymysql
-except ImportError as import_error:
-    pymysql = None
-    PYMYSQL_IMPORT_ERROR = import_error
-else:
-    PYMYSQL_IMPORT_ERROR = None
+    from mysql_connection import connect_mysql, load_mysql_settings, quote_mysql_identifier, require_mysql_driver
+except ImportError:
+    from .mysql_connection import connect_mysql, load_mysql_settings, quote_mysql_identifier, require_mysql_driver
 
-
-MYSQL_HOST = os.environ.get('REQUEST_MYSQL_HOST') or os.environ.get('AUTH_MYSQL_HOST') or os.environ.get('MYSQL_HOST', 'localhost')
-MYSQL_PORT = int(os.environ.get('REQUEST_MYSQL_PORT') or os.environ.get('AUTH_MYSQL_PORT') or os.environ.get('MYSQL_PORT', '3306'))
-MYSQL_USER = os.environ.get('REQUEST_MYSQL_USER') or os.environ.get('AUTH_MYSQL_USER') or os.environ.get('MYSQL_USER', 'root')
-MYSQL_PASSWORD = os.environ.get('REQUEST_MYSQL_PASSWORD') or os.environ.get('AUTH_MYSQL_PASSWORD') or os.environ.get('MYSQL_PASSWORD', '12345678')
-MYSQL_DATABASE = os.environ.get('REQUEST_MYSQL_DATABASE') or os.environ.get('AUTH_MYSQL_DATABASE') or os.environ.get('MYSQL_DATABASE', 'audio_studio')
+_MYSQL_SETTINGS = load_mysql_settings(['REQUEST', 'AUTH'])
+MYSQL_HOST = _MYSQL_SETTINGS['host']
+MYSQL_PORT = _MYSQL_SETTINGS['port']
+MYSQL_USER = _MYSQL_SETTINGS['user']
+MYSQL_PASSWORD = _MYSQL_SETTINGS['password']
+MYSQL_DATABASE = _MYSQL_SETTINGS['database']
 LEGACY_TRANSLATION_ROOT = Path(__file__).resolve().parent / 'uploads' / 'translation-jobs'
 
 _schema_ready = False
@@ -27,33 +24,15 @@ class RequestStoreError(RuntimeError):
 
 
 def _require_driver():
-    if pymysql is None:
-        raise RequestStoreError('PyMySQL is not installed') from PYMYSQL_IMPORT_ERROR
-    return pymysql
+    return require_mysql_driver(RequestStoreError)
 
 
 def _quote_identifier(identifier):
-    safe_identifier = ''.join(ch for ch in str(identifier or '') if ch.isalnum() or ch == '_')
-    if not safe_identifier:
-        raise RequestStoreError('Invalid MySQL database name')
-    return f'`{safe_identifier}`'
+    return quote_mysql_identifier(identifier, RequestStoreError)
 
 
 def _connect(database=None):
-    driver = _require_driver()
-    try:
-        return driver.connect(
-            host=MYSQL_HOST,
-            port=MYSQL_PORT,
-            user=MYSQL_USER,
-            password=MYSQL_PASSWORD,
-            database=database,
-            charset='utf8mb4',
-            cursorclass=driver.cursors.DictCursor,
-            autocommit=True,
-        )
-    except driver.MySQLError as error:
-        raise RequestStoreError('Unable to connect to MySQL') from error
+    return connect_mysql(_MYSQL_SETTINGS, error_cls=RequestStoreError, database=database)
 
 
 def _read_legacy_output(metadata):
