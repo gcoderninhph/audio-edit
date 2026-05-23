@@ -1,10 +1,12 @@
-import { FileClock, Settings } from 'lucide-react'
+import { FileClock, Server, Settings } from 'lucide-react'
 import DeveloperMarker from './DeveloperMarker'
 import WhisperConfigPanel from './WhisperConfigPanel'
+import WhisperNodesPanel from './WhisperNodesPanel'
 import WhisperRequestsPanel from './WhisperRequestsPanel'
 
 const SECTIONS = [
   { key: 'requests', label: 'Requests', meta: 'Transcription jobs', icon: FileClock, markerCode: 'admin.react.service.whisper.nav.requests' },
+  { key: 'nodes', label: 'Nodes', meta: 'Processing nodes', icon: Server, markerCode: 'admin.react.service.whisper.nav.nodes' },
   { key: 'config', label: 'Config', meta: 'Provider settings', icon: Settings, markerCode: 'admin.react.service.whisper.nav.config' },
 ]
 
@@ -13,6 +15,7 @@ function getWhisperSectionPath(sectionKey) {
 }
 
 function renderSection(sectionKey) {
+  if (sectionKey === 'nodes') return <WhisperNodesPanel />
   if (sectionKey === 'config') return <WhisperConfigPanel />
   return <WhisperRequestsPanel />
 }

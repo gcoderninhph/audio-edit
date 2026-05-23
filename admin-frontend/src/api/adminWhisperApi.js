@@ -14,6 +14,21 @@ export async function fetchAdminWhisperConfig() {
   return response.data || {}
 }
 
+export async function fetchAdminWhisperNodes() {
+  const response = await requestJson('/api/admin/services/whisper/nodes')
+  if (!response.ok) throw new Error(response.data?.error || 'Unable to load Whisper nodes.')
+  return response.data || {}
+}
+
+export async function createAdminWhisperNode(payload) {
+  const response = await requestJson('/api/admin/services/whisper/nodes', {
+    method: 'POST',
+    body: JSON.stringify(payload),
+  })
+  if (!response.ok) throw new Error(response.data?.error || 'Unable to create Whisper node.')
+  return response.data || {}
+}
+
 export async function updateAdminWhisperConfig(payload) {
   const response = await requestJson('/api/admin/services/whisper/config', {
     method: 'PATCH',

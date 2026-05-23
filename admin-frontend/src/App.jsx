@@ -13,7 +13,7 @@ const IAP_TABS = new Set(['packages', 'api-key', 'payment-tools', 'sale'])
 const SERVICE_TABS = new Set(['openai', 'vbee', 'whisper'])
 const VBEE_SECTIONS = new Set(['tokens', 'requests', 'segments', 'config'])
 const OPENAI_SECTIONS = new Set(['tokens', 'requests', 'usage', 'test', 'config'])
-const WHISPER_SECTIONS = new Set(['requests', 'config'])
+const WHISPER_SECTIONS = new Set(['requests', 'nodes', 'config'])
 
 function parseIapRoute(normalizedPath) {
   if (normalizedPath === '/admin/iap/pack-function') {
@@ -240,6 +240,7 @@ function App() {
         return 'OpenAI tokens'
       }
       if (route.serviceTab === 'whisper') {
+        if (route.whisperSection === 'nodes') return 'Whisper nodes'
         if (route.whisperSection === 'config') return 'Whisper config'
         return 'Whisper requests'
       }

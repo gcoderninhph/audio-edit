@@ -11,7 +11,7 @@
 - `admin-frontend/src/api/adminApi.js` - Wraps the Flask auth and admin APIs for login, bootstrap, user management, IAP, requests, and credits.
 - `admin-frontend/src/api/adminOpenAiApi.js` - Wraps the admin-only OpenAI service APIs for token CRUD, request monitoring, prompt or model configuration, and one-off `.srt` test translation uploads.
 - `admin-frontend/src/api/adminVbeeApi.js` - Wraps the admin-only Service/Vbee APIs for tokens, requests, grouped segments, inline audio, delete, cache clear, and config.
-- `admin-frontend/src/api/adminWhisperApi.js` - Wraps the admin-only Service/Whisper APIs for request monitoring and provider config.
+- `admin-frontend/src/api/adminWhisperApi.js` - Wraps the admin-only Service/Whisper APIs for request monitoring, processing-node list or create flows, and provider config.
 - `admin-frontend/src/utils/format.js` - Provides shared number, currency, and date-time formatting helpers for admin screens.
 - `admin-frontend/src/components/AdminLayout.jsx` - Renders the shared admin React shell with fixed navigation, topbar actions, and logout flow.
 - `admin-frontend/src/components/DeveloperMarker.jsx` - Renders developer-only locator markers for admin React UI sections.
@@ -48,8 +48,9 @@
 - `admin-frontend/src/components/VbeeSegmentsPanel.jsx` - Renders the grouped Vbee segment list, status filter, cache-clear flow, and route handoff into the dedicated Vbee segment detail component while keeping the list surface under the 400-line guardrail.
 - `admin-frontend/src/components/VbeeSegmentDetailPanel.jsx` - Renders the Service/Vbee segment detail view with top-level failure reasons, a structured failure-detail section showing the latest failed stage and recent failure events, usage-level error visibility, delete confirmation, and inline audio preview for completed assets.
 - `admin-frontend/src/components/VbeeConfigPanel.jsx` - Renders the Vbee provider config form, shows webhook host/path info above the checkbox grid that enables or disables supported narration languages for desktop voiceover, and no longer exposes the saved webhook secret for inline editing.
-- `admin-frontend/src/components/WhisperOperationsPanel.jsx` - Renders the Whisper left-nav and right-content operations layout for requests and config.
-- `admin-frontend/src/components/WhisperRequestsPanel.jsx` - Renders paginated Whisper transcription request monitoring with status filters and metadata.
+- `admin-frontend/src/components/WhisperOperationsPanel.jsx` - Renders the Whisper left-nav and right-content operations layout for requests, processing nodes, and config.
+- `admin-frontend/src/components/WhisperNodesPanel.jsx` - Renders the Service/Whisper node-management panel with a toolbar, modal add-node form, node URL plus `maxConcurrentRequests` inputs, queue-capacity notice, and a compact table of configured processing nodes.
+- `admin-frontend/src/components/WhisperRequestsPanel.jsx` - Renders the compact Vbee-token-style Whisper transcription request table with status filtering, queue position, node assignment, provider job hints, and pagination.
 - `admin-frontend/src/components/WhisperConfigPanel.jsx` - Renders the Whisper provider config placeholder (empty body until backend config is ready).
 - `admin-frontend/src/components/UserDetailPage.jsx` - Renders the selected user detail screen with premium, lock, request, and credit history management.
 - `admin-frontend/src/components/Pagination.jsx` - Renders reusable pagination controls across admin lists.

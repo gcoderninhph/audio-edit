@@ -1,7 +1,7 @@
 # Backend Map
 
 ## server root
-- `server/app.py` - Flask entrypoint that wires controller modules, shared logging, health checks, and background workers through the new role-based package layout.
+- `server/app.py` - Flask entrypoint that wires controller modules, shared logging, centralized HTTP request or response logging hooks, health checks, and background workers including the Whisper queue dispatcher through the new role-based package layout.
 - `server/controllers/__init__.py` - Marks the controller package that owns HTTP route registration modules.
 - `server/services/__init__.py` - Marks the service package that owns business workflows, store orchestration, caches, and workers.
 - `server/repositories/__init__.py` - Marks the repository package that owns SQL and low-level persistence access.
@@ -17,8 +17,9 @@
 - `server/controllers/iap_routes.py` - Registers public IAP catalog reads plus admin IAP package, API key, history, function, and sale APIs.
 - `server/controllers/openai_translation_routes.py` - Registers admin-only Service/OpenAI token, request, config, and one-off test-translation upload APIs.
 - `server/controllers/proxy_routes.py` - Registers transcription proxy endpoints plus the OpenAI-backed subtitle translation contract and local request ownership checks.
-- `server/controllers/proxy_transcription_routes.py` - Owns the authenticated transcription proxy endpoints and downstream Whishper integration.
+- `server/controllers/proxy_transcription_routes.py` - Owns the authenticated transcription proxy endpoints, charges or refunds credits around Whisper job creation, returns stable local request ids for queued or processing transcription jobs, and reads queue-aware status snapshots from the Whisper runtime service.
 - `server/controllers/vbee_routes.py` - Registers client voiceover APIs plus admin Service/Vbee token, request, segment, audio, cache-clear, delete, and config APIs.
+- `server/controllers/whisper_routes.py` - Registers admin-only Service/Whisper request-list and processing-node list or create APIs.
 
 ## server/services
 - `server/services/admin_bootstrap.py` - Creates and clears the temporary bootstrap admin credentials when no persisted admin exists.
@@ -47,6 +48,9 @@
 - `server/services/vbee_segment_store.py` - Owns grouped Vbee segment status derivation, failure-detail shaping, and pagination while delegating SQL execution to `server/repositories/vbee_segment_repository.py`.
 - `server/services/vbee_service.py` - Orchestrates Vbee voiceover creation, provider polling, webhook completion, reuse, request summary refresh, and language-aware voice selection.
 - `server/services/vbee_token_store.py` - Owns Vbee token/config normalization and response shaping while delegating SQL execution to `server/repositories/vbee_token_repository.py`.
+- `server/services/whisper_admin_store.py` - Owns Whisper admin request paging, per-request queue metadata shaping, processing-node URL and concurrency validation, schema bootstrap, and dispatch-node selection while delegating SQL execution to `server/repositories/whisper_admin_repository.py`.
+- `server/services/whisper_runtime.py` - Owns the Whisper temp-file queue lifecycle, local request-id generation, background dispatch worker, the lock-scoped queue-claim step that assigns node capacity before dispatch, the guard that skips provider polling while a sync dispatch still has no real provider job id, in-flight dispatch status transitions used by the admin node-processing counter, provider polling, queue-aware status payload shaping, and automatic submission of saved files when node capacity frees up.
+- `server/services/whisper_runtime_status.py` - Holds Whisper runtime status constants plus the shared request-status and provider-status normalization helpers extracted from `server/services/whisper_runtime.py` to keep the dispatch orchestrator under the workspace line-count guardrail.
 
 ## server/repositories
 - `server/repositories/admin_user_repository.py` - Owns admin-user SQL reads and writes for counts, list paging, summaries, and role/premium/lock updates.
@@ -65,12 +69,13 @@
 - `server/repositories/vbee_request_repository.py` - Owns Vbee request/segment SQL for request creation, summary aggregation, paging, segment updates, and cache-clear deletes.
 - `server/repositories/vbee_segment_repository.py` - Owns grouped Vbee segment summary/detail SQL reads for admin segment surfaces.
 - `server/repositories/vbee_token_repository.py` - Owns Vbee token/config SQL, token stats reads, and active-capacity query operations.
+- `server/repositories/whisper_admin_repository.py` - Owns Whisper admin SQL for processing-node schema or CRUD with `max_concurrent_requests`, queue-position reads, named dispatch locks, and filtered Whisper request count or paging queries over `server_requests`.
 
 ## server/utils
 - `server/utils/auth_identity.py` - Holds shared auth-side username normalization, display-name normalization, and public-user shaping helpers reused by auth controllers.
 - `server/utils/auth_user_record.py` - Centralizes auth-user role, lock, and premium-window normalization.
 - `server/utils/iap_payment_records.py` - Holds payment ticket/refund row mappers plus IAP record pagination helpers.
-- `server/utils/logging_setup.py` - Configures hourly rotating backend log files and shared Flask logging setup.
+- `server/utils/logging_setup.py` - Configures hourly rotating backend log files, resolves the runtime log directory for Docker versus local runs, and registers compact single-line HTTP logging with `reqId`, a `HTTP [<time>ms]` prefix, 100-character request or response body previews, and masking for sensitive headers or payload fields such as authorization, password, token, and secret values.
 - `server/utils/mysql_connection.py` - Centralizes MySQL env-resolution order, PyMySQL loading, identifier quoting, and the shared `driver.connect(...)` path reused by repositories and services.
 - `server/utils/openai_translation_record_utils.py` - Holds the OpenAI token/config/request-row serialization and request-detail scrubbing helpers.
 - `server/utils/pagination.py` - Centralizes page/page-size normalization and pagination payload construction reused across multiple backend services.
