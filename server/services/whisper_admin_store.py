@@ -8,24 +8,28 @@ try:
     from repositories.whisper_admin_repository import (
         WhisperAdminRepositoryError,
         count_whisper_queue_position_row,
+        delete_whisper_processing_node_row,
         count_whisper_request_rows,
         ensure_whisper_admin_tables,
         insert_whisper_processing_node_row,
         list_processing_whisper_request_rows,
         list_whisper_processing_node_rows,
         list_whisper_request_rows,
+        update_whisper_processing_node_row,
     )
     from utils.pagination import build_pagination, normalize_pagination
 except ImportError:
     from ..repositories.whisper_admin_repository import (
         WhisperAdminRepositoryError,
         count_whisper_queue_position_row,
+        delete_whisper_processing_node_row,
         count_whisper_request_rows,
         ensure_whisper_admin_tables,
         insert_whisper_processing_node_row,
         list_processing_whisper_request_rows,
         list_whisper_processing_node_rows,
         list_whisper_request_rows,
+        update_whisper_processing_node_row,
     )
     from ..utils.pagination import build_pagination, normalize_pagination
 
@@ -44,6 +48,10 @@ class WhisperAdminError(RuntimeError):
 
 
 class WhisperAdminValidationError(WhisperAdminError):
+    pass
+
+
+class WhisperAdminNotFoundError(WhisperAdminError):
     pass
 
 
@@ -111,6 +119,15 @@ def _normalize_max_concurrent_requests(value):
     return safe_value
 
 
+def _normalize_node_name(value):
+    safe_value = ' '.join(str(value or '').split()).strip()
+    if not safe_value:
+        raise WhisperAdminValidationError('Please enter a Whisper node name.')
+    if len(safe_value) > 120:
+        raise WhisperAdminValidationError('Whisper node name must be 120 characters or fewer.')
+    return safe_value
+
+
 def _processing_counts_by_node_url(limit=500):
     try:
         rows = list_processing_whisper_request_rows(limit=max(1, int(limit or 500)))
@@ -167,6 +184,7 @@ def _row_to_node(row, processing_count=0):
         'createdAt': float(row.get('created_at') or 0),
         'id': int(row.get('node_id') or 0),
         'maxConcurrentRequests': max_concurrent_requests,
+        'name': str(row.get('node_name') or row.get('node_url') or '').strip(),
         'processingCount': int(processing_count or 0),
         'updatedAt': float(row.get('updated_at') or 0),
         'url': row.get('node_url') or '',
@@ -237,12 +255,16 @@ def list_whisper_processing_node_urls():
 
 
 def create_whisper_processing_node(payload):
+    _ensure_whisper_admin_schema()
+    raw_name = ''
     raw_url = ''
     raw_max_concurrent_requests = 1
     if isinstance(payload, dict):
+        raw_name = payload.get('name') or payload.get('nodeName') or ''
         raw_url = payload.get('url') or payload.get('nodeUrl') or ''
         raw_max_concurrent_requests = payload.get('maxConcurrentRequests') or payload.get('max_concurrent_requests') or 1
 
+    normalized_name = _normalize_node_name(raw_name)
     normalized_url = normalize_whisper_base_url(raw_url)
     if not normalized_url:
         raise WhisperAdminValidationError('Please enter a Whisper node URL.')
@@ -252,14 +274,18 @@ def create_whisper_processing_node(payload):
         raise WhisperAdminValidationError('Whisper node URL must start with http:// or https:// and include a host.')
 
     max_concurrent_requests = _normalize_max_concurrent_requests(raw_max_concurrent_requests)
+    try:
+        existing_rows = list_whisper_processing_node_rows()
+    except WhisperAdminRepositoryError as error:
+        raise WhisperAdminError('Unable to create Whisper processing node') from error
 
-    existing_urls = {node_url.lower() for node_url in list_whisper_processing_node_urls()}
+    existing_urls = {str(row.get('node_url') or '').lower() for row in existing_rows}
     if normalized_url.lower() in existing_urls:
         raise WhisperAdminValidationError('This Whisper node URL already exists.')
 
     now = time.time()
     try:
-        insert_whisper_processing_node_row(normalized_url, max_concurrent_requests, now, now)
+        insert_whisper_processing_node_row(normalized_name, normalized_url, max_concurrent_requests, now, now)
     except WhisperAdminRepositoryError as error:
         raise WhisperAdminError('Unable to create Whisper processing node') from error
 
@@ -267,9 +293,117 @@ def create_whisper_processing_node(payload):
         'availableCapacity': max_concurrent_requests,
         'createdAt': now,
         'maxConcurrentRequests': max_concurrent_requests,
+        'name': normalized_name,
         'processingCount': 0,
         'updatedAt': now,
         'url': normalized_url,
+    }
+
+
+def update_whisper_processing_node(node_id, payload):
+    _ensure_whisper_admin_schema()
+    safe_node_id = int(node_id or 0)
+    if safe_node_id <= 0:
+        raise WhisperAdminNotFoundError('Whisper node was not found.')
+
+    try:
+        existing_rows = list_whisper_processing_node_rows()
+    except WhisperAdminRepositoryError as error:
+        raise WhisperAdminError('Unable to update Whisper processing node') from error
+
+    existing_row = next((row for row in existing_rows if int(row.get('node_id') or 0) == safe_node_id), None)
+    if existing_row is None:
+        raise WhisperAdminNotFoundError('Whisper node was not found.')
+
+    payload = payload if isinstance(payload, dict) else {}
+    current_name = str(existing_row.get('node_name') or existing_row.get('node_url') or '').strip()
+    current_url = normalize_whisper_base_url(existing_row.get('node_url') or '')
+    current_max_concurrent_requests = int(existing_row.get('max_concurrent_requests') or 1)
+
+    normalized_name = _normalize_node_name(payload.get('name', payload.get('nodeName', current_name)))
+    normalized_url = normalize_whisper_base_url(payload.get('url', payload.get('nodeUrl', current_url)))
+    if not normalized_url:
+        raise WhisperAdminValidationError('Please enter a Whisper node URL.')
+
+    parsed = urlsplit(normalized_url)
+    if parsed.scheme not in {'http', 'https'} or not parsed.netloc:
+        raise WhisperAdminValidationError('Whisper node URL must start with http:// or https:// and include a host.')
+
+    max_concurrent_requests = _normalize_max_concurrent_requests(
+        payload.get('maxConcurrentRequests', payload.get('max_concurrent_requests', current_max_concurrent_requests))
+    )
+
+    duplicate_rows = {
+        str(row.get('node_url') or '').lower(): int(row.get('node_id') or 0)
+        for row in existing_rows
+    }
+    duplicate_node_id = duplicate_rows.get(normalized_url.lower())
+    if duplicate_node_id and duplicate_node_id != safe_node_id:
+        raise WhisperAdminValidationError('This Whisper node URL already exists.')
+
+    processing_counts = _processing_counts_by_node_url()
+    if normalized_url.lower() != current_url.lower() and int(processing_counts.get(current_url, 0) or 0) > 0:
+        raise WhisperAdminValidationError('Cannot change the node URL while the node is processing requests.')
+
+    updated_at = time.time()
+    try:
+        updated = update_whisper_processing_node_row(
+            safe_node_id,
+            normalized_name,
+            normalized_url,
+            max_concurrent_requests,
+            updated_at,
+        )
+    except WhisperAdminRepositoryError as error:
+        raise WhisperAdminError('Unable to update Whisper processing node') from error
+
+    if not updated:
+        raise WhisperAdminNotFoundError('Whisper node was not found.')
+
+    processing_count = int(processing_counts.get(current_url if normalized_url.lower() == current_url.lower() else normalized_url, 0) or 0)
+    return {
+        'availableCapacity': max(0, max_concurrent_requests - processing_count),
+        'createdAt': float(existing_row.get('created_at') or 0),
+        'id': safe_node_id,
+        'maxConcurrentRequests': max_concurrent_requests,
+        'name': normalized_name,
+        'processingCount': processing_count,
+        'updatedAt': updated_at,
+        'url': normalized_url,
+    }
+
+
+def delete_whisper_processing_node(node_id):
+    _ensure_whisper_admin_schema()
+    safe_node_id = int(node_id or 0)
+    if safe_node_id <= 0:
+        raise WhisperAdminNotFoundError('Whisper node was not found.')
+
+    try:
+        existing_rows = list_whisper_processing_node_rows()
+    except WhisperAdminRepositoryError as error:
+        raise WhisperAdminError('Unable to delete Whisper processing node') from error
+
+    existing_row = next((row for row in existing_rows if int(row.get('node_id') or 0) == safe_node_id), None)
+    if existing_row is None:
+        raise WhisperAdminNotFoundError('Whisper node was not found.')
+
+    current_url = normalize_whisper_base_url(existing_row.get('node_url') or '')
+    processing_count = int(_processing_counts_by_node_url().get(current_url, 0) or 0)
+    if processing_count > 0:
+        raise WhisperAdminValidationError('Cannot delete the node while it is processing requests.')
+
+    try:
+        deleted = delete_whisper_processing_node_row(safe_node_id)
+    except WhisperAdminRepositoryError as error:
+        raise WhisperAdminError('Unable to delete Whisper processing node') from error
+
+    if not deleted:
+        raise WhisperAdminNotFoundError('Whisper node was not found.')
+
+    return {
+        'deleted': True,
+        'id': safe_node_id,
     }
 
 

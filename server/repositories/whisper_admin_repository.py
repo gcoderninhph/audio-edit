@@ -49,6 +49,7 @@ def ensure_whisper_admin_tables():
                     """
                     CREATE TABLE IF NOT EXISTS whisper_processing_nodes (
                         node_id INT NOT NULL AUTO_INCREMENT PRIMARY KEY,
+                        node_name VARCHAR(255) NOT NULL DEFAULT '',
                         node_url VARCHAR(512) NOT NULL,
                         max_concurrent_requests INT NOT NULL DEFAULT 1,
                         created_at DOUBLE NOT NULL,
@@ -61,8 +62,21 @@ def ensure_whisper_admin_tables():
                 _ensure_column(
                     cursor,
                     'whisper_processing_nodes',
+                    'node_name',
+                    "VARCHAR(255) NOT NULL DEFAULT '' AFTER node_id",
+                )
+                _ensure_column(
+                    cursor,
+                    'whisper_processing_nodes',
                     'max_concurrent_requests',
                     'INT NOT NULL DEFAULT 1 AFTER node_url',
+                )
+                cursor.execute(
+                    """
+                    UPDATE whisper_processing_nodes
+                    SET node_name = node_url
+                    WHERE TRIM(COALESCE(node_name, '')) = ''
+                    """
                 )
         finally:
             connection.close()
@@ -171,7 +185,7 @@ def list_whisper_processing_node_rows():
         with connection.cursor() as cursor:
             cursor.execute(
                 """
-                SELECT node_id, node_url, max_concurrent_requests, created_at, updated_at
+                SELECT node_id, node_name, node_url, max_concurrent_requests, created_at, updated_at
                 FROM whisper_processing_nodes
                 ORDER BY updated_at DESC, node_id DESC
                 """
@@ -183,17 +197,17 @@ def list_whisper_processing_node_rows():
         connection.close()
 
 
-def insert_whisper_processing_node_row(node_url, max_concurrent_requests, created_at, updated_at):
+def insert_whisper_processing_node_row(node_name, node_url, max_concurrent_requests, created_at, updated_at):
     driver = _require_driver()
     connection = _connect(MYSQL_DATABASE)
     try:
         with connection.cursor() as cursor:
             cursor.execute(
                 """
-                INSERT INTO whisper_processing_nodes (node_url, max_concurrent_requests, created_at, updated_at)
-                VALUES (%s, %s, %s, %s)
+                INSERT INTO whisper_processing_nodes (node_name, node_url, max_concurrent_requests, created_at, updated_at)
+                VALUES (%s, %s, %s, %s, %s)
                 """,
-                (node_url, int(max_concurrent_requests), float(created_at), float(updated_at)),
+                (str(node_name or '').strip(), node_url, int(max_concurrent_requests), float(created_at), float(updated_at)),
             )
     except driver.MySQLError as error:
         raise WhisperAdminRepositoryError('Unable to create Whisper processing node') from error
@@ -201,23 +215,86 @@ def insert_whisper_processing_node_row(node_url, max_concurrent_requests, create
         connection.close()
 
 
-def list_queued_whisper_request_rows(limit=50):
+def update_whisper_processing_node_row(node_id, node_name, node_url, max_concurrent_requests, updated_at):
     driver = _require_driver()
     connection = _connect(MYSQL_DATABASE)
     try:
         with connection.cursor() as cursor:
             cursor.execute(
                 """
-                SELECT *
-                FROM server_requests
-                WHERE request_type = %s
-                  AND provider IN (%s, %s)
-                  AND status = %s
-                ORDER BY created_at ASC, request_id ASC
-                LIMIT %s
+                UPDATE whisper_processing_nodes
+                SET node_name = %s,
+                    node_url = %s,
+                    max_concurrent_requests = %s,
+                    updated_at = %s
+                WHERE node_id = %s
                 """,
-                ('transcription', *WHISPER_PROVIDER_NAMES, 'queued', int(limit)),
+                (
+                    str(node_name or '').strip(),
+                    node_url,
+                    int(max_concurrent_requests),
+                    float(updated_at),
+                    int(node_id),
+                ),
             )
+            return int(cursor.rowcount or 0) > 0
+    except driver.MySQLError as error:
+        raise WhisperAdminRepositoryError('Unable to update Whisper processing node') from error
+    finally:
+        connection.close()
+
+
+def delete_whisper_processing_node_row(node_id):
+    driver = _require_driver()
+    connection = _connect(MYSQL_DATABASE)
+    try:
+        with connection.cursor() as cursor:
+            cursor.execute(
+                """
+                DELETE FROM whisper_processing_nodes
+                WHERE node_id = %s
+                """,
+                (int(node_id),),
+            )
+            return int(cursor.rowcount or 0) > 0
+    except driver.MySQLError as error:
+        raise WhisperAdminRepositoryError('Unable to delete Whisper processing node') from error
+    finally:
+        connection.close()
+
+
+def list_queued_whisper_request_rows(limit=50, preferred_request_id=''):
+    driver = _require_driver()
+    connection = _connect(MYSQL_DATABASE)
+    try:
+        with connection.cursor() as cursor:
+            safe_preferred_request_id = str(preferred_request_id or '').strip()
+            if safe_preferred_request_id:
+                cursor.execute(
+                    """
+                    SELECT *
+                    FROM server_requests
+                    WHERE request_type = %s
+                      AND provider IN (%s, %s)
+                      AND status = %s
+                    ORDER BY CASE WHEN request_id = %s THEN 0 ELSE 1 END, created_at ASC, request_id ASC
+                    LIMIT %s
+                    """,
+                    ('transcription', *WHISPER_PROVIDER_NAMES, 'queued', safe_preferred_request_id, int(limit)),
+                )
+            else:
+                cursor.execute(
+                    """
+                    SELECT *
+                    FROM server_requests
+                    WHERE request_type = %s
+                      AND provider IN (%s, %s)
+                      AND status = %s
+                    ORDER BY created_at ASC, request_id ASC
+                    LIMIT %s
+                    """,
+                    ('transcription', *WHISPER_PROVIDER_NAMES, 'queued', int(limit)),
+                )
             return cursor.fetchall() or []
     except driver.MySQLError as error:
         raise WhisperAdminRepositoryError('Unable to list queued Whisper requests') from error

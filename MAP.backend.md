@@ -19,7 +19,7 @@
 - `server/controllers/proxy_routes.py` - Registers transcription proxy endpoints plus the OpenAI-backed subtitle translation contract and local request ownership checks.
 - `server/controllers/proxy_transcription_routes.py` - Owns the authenticated transcription proxy endpoints, charges or refunds credits around Whisper job creation, returns stable local request ids for queued or processing transcription jobs, and reads queue-aware status snapshots from the Whisper runtime service.
 - `server/controllers/vbee_routes.py` - Registers client voiceover APIs plus admin Service/Vbee token, request, segment, audio, cache-clear, delete, and config APIs.
-- `server/controllers/whisper_routes.py` - Registers admin-only Service/Whisper request-list and processing-node list or create APIs.
+- `server/controllers/whisper_routes.py` - Registers admin-only Service/Whisper request-list plus processing-node list, create, update, and delete APIs.
 
 ## server/services
 - `server/services/admin_bootstrap.py` - Creates and clears the temporary bootstrap admin credentials when no persisted admin exists.
@@ -48,7 +48,7 @@
 - `server/services/vbee_segment_store.py` - Owns grouped Vbee segment status derivation, failure-detail shaping, and pagination while delegating SQL execution to `server/repositories/vbee_segment_repository.py`.
 - `server/services/vbee_service.py` - Orchestrates Vbee voiceover creation, provider polling, webhook completion, reuse, request summary refresh, and language-aware voice selection.
 - `server/services/vbee_token_store.py` - Owns Vbee token/config normalization and response shaping while delegating SQL execution to `server/repositories/vbee_token_repository.py`.
-- `server/services/whisper_admin_store.py` - Owns Whisper admin request paging, per-request queue metadata shaping, processing-node URL and concurrency validation, schema bootstrap, and dispatch-node selection while delegating SQL execution to `server/repositories/whisper_admin_repository.py`.
+- `server/services/whisper_admin_store.py` - Owns Whisper admin request paging, per-request queue metadata shaping, processing-node name/URL/concurrency validation, node-update and delete rules, schema bootstrap, and dispatch-node selection while delegating SQL execution to `server/repositories/whisper_admin_repository.py`.
 - `server/services/whisper_runtime.py` - Owns the Whisper temp-file queue lifecycle, local request-id generation, background dispatch worker, the lock-scoped queue-claim step that assigns node capacity before dispatch, the guard that skips provider polling while a sync dispatch still has no real provider job id, in-flight dispatch status transitions used by the admin node-processing counter, provider polling, queue-aware status payload shaping, and automatic submission of saved files when node capacity frees up.
 - `server/services/whisper_runtime_status.py` - Holds Whisper runtime status constants plus the shared request-status and provider-status normalization helpers extracted from `server/services/whisper_runtime.py` to keep the dispatch orchestrator under the workspace line-count guardrail.
 
@@ -69,7 +69,7 @@
 - `server/repositories/vbee_request_repository.py` - Owns Vbee request/segment SQL for request creation, summary aggregation, paging, segment updates, and cache-clear deletes.
 - `server/repositories/vbee_segment_repository.py` - Owns grouped Vbee segment summary/detail SQL reads for admin segment surfaces.
 - `server/repositories/vbee_token_repository.py` - Owns Vbee token/config SQL, token stats reads, and active-capacity query operations.
-- `server/repositories/whisper_admin_repository.py` - Owns Whisper admin SQL for processing-node schema or CRUD with `max_concurrent_requests`, queue-position reads, named dispatch locks, and filtered Whisper request count or paging queries over `server_requests`.
+- `server/repositories/whisper_admin_repository.py` - Owns Whisper admin SQL for processing-node schema or CRUD with `node_name` plus `max_concurrent_requests`, processing-node delete statements, queue-position reads, named dispatch locks, and filtered Whisper request count or paging queries over `server_requests`.
 
 ## server/utils
 - `server/utils/auth_identity.py` - Holds shared auth-side username normalization, display-name normalization, and public-user shaping helpers reused by auth controllers.
@@ -85,9 +85,13 @@
 - `server/utils/vbee_schema.py` - Defines Vbee statuses, validators, serializers, and MySQL schema helpers.
 - `server/utils/vbee_voice_catalog.py` - Normalizes the supported voiceover language catalog and resolves matching Vbee `voice_code` values for requested languages.
 
+## server/scripts
+- `server/scripts/cleanup_whisper_queue.py` - Safely inspects `server/uploads/whisper-queue` against persisted Whisper request records, keeps only queue dirs still referenced by a live queued or processing request, and supports dry-run or `--apply` cleanup output for operators.
+
 ## root
 - `.gitignore` - Excludes generated workspace artifacts, runtime data, logs, uploads, and bind-mounted service data.
 - `.dockerignore` - Keeps Docker build context small by excluding git metadata, caches, logs, projects, and installed dependencies.
 - `.env` - Stores local Docker Compose secrets and backend runtime defaults.
-- `docker-compose.yml` - Defines the containerized backend stack, internal service wiring, and published ports for the Flask backend, MySQL, Redis, Whishper, and related runtime services.
+- `cleanup_whisper_queue.ps1` - Runs the safe Whisper queue cleanup command inside the `web` container, defaulting to dry-run mode and forwarding `-Apply` or `-Json` for Windows operators.
+- `docker-compose.yml` - Defines the containerized backend stack, internal service wiring, and published ports for the Flask backend, MySQL, Redis, two Whisper runtime nodes (`whishper` on `8000` and `whishper-2` on `8001`), the internal `translate` dependency required by the Whisper image nginx config, and related runtime services.
 - `TASK.md` - Tracks active work, validation state, and follow-up refactors for the repository.

@@ -4,19 +4,25 @@ try:
     from controllers.auth_routes import require_admin_access
     from services.whisper_admin_store import (
         WhisperAdminError,
+        WhisperAdminNotFoundError,
         WhisperAdminValidationError,
         create_whisper_processing_node,
+        delete_whisper_processing_node,
         list_whisper_processing_nodes,
         list_whisper_requests_page,
+        update_whisper_processing_node,
     )
 except ImportError:
     from .auth_routes import require_admin_access
     from ..services.whisper_admin_store import (
         WhisperAdminError,
+        WhisperAdminNotFoundError,
         WhisperAdminValidationError,
         create_whisper_processing_node,
+        delete_whisper_processing_node,
         list_whisper_processing_nodes,
         list_whisper_requests_page,
+        update_whisper_processing_node,
     )
 
 
@@ -49,6 +55,22 @@ def register_whisper_routes(app):
             if request.method == 'GET':
                 return jsonify({'nodes': list_whisper_processing_nodes()})
             return jsonify({'node': create_whisper_processing_node(request.get_json(silent=True) or {})}), 201
+        except WhisperAdminValidationError as error:
+            return jsonify({'error': str(error)}), 400
+        except WhisperAdminError:
+            return _store_error_response()
+
+    @app.route('/api/admin/services/whisper/nodes/<int:node_id>', methods=['PATCH', 'DELETE'])
+    def admin_whisper_node_detail_route(node_id):
+        _claims, auth_error = require_admin_access()
+        if auth_error:
+            return auth_error
+        try:
+            if request.method == 'DELETE':
+                return jsonify(delete_whisper_processing_node(node_id))
+            return jsonify({'node': update_whisper_processing_node(node_id, request.get_json(silent=True) or {})})
+        except WhisperAdminNotFoundError as error:
+            return jsonify({'error': str(error)}), 404
         except WhisperAdminValidationError as error:
             return jsonify({'error': str(error)}), 400
         except WhisperAdminError:

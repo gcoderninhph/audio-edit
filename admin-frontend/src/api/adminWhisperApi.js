@@ -29,6 +29,23 @@ export async function createAdminWhisperNode(payload) {
   return response.data || {}
 }
 
+export async function updateAdminWhisperNode(nodeId, payload) {
+  const response = await requestJson(`/api/admin/services/whisper/nodes/${nodeId}`, {
+    method: 'PATCH',
+    body: JSON.stringify(payload),
+  })
+  if (!response.ok) throw new Error(response.data?.error || 'Unable to update Whisper node.')
+  return response.data || {}
+}
+
+export async function deleteAdminWhisperNode(nodeId) {
+  const response = await requestJson(`/api/admin/services/whisper/nodes/${nodeId}`, {
+    method: 'DELETE',
+  })
+  if (!response.ok) throw new Error(response.data?.error || 'Unable to delete Whisper node.')
+  return response.data || {}
+}
+
 export async function updateAdminWhisperConfig(payload) {
   const response = await requestJson('/api/admin/services/whisper/config', {
     method: 'PATCH',

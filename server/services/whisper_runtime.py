@@ -263,7 +263,7 @@ def _submit_request_to_node(stored_request, node):
                 'tempFilePath': '',
             },
         )
-        _cleanup_queue_file(updated_request.get('details'))
+        _cleanup_queue_file({'tempFilePath': str(temp_file_path)})
         return updated_request
 
     if not provider_request_id:
@@ -346,9 +346,7 @@ def _run_runtime_cycle(limit=50, preferred_request_id=''):
     if not nodes:
         return []
 
-    queued_rows = list_queued_whisper_request_rows(limit=max(1, int(limit or 50)))
-    if preferred_request_id:
-        queued_rows.sort(key=lambda row: 0 if (row.get('request_id') or '') == preferred_request_id else 1)
+    queued_rows = list_queued_whisper_request_rows(limit=max(1, int(limit or 50)), preferred_request_id=preferred_request_id)
 
     queued_request_ids = [row.get('request_id') or '' for row in queued_rows if row.get('request_id')]
     queue_index = 0
