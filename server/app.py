@@ -3,27 +3,27 @@ from flask_cors import CORS
 import os
 
 try:
-    from admin_routes import register_admin_routes
-    from admin_web_routes import register_admin_web_routes
-    from auth_routes import register_auth_routes
-    from iap_payment_routes import register_iap_payment_routes
-    from openai_translation_routes import register_openai_translation_routes
-    from vbee_asset_expiry import start_vbee_asset_expiry_worker
-    from iap_routes import register_iap_routes
-    from logging_setup import configure_backend_logging
-    from proxy_routes import register_proxy_routes
-    from vbee_routes import register_vbee_routes
+    from controllers.admin_routes import register_admin_routes
+    from controllers.admin_web_routes import register_admin_web_routes
+    from controllers.auth_routes import register_auth_routes
+    from controllers.iap_payment_routes import register_iap_payment_routes
+    from controllers.openai_translation_routes import register_openai_translation_routes
+    from services.vbee_asset_expiry import start_vbee_asset_expiry_worker
+    from controllers.iap_routes import register_iap_routes
+    from utils.logging_setup import configure_backend_logging
+    from controllers.proxy_routes import register_proxy_routes
+    from controllers.vbee_routes import register_vbee_routes
 except ImportError:
-    from .admin_routes import register_admin_routes
-    from .admin_web_routes import register_admin_web_routes
-    from .auth_routes import register_auth_routes
-    from .iap_payment_routes import register_iap_payment_routes
-    from .openai_translation_routes import register_openai_translation_routes
-    from .vbee_asset_expiry import start_vbee_asset_expiry_worker
-    from .iap_routes import register_iap_routes
-    from .logging_setup import configure_backend_logging
-    from .proxy_routes import register_proxy_routes
-    from .vbee_routes import register_vbee_routes
+    from .controllers.admin_routes import register_admin_routes
+    from .controllers.admin_web_routes import register_admin_web_routes
+    from .controllers.auth_routes import register_auth_routes
+    from .controllers.iap_payment_routes import register_iap_payment_routes
+    from .controllers.openai_translation_routes import register_openai_translation_routes
+    from .services.vbee_asset_expiry import start_vbee_asset_expiry_worker
+    from .controllers.iap_routes import register_iap_routes
+    from .utils.logging_setup import configure_backend_logging
+    from .controllers.proxy_routes import register_proxy_routes
+    from .controllers.vbee_routes import register_vbee_routes
 
 SERVER_PORT = int(os.environ.get('SERVER_PORT', '5000'))
 

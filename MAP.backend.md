@@ -1,56 +1,84 @@
 # Backend Map
 
-## server
-- `server/app.py` - Flask API entrypoint with auth APIs, admin APIs, IAP APIs, OpenAI translation admin APIs, backend-owned Vbee APIs, admin web serving, and background workers.
-- `server/logging_setup.py` - Configures hourly rotating backend log files and shared Flask logging setup.
-- `server/mysql_connection.py` - Centralizes MySQL env-resolution order, PyMySQL loading, identifier quoting, and the single shared `driver.connect(...)` path reused by backend stores.
-- `server/redis_connection.py` - Centralizes Redis env-resolution order plus the shared `redis.Redis(...)` client construction used by backend cache modules.
-- `server/auth_routes.py` - Registers auth endpoints, JWT access or refresh flows, current-user reads, logout, and admin access guards.
-- `server/auth_identity.py` - Owns shared auth-side username normalization and public-user shaping helpers.
-- `server/auth_store.py` - Owns auth persistence, schema bootstrap, and shared user or balance state while re-exporting the auth-scoped MySQL settings and connection wrappers backed by `server/mysql_connection.py`.
-- `server/auth_user_record.py` - Centralizes auth-user role, lock, and premium-window normalization.
-- `server/auth_refresh_store.py` - Owns refresh-token persistence helpers split out of `auth_store.py`.
-- `server/auth_credit_store.py` - Owns the MySQL credit-history ledger and typed balance mutations.
-- `server/admin_store.py` - Owns admin-side user queries, search, summaries, and role or premium or lock mutations.
-- `server/admin_bootstrap.py` - Creates and clears the temporary bootstrap admin credentials when no persisted admin exists.
-- `server/admin_routes.py` - Registers admin-only backend APIs for bootstrap, user management, credit history, and recent requests.
-- `server/iap_store.py` - Owns MySQL-backed IAP package persistence and schema creation.
-- `server/iap_api_key_store.py` - Owns MySQL-backed payment-hook API key persistence and inbound validation settings.
-- `server/iap_admin_store.py` - Owns admin-only IAP configuration persistence for pack functions and sale rules.
-- `server/iap_cache.py` - Owns the public IAP package cache keys and TTL behavior while reusing the shared Redis helper for env precedence and cached client construction.
-- `server/iap_routes.py` - Registers public IAP catalog reads plus admin IAP package, API key, history, function, and sale APIs.
-- `server/iap_beneficiary_store.py` - Owns MySQL-backed beneficiary account persistence for Sepay QR payment receivers.
-- `server/iap_payment_store.py` - Owns MySQL-backed QR payment tickets, refund pending records, entitlement application, and cancellation logic.
-- `server/iap_payment_records.py` - Holds shared payment ticket or refund row mappers and pagination helpers.
-- `server/iap_payment_routes.py` - Registers desktop payment ticket APIs, QR-image proxying, admin payment APIs, and payment expiry worker startup.
-- `server/iap_payment_expiry.py` - Starts the worker that expires pending payment tickets every minute.
-- `server/iap_bank_hook_history_store.py` - Owns MySQL-backed bank-hook history persistence, filtering, pagination, and detail lookup.
-- `server/admin_web_routes.py` - Serves the built standalone admin frontend and nested `/admin/...` SPA routes.
-- `server/proxy_routes.py` - Registers transcription proxy endpoints plus the OpenAI-backed subtitle translation contract and local request ownership checks.
-- `server/proxy_transcription_routes.py` - Owns the authenticated transcription proxy endpoints and downstream Whishper integration.
-- `server/proxy_credit_helpers.py` - Centralizes shared credit charge or refund helpers for proxy-backed routes.
-- `server/proxy_route_helpers.py` - Owns shared proxy-route helpers for provider shaping and request persistence.
-- `server/openai_translation_record_utils.py` - Holds the OpenAI store's token/config/request-row serialization and request-detail scrubbing helpers so `openai_translation_store.py` stays under the 400-line guardrail.
-- `server/openai_translation_store.py` - Owns OpenAI subtitle token/config CRUD, admin request-list queries for the new Service/OpenAI surface, uses the shared MySQL connection helper, and sanitizes legacy OpenAI request records so hidden fields like saved system prompts are removed from returned detail payloads.
-- `server/openai_translation_client.py` - Owns the low-level OpenAI request-building, prompt assembly, usage extraction, and SRT-response normalization helpers split out of the service module.
-- `server/openai_translation_service.py` - Runs asynchronous OpenAI subtitle translation jobs, persists job state, powers synchronous admin `.srt` test translations, records those admin test runs in the shared OpenAI request history, and delegates OpenAI request/response shaping to `openai_translation_client.py` while storing the concrete user prompt plus input/output/total token usage in request snapshots without persisting the configured system prompt.
-- `server/openai_translation_routes.py` - Registers admin-only Service/OpenAI token, request, config, and one-off test-translation upload APIs.
-- `server/vbee_schema.py` - Defines Vbee statuses, validators, serializers, and MySQL schema helpers.
-- `server/vbee_token_store.py` - Owns MySQL-backed Vbee token and provider config CRUD, including the persisted `enabledLanguageCodes` list that controls which narration languages desktop clients may generate.
-- `server/vbee_request_store.py` - Owns MySQL-backed Vbee request or segment persistence, queue lookups, refresh helpers, and cache-clear deletion paths.
-- `server/vbee_audio_cache_store.py` - Owns the MySQL-backed reusable Vbee asset registry keyed by segment cache key.
-- `server/vbee_segment_store.py` - Groups historical Vbee request segments by cache hash for admin segment list and detail reads, now anchoring summary fields to the latest usage row and deriving structured failure-detail payloads for failed segment inspection.
-- `server/vbee_store.py` - Thin compatibility re-export for the split Vbee schema, token/config, request/segment, and grouped segment modules.
-- `server/vbee_cache.py` - Owns Vbee request and audio cache keys plus TTL behavior while reusing the shared Redis helper for env precedence and cached client construction.
-- `server/vbee_asset_service.py` - Orchestrates the Cloudflare R2-backed Vbee asset lifecycle, reuse expiry, and delete helpers.
-- `server/vbee_asset_expiry.py` - Starts the daemon worker that expires old Vbee segment assets.
-- `server/vbee_service.py` - Orchestrates Vbee voiceover creation, provider polling, webhook completion, reuse, request summary refresh, language-aware Vbee voice selection when the desktop requests narration in different languages, and rejects client requests for languages disabled in Vbee config.
-- `server/vbee_voice_catalog.py` - Normalizes the supported 30-language voiceover codes, exposes the derived supported-language metadata plus enabled-language normalization helpers, resolves a matching Vbee `voice_code` from the provider's public voice catalog for a requested language, and includes the provider's required `voiceOwnership=VBEE` filter plus readable validation details when lookup fails.
-- `server/vbee_routes.py` - Registers client voiceover APIs plus admin Service/Vbee token, request, segment, audio, cache-clear, delete, and config APIs, including the public desktop `voiceover/config` payload used to gate narration buttons by enabled language and language-aware desktop voiceover start payloads.
-- `server/request_store.py` - Owns persistence for server-managed transcription, translation, and voiceover request records while reusing the shared MySQL connection helper with request-scoped env precedence.
-- `server/translation_fallback.py` - Retains the local subtitle translation helpers plus shared SRT parsing utilities used by translation job flows.
+## server root
+- `server/app.py` - Flask entrypoint that wires controller modules, shared logging, health checks, and background workers through the new role-based package layout.
+- `server/controllers/__init__.py` - Marks the controller package that owns HTTP route registration modules.
+- `server/services/__init__.py` - Marks the service package that owns business workflows, store orchestration, caches, and workers.
+- `server/repositories/__init__.py` - Marks the repository package that owns SQL and low-level persistence access.
+- `server/utils/__init__.py` - Marks the utility package that owns shared helpers reused across controllers, services, and repositories.
 - `server/requirements.txt` - Lists Python runtime dependencies for the subtitle-service backend.
 - `server/Dockerfile` - Builds the backend runtime image and serves Flask on port `5000`.
+
+## server/controllers
+- `server/controllers/admin_routes.py` - Registers admin-only backend APIs for bootstrap, user management, credit history, and recent requests.
+- `server/controllers/admin_web_routes.py` - Serves the built standalone admin frontend from the workspace-level `admin-frontend/dist`, redirects `/` into the admin SPA, and handles nested `/admin/...` routes.
+- `server/controllers/auth_routes.py` - Registers auth endpoints, JWT access or refresh flows, current-user reads, logout, and admin access guards.
+- `server/controllers/iap_payment_routes.py` - Registers desktop payment ticket APIs, QR-image proxying, admin payment APIs, and payment expiry worker startup.
+- `server/controllers/iap_routes.py` - Registers public IAP catalog reads plus admin IAP package, API key, history, function, and sale APIs.
+- `server/controllers/openai_translation_routes.py` - Registers admin-only Service/OpenAI token, request, config, and one-off test-translation upload APIs.
+- `server/controllers/proxy_routes.py` - Registers transcription proxy endpoints plus the OpenAI-backed subtitle translation contract and local request ownership checks.
+- `server/controllers/proxy_transcription_routes.py` - Owns the authenticated transcription proxy endpoints and downstream Whishper integration.
+- `server/controllers/vbee_routes.py` - Registers client voiceover APIs plus admin Service/Vbee token, request, segment, audio, cache-clear, delete, and config APIs.
+
+## server/services
+- `server/services/admin_bootstrap.py` - Creates and clears the temporary bootstrap admin credentials when no persisted admin exists.
+- `server/services/admin_store.py` - Owns admin-user business rules and validation while delegating SQL execution to `server/repositories/admin_user_repository.py` and shared pagination helpers.
+- `server/services/auth_credit_store.py` - Owns auth credit business rules while delegating SQL execution to `server/repositories/auth_credit_repository.py` and shared pagination helpers.
+- `server/services/auth_refresh_store.py` - Owns refresh-token business logic, schema guards, and auth-facing error mapping while delegating SQL execution to `server/repositories/auth_refresh_repository.py`.
+- `server/services/auth_store.py` - Owns auth-user normalization, premium or lock state shaping, duplicate-user handling, and compatibility exports while delegating auth-user SQL execution to `server/repositories/auth_user_repository.py`.
+- `server/services/iap_admin_store.py` - Owns admin-only IAP pack-function and sale validation/rule logic while delegating SQL execution to `server/repositories/iap_admin_repository.py`.
+- `server/services/iap_api_key_store.py` - Owns payment-hook API key business validation and inbound header-match logic while delegating SQL execution to `server/repositories/iap_api_key_repository.py`.
+- `server/services/iap_bank_hook_history_store.py` - Owns bank-hook history payload normalization, date/filter shaping, and paginated response shaping while delegating SQL execution to `server/repositories/iap_bank_hook_history_repository.py`.
+- `server/services/iap_beneficiary_store.py` - Owns beneficiary-account validation and current-account business rules while delegating SQL execution to `server/repositories/iap_beneficiary_repository.py`.
+- `server/services/iap_cache.py` - Owns the public IAP package cache keys and TTL behavior while reusing the shared Redis helper package.
+- `server/services/iap_payment_expiry.py` - Starts the worker that expires pending payment tickets every minute.
+- `server/services/iap_payment_store.py` - Owns QR payment entitlement and matching logic while delegating SQL execution to `server/repositories/iap_payment_repository.py` and helper row mappers.
+- `server/services/iap_store.py` - Owns IAP package business validation, payload normalization, and auth-facing error mapping while delegating SQL execution to `server/repositories/iap_package_repository.py`.
+- `server/services/openai_translation_client.py` - Owns the low-level OpenAI request-building, prompt assembly, usage extraction, and SRT-response normalization helpers used by the OpenAI translation service flow.
+- `server/services/openai_translation_service.py` - Runs asynchronous OpenAI subtitle translation jobs, synchronous admin `.srt` tests, and request-history persistence.
+- `server/services/openai_translation_store.py` - Owns OpenAI token/config/request validation and detail sanitization flow while delegating SQL execution to `server/repositories/openai_translation_repository.py` and shared pagination helpers.
+- `server/services/request_store.py` - Owns request-record serialization, legacy-file migration orchestration, and request-facing error mapping while delegating SQL execution to `server/repositories/request_repository.py` and shared pagination helpers.
+- `server/services/translation_fallback.py` - Retains the local subtitle translation helpers plus shared SRT parsing utilities used by translation job flows.
+- `server/services/vbee_asset_expiry.py` - Starts the daemon worker that expires old Vbee segment assets.
+- `server/services/vbee_asset_service.py` - Orchestrates the Cloudflare R2-backed Vbee asset lifecycle, reuse expiry, and delete helpers.
+- `server/services/vbee_audio_cache_store.py` - Owns Vbee audio-cache payload shaping and post-clear refresh orchestration while delegating SQL execution to `server/repositories/vbee_audio_cache_repository.py`.
+- `server/services/vbee_cache.py` - Owns Vbee request and audio cache keys plus TTL behavior while reusing the shared Redis helper package.
+- `server/services/vbee_request_store.py` - Owns Vbee request/segment business orchestration, status aggregation logic, and pagination while delegating SQL execution to `server/repositories/vbee_request_repository.py`.
+- `server/services/vbee_segment_store.py` - Owns grouped Vbee segment status derivation, failure-detail shaping, and pagination while delegating SQL execution to `server/repositories/vbee_segment_repository.py`.
+- `server/services/vbee_service.py` - Orchestrates Vbee voiceover creation, provider polling, webhook completion, reuse, request summary refresh, and language-aware voice selection.
+- `server/services/vbee_token_store.py` - Owns Vbee token/config normalization and response shaping while delegating SQL execution to `server/repositories/vbee_token_repository.py`.
+
+## server/repositories
+- `server/repositories/admin_user_repository.py` - Owns admin-user SQL reads and writes for counts, list paging, summaries, and role/premium/lock updates.
+- `server/repositories/auth_credit_repository.py` - Owns auth credit-history SQL and low-level balance mutation queries.
+- `server/repositories/auth_refresh_repository.py` - Owns the auth refresh-token SQL and low-level cursor work.
+- `server/repositories/auth_user_repository.py` - Owns auth-user schema SQL, legacy-user migration inserts, and low-level user read/create queries.
+- `server/repositories/iap_admin_repository.py` - Owns admin IAP pack-function and sale SQL for schema, list/detail, create, update, and delete operations.
+- `server/repositories/iap_api_key_repository.py` - Owns payment-hook API key SQL and low-level cursor work for schema, list, create, delete, method filtering, and usage touch updates.
+- `server/repositories/iap_bank_hook_history_repository.py` - Owns bank-hook history SQL and low-level cursor work for schema, detail lookup, inserts, and paged list/count queries.
+- `server/repositories/iap_beneficiary_repository.py` - Owns beneficiary-account SQL and low-level cursor work for schema, list/detail, current-flag updates, create/update/delete, and fallback current-account selection.
+- `server/repositories/iap_package_repository.py` - Owns IAP package SQL and low-level cursor work for package schema, list, create, update, and delete operations.
+- `server/repositories/iap_payment_repository.py` - Owns IAP payment-ticket/refund SQL for schema, ticket lifecycle mutations, refund inserts, premium updates, and paged record reads.
+- `server/repositories/openai_translation_repository.py` - Owns OpenAI translation schema SQL plus token/config/request-row CRUD and paging queries.
+- `server/repositories/request_repository.py` - Owns request-storage schema SQL plus translation-job and server-request CRUD/paging queries.
+- `server/repositories/vbee_audio_cache_repository.py` - Owns Vbee reusable-audio-cache SQL and segment-audio clear queries.
+- `server/repositories/vbee_request_repository.py` - Owns Vbee request/segment SQL for request creation, summary aggregation, paging, segment updates, and cache-clear deletes.
+- `server/repositories/vbee_segment_repository.py` - Owns grouped Vbee segment summary/detail SQL reads for admin segment surfaces.
+- `server/repositories/vbee_token_repository.py` - Owns Vbee token/config SQL, token stats reads, and active-capacity query operations.
+
+## server/utils
+- `server/utils/auth_identity.py` - Holds shared auth-side username normalization, display-name normalization, and public-user shaping helpers reused by auth controllers.
+- `server/utils/auth_user_record.py` - Centralizes auth-user role, lock, and premium-window normalization.
+- `server/utils/iap_payment_records.py` - Holds payment ticket/refund row mappers plus IAP record pagination helpers.
+- `server/utils/logging_setup.py` - Configures hourly rotating backend log files and shared Flask logging setup.
+- `server/utils/mysql_connection.py` - Centralizes MySQL env-resolution order, PyMySQL loading, identifier quoting, and the shared `driver.connect(...)` path reused by repositories and services.
+- `server/utils/openai_translation_record_utils.py` - Holds the OpenAI token/config/request-row serialization and request-detail scrubbing helpers.
+- `server/utils/pagination.py` - Centralizes page/page-size normalization and pagination payload construction reused across multiple backend services.
+- `server/utils/proxy_credit_helpers.py` - Centralizes shared credit charge/refund helpers for proxy-backed routes.
+- `server/utils/proxy_route_helpers.py` - Owns shared proxy-route helpers for provider shaping, persisted request handling, and response shaping.
+- `server/utils/redis_connection.py` - Centralizes Redis env-resolution order plus the shared `redis.Redis(...)` client construction used by backend cache modules.
+- `server/utils/vbee_schema.py` - Defines Vbee statuses, validators, serializers, and MySQL schema helpers.
+- `server/utils/vbee_voice_catalog.py` - Normalizes the supported voiceover language catalog and resolves matching Vbee `voice_code` values for requested languages.
 
 ## root
 - `.gitignore` - Excludes generated workspace artifacts, runtime data, logs, uploads, and bind-mounted service data.
