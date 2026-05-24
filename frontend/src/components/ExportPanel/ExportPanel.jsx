@@ -1,7 +1,13 @@
+import { useState } from 'react';
 import DeveloperLocator from '../DeveloperLocator/DeveloperLocator';
 import {
   getExportQualityProfileById,
 } from '../../utils/exportQualityProfile';
+import {
+  DEFAULT_EXPORT_FRAME_RATE,
+  EXPORT_FRAME_RATE_OPTIONS,
+  normalizeExportFrameRate,
+} from '../../utils/exportFrameRate';
 import {
   getExportDirectoryLabel,
   getExportFileNameLabel,
@@ -45,6 +51,7 @@ export default function ExportPanel({
   onExport,
 }) {
   const { t } = useI18n();
+  const [selectedFrameRate, setSelectedFrameRate] = useState(DEFAULT_EXPORT_FRAME_RATE);
   const hasScenes = scenes && scenes.length > 0;
   const hasDeletedScenes = deletedSceneIds && deletedSceneIds.size > 0;
   const canExport = keptScenes.length > 0 || duration > 0;
@@ -52,6 +59,7 @@ export default function ExportPanel({
   const exportSavedFilePath = exportResult?.savedFilePath || '';
   const exportSize = exportResult?.size || 0;
   const activeExportQualityProfile = getExportQualityProfileById(exportConfig?.qualityProfileId);
+  const activeFrameRate = normalizeExportFrameRate(selectedFrameRate);
   const getProfileLabel = (profile) => (profile?.labelKey ? t(profile.labelKey) : profile?.label);
   const getProfileHelper = (profile) => (profile?.helperKey ? t(profile.helperKey) : profile?.helper);
   const phaseLabels = {
@@ -67,7 +75,7 @@ export default function ExportPanel({
   };
 
   const handleExport = () => {
-    if (canExport) onExport();
+    if (canExport) onExport({ frameRate: activeFrameRate });
   };
 
   const handleDownload = () => {
@@ -109,6 +117,23 @@ export default function ExportPanel({
           </div>
         </div>
         <div className="export-actions">
+          <div className="export-fps-control dev-locator-host">
+            <DeveloperLocator code="panel.export.fps" title="Export FPS Control" />
+            <label className="export-fps-label" htmlFor="panel-export-fps-select">
+              {t('panel.export.frameRate')}
+            </label>
+            <select
+              id="panel-export-fps-select"
+              className="export-fps-select"
+              value={activeFrameRate}
+              onChange={(event) => setSelectedFrameRate(normalizeExportFrameRate(event.target.value))}
+              disabled={isExporting}
+            >
+              {EXPORT_FRAME_RATE_OPTIONS.map((option) => (
+                <option key={option.value} value={option.value}>{option.label}</option>
+              ))}
+            </select>
+          </div>
           <div className="export-quality-control dev-locator-host">
             <DeveloperLocator code="panel.export.quality" title="Export Quality Control" />
             <div className="export-quality-summary">
@@ -141,6 +166,7 @@ export default function ExportPanel({
           fileName: getExportFileNameLabel(exportConfig?.fileName),
           folder: getExportDirectoryLabel(exportConfig?.outputDirectory),
         })}
+        {` • ${t('panel.export.frameRateSummary', { fps: activeFrameRate })}`}
       </div>
 
       <div className="export-target-helper">

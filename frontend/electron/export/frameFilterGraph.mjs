@@ -144,7 +144,7 @@ export function buildFastFeatureFrameFilter(framePreset, frameBackground, overla
   const nativeFrameRate = formatFrameRate(frameRate)
   const fadePreset = getVideoFadePresetById(frameBackground?.presetId)
   const sourceLabel = 'src'
-  const filterChain = [`[${sourceVideoLabel}]setpts=N/(${nativeFrameRate}*TB)[${sourceLabel}]`]
+  const filterChain = [`[${sourceVideoLabel}]fps=${nativeFrameRate},setpts=N/(${nativeFrameRate}*TB)[${sourceLabel}]`]
 
   if (isNativeVideoFadeBackground(frameBackground)) {
     const fastBlur = getFastVideoFadeBlurPlan(framePreset, fadePreset)

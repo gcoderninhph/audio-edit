@@ -6,6 +6,8 @@ import { buildSceneMotionSegments } from './sceneMotion'
 import { DEFAULT_SUBTITLE_SETTINGS, normalizeSubtitleSettings } from './subtitleRenderModel'
 import { DEFAULT_SUBTITLE_LANGUAGE_KEY, getSubtitlesForLanguage, normalizeActiveSubtitleLanguage } from './subtitleTracks'
 
+const TARGET_EXPORT_FRAME_RATE = 60
+
 function getRuntimeBenchmarkConfig() {
   try {
     return window.desktopBridge?.getRuntimeConfig?.()?.exportBenchmark || null
@@ -123,6 +125,9 @@ function buildBenchmarkFailures({ elapsedMs, effectSummary, maxElapsedMs, result
   }
   if ((effectSummary.hasVideoAudio || effectSummary.hasVoiceoverAudio) && diagnostics.audioRenderEnabled !== true) {
     failures.push('Configured export audio mix was not rendered by native export.')
+  }
+  if (Math.round(Number(diagnostics.frameRate) || 0) !== TARGET_EXPORT_FRAME_RATE) {
+    failures.push(`Expected ${TARGET_EXPORT_FRAME_RATE}fps native export, got ${diagnostics.frameRate || 'unknown'}fps.`)
   }
 
   return failures

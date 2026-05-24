@@ -12,6 +12,7 @@ import {
 } from './exportAudioMix';
 import { saveExportBytesToFile } from './exportOutputTarget';
 import { getExportQualityProfileById, getFallbackVideoEncodingSettings } from './exportQualityProfile';
+import { normalizeExportFrameRate } from './exportFrameRate';
 import { materializeVoiceoverFile, renderExportAudioTrack } from './exportAudioStage';
 import { recordFallbackFrameComposition } from './fallbackFrameRecorder';
 import { buildMergedSceneTrack } from './ffmpegSceneMerge';
@@ -180,6 +181,7 @@ export async function exportVideo(inputFile, keptScenes, subtitles, exportOption
   const frameSettings = exportOptions?.frameSettings || exportOptions;
   const hideWatermark = Boolean(exportOptions?.hideWatermark ?? frameSettings?.hideWatermark);
   const normalizedFrameBackground = sanitizeFrameBackground(frameSettings?.backgroundColor);
+  const exportFrameRate = normalizeExportFrameRate(exportOptions?.frameRate ?? frameSettings?.frameRate);
   const normalizedAudioMix = normalizeExportAudioMix(exportOptions?.audioMix, exportOptions?.voiceoverTrack);
   const exportQualityProfile = getExportQualityProfileById(exportOptions?.exportQualityProfileId);
   const timelineDurationSeconds = getExportTimelineDurationSeconds(keptScenes);
@@ -197,6 +199,7 @@ export async function exportVideo(inputFile, keptScenes, subtitles, exportOption
         ...frameSettings,
         backgroundColor: normalizedFrameBackground,
         hideWatermark,
+        frameRate: exportFrameRate,
       },
       exportQualityProfileId: exportQualityProfile.id,
       outputTarget: exportOptions?.outputTarget || null,
@@ -298,6 +301,7 @@ export async function exportVideo(inputFile, keptScenes, subtitles, exportOption
       ffmpeg,
       framePreset,
       frameBackground: normalizedFrameBackground,
+      frameRate: exportFrameRate,
       hideWatermark,
       keptScenes,
       onProgress,

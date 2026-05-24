@@ -92,6 +92,35 @@
   white-space: nowrap;
 }
 
+.export-fps-control {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 10px;
+  border-radius: var(--radius-md);
+  border: 1px solid var(--border-color);
+  background: var(--bg-secondary);
+}
+
+.export-fps-label {
+  font-size: 0.72rem;
+  font-weight: 700;
+  color: var(--text-secondary);
+  white-space: nowrap;
+}
+
+.export-fps-select {
+  height: 30px;
+  min-width: 88px;
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-md);
+  background: var(--bg-card);
+  color: var(--text-primary);
+  font-size: 0.8rem;
+  font-weight: 700;
+  padding: 0 8px;
+}
+
 .export-btn {
   padding: 12px 28px;
   font-size: 0.9rem;

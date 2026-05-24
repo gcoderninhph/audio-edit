@@ -10,13 +10,12 @@ import {
   getFramePresetById,
   getFrameSummary,
   sanitizeFrameBackground,
-  serializeFrameBackground,
 } from '../utils/frameComposer'
 import {
   DEFAULT_EXPORT_QUALITY_PROFILE_ID,
   normalizeExportQualityProfileId,
-  serializeExportQualityProfileId,
 } from '../utils/exportQualityProfile'
+import { DEFAULT_EXPORT_FRAME_RATE, normalizeExportFrameRate } from '../utils/exportFrameRate'
 import {
   buildDefaultExportFileName,
   chooseExportOutputDirectory,
@@ -27,76 +26,17 @@ import {
 import {
   DEFAULT_SUBTITLE_SETTINGS,
   normalizeSubtitleSettings,
-  serializeSubtitleSettings,
 } from '../utils/subtitleRenderModel'
-import { serializeSceneMotionConfig } from '../utils/sceneMotion'
-
-function buildExportSignature(keptScenes, exportSubtitles, framePresetId, frameBackground, subtitleSettings, exportQualityProfileId, exportFileName, exportOutputDirectory) {
-  const sceneSignature = keptScenes.map((scene) => `${scene.id}:${scene.start}-${scene.end}:${serializeSceneMotionConfig(scene.motion)}`).join('|')
-  const subtitleSignature = exportSubtitles
-    .map((subtitle) => `${subtitle.id}:${subtitle.start}-${subtitle.end}:${subtitle.text}`)
-    .join('|')
-
-  return `${framePresetId}::${serializeFrameBackground(frameBackground)}::${serializeSubtitleSettings(subtitleSettings)}::${serializeExportQualityProfileId(exportQualityProfileId)}::${getExportFileNameLabel(exportFileName)}::${exportOutputDirectory || ''}::${sceneSignature}::${subtitleSignature}`
-}
-
-function clampVolume(value, fallback = 1) {
-  const normalizedValue = Number.isFinite(value) ? value : fallback
-  return Math.max(0, Math.min(1, normalizedValue))
-}
-
-function normalizeStoredAudioMix(audioMix = {}) {
-  return {
-    videoVolume: clampVolume(Number(audioMix?.videoVolume), 1),
-    voiceoverVolume: clampVolume(Number(audioMix?.voiceoverVolume), 1),
-    customizedAudioTrackKey: String(audioMix?.customizedAudioTrackKey || ''),
-  }
-}
-
-function getAudioTrackKey(voiceoverTrack) {
-  return voiceoverTrack?.storedFileName || voiceoverTrack?.fileName || voiceoverTrack?.previewUrl || ''
-}
-
-function getSourceVideoName(videoSource) {
-  return videoSource?.name || videoSource?.fileName || 'video.mp4'
-}
-
-function createInitialExportProgress() {
-  return {
-    phase: '',
-    percent: 0,
-    stagePercent: 0,
-    detail: '',
-    logs: [],
-    elapsedMs: 0,
-    ffmpegTimeMicroseconds: 0,
-    sceneCount: 0,
-    subtitleCount: 0,
-    startedAt: null,
-  }
-}
-
-function mergeExportProgress(previous, update) {
-  const nextLogs = update.logEntry
-    ? [...previous.logs, update.logEntry].slice(-120)
-    : previous.logs
-
-  return {
-    ...previous,
-    ...Object.fromEntries(Object.entries(update).filter(([, value]) => value !== undefined)),
-    logs: nextLogs,
-    elapsedMs: previous.startedAt ? Date.now() - previous.startedAt : previous.elapsedMs,
-  }
-}
-
-function createFullVideoScene(videoDuration) {
-  return {
-    id: '__full-video__',
-    start: 0,
-    end: videoDuration,
-    duration: videoDuration,
-  }
-}
+import {
+  buildExportSignature,
+  clampVolume,
+  createFullVideoScene,
+  createInitialExportProgress,
+  getAudioTrackKey,
+  getSourceVideoName,
+  mergeExportProgress,
+  normalizeStoredAudioMix,
+} from './frameExportModel'
 
 export function useFrameExport({ videoFile, keptScenes, filteredSubtitles, videoDuration = 0, voiceoverTrack }) {
   const [framePresetId, setFramePresetIdState] = useState(DEFAULT_FRAME_PRESET_ID)
@@ -147,7 +87,7 @@ export function useFrameExport({ videoFile, keptScenes, filteredSubtitles, video
     : 1
   const resolvedExportOutputDirectory = exportOutputDirectory || defaultExportOutputDirectory
   const exportSignature = useMemo(
-    () => `${buildExportSignature(effectiveKeptScenes, exportSubtitles, framePresetId, frameBackground, subtitleSettings, exportQualityProfileId, exportFileName, resolvedExportOutputDirectory)}::${currentAudioTrackKey}:${effectiveVideoVolume}:${effectiveVoiceoverVolume}`,
+    () => `${buildExportSignature(effectiveKeptScenes, exportSubtitles, framePresetId, frameBackground, subtitleSettings, exportQualityProfileId, exportFileName, resolvedExportOutputDirectory, DEFAULT_EXPORT_FRAME_RATE)}::${currentAudioTrackKey}:${effectiveVideoVolume}:${effectiveVoiceoverVolume}`,
     [currentAudioTrackKey, effectiveKeptScenes, effectiveVideoVolume, effectiveVoiceoverVolume, exportFileName, exportQualityProfileId, exportSubtitles, frameBackground, framePresetId, resolvedExportOutputDirectory, subtitleSettings],
   )
   const hasFreshExport = Boolean(exportUrl || exportSavedFilePath) && lastExportSignature === exportSignature
@@ -293,12 +233,14 @@ export function useFrameExport({ videoFile, keptScenes, filteredSubtitles, video
     }
 
     const hideWatermark = Boolean(exportOptions?.hideWatermark)
+    const exportFrameRate = normalizeExportFrameRate(exportOptions?.frameRate)
 
     const startedAt = Date.now()
     void logExportDebug('Export requested from UI', {
       exportFileName: getExportFileNameLabel(exportFileName),
       exportOutputDirectory: resolvedExportOutputDirectory || null,
       exportQualityProfileId,
+      exportFrameRate,
       frameBackground: describeFrameBackground(frameBackground),
       framePresetId,
       hideWatermark,
@@ -347,6 +289,7 @@ export function useFrameExport({ videoFile, keptScenes, filteredSubtitles, video
             presetId: framePresetId,
             backgroundColor: frameBackground,
             hideWatermark,
+            frameRate: exportFrameRate,
           },
           subtitleSettings,
           audioMix: {

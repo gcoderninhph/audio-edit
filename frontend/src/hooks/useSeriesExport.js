@@ -2,6 +2,7 @@ import { useCallback, useState } from 'react';
 import { exportSeriesEpisodes } from '../utils/seriesExportPipeline';
 import { chooseExportOutputDirectory, getDefaultExportDirectory } from '../utils/exportOutputTarget';
 import { DEFAULT_EXPORT_QUALITY_PROFILE_ID, normalizeExportQualityProfileId } from '../utils/exportQualityProfile';
+import { DEFAULT_EXPORT_FRAME_RATE, normalizeExportFrameRate } from '../utils/exportFrameRate';
 import { normalizeEpisodeNumber } from '../components/ProjectDashboard/projectDashboardModel';
 
 function createInitialProgress() {
@@ -35,6 +36,7 @@ function mergeProgress(current, update) {
 
 export default function useSeriesExport(seriesName = 'series', { hideWatermark = false } = {}) {
   const [qualityProfileId, setQualityProfileId] = useState(DEFAULT_EXPORT_QUALITY_PROFILE_ID);
+  const [frameRate, setFrameRateState] = useState(DEFAULT_EXPORT_FRAME_RATE);
   const [outputDirectory, setOutputDirectory] = useState('');
   const [outputFileName, setOutputFileName] = useState(() => {
     const safe = String(seriesName || 'series').replace(/[^a-zA-Z0-9_\- ]/g, '').trim().replace(/\s+/g, '_') || 'series';
@@ -56,6 +58,10 @@ export default function useSeriesExport(seriesName = 'series', { hideWatermark =
     }
   }, []);
 
+  const setFrameRate = useCallback((nextFrameRate) => {
+    setFrameRateState(normalizeExportFrameRate(nextFrameRate));
+  }, []);
+
   const ensureOutputDirectory = useCallback(async () => {
     if (outputDirectory) return outputDirectory;
     const defaultDir = await getDefaultExportDirectory();
@@ -73,6 +79,7 @@ export default function useSeriesExport(seriesName = 'series', { hideWatermark =
 
     const resolvedDirectory = await ensureOutputDirectory();
     const resolvedProfileId = normalizeExportQualityProfileId(qualityProfileId);
+    const resolvedFrameRate = normalizeExportFrameRate(frameRate);
 
     setIsExporting(true);
     setExportResult(null);
@@ -84,7 +91,7 @@ export default function useSeriesExport(seriesName = 'series', { hideWatermark =
       logs: [{
         phase: 'episode',
         level: 'info',
-        message: `Series export started — ${sorted.length} episodes, quality: ${resolvedProfileId}`,
+        message: `Series export started — ${sorted.length} episodes, quality: ${resolvedProfileId}, fps: ${resolvedFrameRate}`,
         timestamp: Date.now(),
       }],
     });
@@ -94,6 +101,7 @@ export default function useSeriesExport(seriesName = 'series', { hideWatermark =
         sorted,
         {
           hideWatermark,
+          frameRate: resolvedFrameRate,
           qualityProfileId: resolvedProfileId,
           outputDirectory: resolvedDirectory,
           outputFileName,
@@ -112,11 +120,13 @@ export default function useSeriesExport(seriesName = 'series', { hideWatermark =
     } finally {
       setIsExporting(false);
     }
-  }, [hideWatermark, isExporting, ensureOutputDirectory, qualityProfileId, outputFileName]);
+  }, [hideWatermark, isExporting, ensureOutputDirectory, qualityProfileId, frameRate, outputFileName]);
 
   return {
     qualityProfileId,
     setQualityProfileId,
+    frameRate,
+    setFrameRate,
     outputDirectory,
     outputFileName,
     setOutputFileName,

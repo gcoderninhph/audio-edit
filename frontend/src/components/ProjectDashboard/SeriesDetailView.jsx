@@ -106,6 +106,8 @@ export default function SeriesDetailView({
               series={series}
               qualityProfileId={seriesExport.qualityProfileId}
               onQualityProfileChange={seriesExport.setQualityProfileId}
+              frameRate={seriesExport.frameRate}
+              onFrameRateChange={seriesExport.setFrameRate}
               outputFileName={seriesExport.outputFileName}
               onOutputFileNameChange={seriesExport.setOutputFileName}
               outputDirectory={seriesExport.outputDirectory}

@@ -153,6 +153,7 @@ export async function exportSeriesEpisodes(sortedEpisodes, exportConfig, onProgr
       {
         exportQualityProfileId: exportConfig.qualityProfileId,
         frameSettings: episodeData.frameSettings,
+        frameRate: exportConfig.frameRate,
         subtitleSettings: episodeData.subtitleSettings,
         audioMix: episodeData.audioMix,
         hideWatermark: Boolean(exportConfig?.hideWatermark),

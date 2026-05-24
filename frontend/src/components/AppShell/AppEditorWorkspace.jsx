@@ -312,7 +312,7 @@ export default function AppEditorWorkspace({
                 frameBackgroundLabel={editor.frameBackgroundLabel}
                 exportConfig={editor.exportConfig}
                 onOpenExportConfig={onOpenExportConfig}
-                onExport={() => editor.startExport({ hideWatermark })}
+                onExport={(exportOptions) => editor.startExport({ ...exportOptions, hideWatermark })}
               />
             </div>
           </div>

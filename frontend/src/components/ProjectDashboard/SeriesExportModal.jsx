@@ -2,6 +2,7 @@ import { createPortal } from 'react-dom';
 import DeveloperLocator from '../DeveloperLocator/DeveloperLocator';
 import { useI18n } from '../../i18n/useI18n';
 import { EXPORT_QUALITY_PROFILE_OPTIONS, getExportQualityProfileById } from '../../utils/exportQualityProfile';
+import { EXPORT_FRAME_RATE_OPTIONS, normalizeExportFrameRate } from '../../utils/exportFrameRate';
 import { getExportDirectoryLabel, getExportFileNameLabel } from '../../utils/exportOutputTarget';
 
 function formatFileSize(bytes) {
@@ -14,6 +15,8 @@ export default function SeriesExportModal({
   series,
   qualityProfileId,
   onQualityProfileChange,
+  frameRate,
+  onFrameRateChange,
   outputFileName,
   onOutputFileNameChange,
   outputDirectory,
@@ -27,6 +30,7 @@ export default function SeriesExportModal({
   const { t } = useI18n();
   const episodeCount = series?.projects?.length || 0;
   const activeProfile = getExportQualityProfileById(qualityProfileId);
+  const activeFrameRate = normalizeExportFrameRate(frameRate);
   const canExport = episodeCount > 0 && !isExporting;
 
   const phaseLabels = {
@@ -106,6 +110,22 @@ export default function SeriesExportModal({
                   </select>
                 </div>
 
+                <div className="series-export-config-row dev-locator-host">
+                  <DeveloperLocator code={`dashboard.series.${series?.id}.export.modal.fps`} title="Series Export FPS Control" />
+                  <label className="series-export-label">
+                    {t('dashboard.exportSeriesModal.frameRate')}
+                  </label>
+                  <select
+                    className="series-export-select"
+                    value={activeFrameRate}
+                    onChange={(e) => onFrameRateChange(normalizeExportFrameRate(e.target.value))}
+                  >
+                    {EXPORT_FRAME_RATE_OPTIONS.map((option) => (
+                      <option key={option.value} value={option.value}>{option.label}</option>
+                    ))}
+                  </select>
+                </div>
+
                 <div className="series-export-config-row">
                   <label className="series-export-label">
                     {t('dashboard.exportSeriesModal.outputFileName')}
@@ -140,6 +160,7 @@ export default function SeriesExportModal({
                     fileName: getExportFileNameLabel(outputFileName || 'series_output'),
                     folder: getExportDirectoryLabel(outputDirectory),
                   })}
+                  &nbsp;• {t('panel.export.frameRateSummary', { fps: activeFrameRate })}
                 </div>
               </div>
             )}

@@ -1,4 +1,5 @@
 import { drawFrameComposition, loadFrameBackgroundImage } from './frameCanvasRenderer'
+import { normalizeExportFrameRate } from './exportFrameRate'
 import { getSceneMotionAtTimelineTime } from './sceneMotion'
 import { DEFAULT_SUBTITLE_FONT_FAMILY, DEFAULT_SUBTITLE_SETTINGS } from './subtitleRenderModel'
 
@@ -49,6 +50,7 @@ export async function renderFrameCompositionVideo({
   onProgress,
   onLog,
   fontFamily = DEFAULT_SUBTITLE_FONT_FAMILY,
+  frameRate = 60,
   recordingVideoBitsPerSecond = 10_000_000,
   sceneMotionSegments = [],
   subtitleSettings = DEFAULT_SUBTITLE_SETTINGS,
@@ -58,6 +60,7 @@ export async function renderFrameCompositionVideo({
   const canvasElement = document.createElement('canvas')
   const canvasContext = canvasElement.getContext('2d', { alpha: false })
   const backgroundImage = await loadFrameBackgroundImage(frameBackground)
+  const exportFrameRate = normalizeExportFrameRate(frameRate)
 
   if (!canvasContext) {
     throw new Error('Unable to initialize the canvas renderer for export.')
@@ -72,7 +75,7 @@ export async function renderFrameCompositionVideo({
   videoElement.preload = 'auto'
   videoElement.crossOrigin = 'anonymous'
 
-  const stream = canvasElement.captureStream(0)
+  const stream = canvasElement.captureStream(exportFrameRate)
   const streamTrack = stream.getVideoTracks()[0]
   const recorderMimeType = getRecorderMimeType()
   const resolvedVideoBitsPerSecond = Math.max(1, Number(recordingVideoBitsPerSecond) || 10_000_000)
@@ -110,7 +113,7 @@ export async function renderFrameCompositionVideo({
     }
   })
 
-  let frameCallbackHandle = null
+  let isPumpingFrames = true
   const paintCurrentFrame = () => {
     drawFrameComposition(canvasContext, {
       framePreset,
@@ -136,26 +139,23 @@ export async function renderFrameCompositionVideo({
     })
   }
 
-  if ('requestVideoFrameCallback' in videoElement) {
-    const pumpFrames = () => {
-      paintCurrentFrame()
-      if (videoElement.ended) {
-        return
-      }
-      frameCallbackHandle = videoElement.requestVideoFrameCallback(() => pumpFrames())
+  const pumpFrames = () => {
+    if (!isPumpingFrames) {
+      return
     }
-
-    frameCallbackHandle = videoElement.requestVideoFrameCallback(() => pumpFrames())
+    paintCurrentFrame()
+    if (videoElement.ended) {
+      return
+    }
+    window.requestAnimationFrame(pumpFrames)
   }
 
   recorder.start(250)
-  onLog?.('Start record-frame compositor from preview renderer')
+  onLog?.(`Start record-frame compositor from preview renderer at ${exportFrameRate}fps`)
   await videoElement.play()
+  window.requestAnimationFrame(pumpFrames)
   await waitForEvent(videoElement, 'ended')
-
-  if (typeof videoElement.cancelVideoFrameCallback === 'function' && frameCallbackHandle !== null) {
-    videoElement.cancelVideoFrameCallback(frameCallbackHandle)
-  }
+  isPumpingFrames = false
 
   paintCurrentFrame()
   recorder.stop()

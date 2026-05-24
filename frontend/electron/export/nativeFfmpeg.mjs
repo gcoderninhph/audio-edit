@@ -18,7 +18,7 @@ const HARDWARE_ENCODERS = [
   },
 ]
 
-export const DEFAULT_NATIVE_FRAME_RATE = 30
+export const DEFAULT_NATIVE_FRAME_RATE = 60
 
 let cachedEncoderPlanPromise = null
 

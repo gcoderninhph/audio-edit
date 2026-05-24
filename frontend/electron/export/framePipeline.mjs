@@ -3,7 +3,7 @@ import path from 'node:path'
 import { buildSceneSplitFrameChunks } from './frameCudaTurboPath.mjs'
 import { buildFrameSceneMotionSegments } from './frameMotionFilter.mjs'
 import { buildFrameChunks, getTimelineDurationSeconds, runFrameChunksWithRetry } from './frameChunkRunner.mjs'
-import { getFrameChunkPlan, getFrameWorkerPlan, getNativeEncodePlan, readNativeVideoMetadata, runNativeFfmpeg } from './nativeFfmpeg.mjs'
+import { DEFAULT_NATIVE_FRAME_RATE, getFrameChunkPlan, getFrameWorkerPlan, getNativeEncodePlan, normalizeNativeFrameRate, readNativeVideoMetadata, runNativeFfmpeg } from './nativeFfmpeg.mjs'
 
 function escapeConcatPath(filePath) {
   return filePath.replace(/\\/g, '/').replace(/'/g, String.raw`'\\''`)
@@ -73,6 +73,7 @@ export async function frameSourceTimelineVideo({
   keptScenes,
   framePreset,
   frameBackground,
+  frameRate = DEFAULT_NATIVE_FRAME_RATE,
   hideWatermark = false,
   overlayAssets,
 }) {
@@ -85,7 +86,8 @@ export async function frameSourceTimelineVideo({
   })
   const sceneMotionSegments = buildFrameSceneMotionSegments(keptScenes)
   const nativeVideoMetadata = await readNativeVideoMetadata(inputPath)
-  const nativeFrameRate = nativeVideoMetadata.frameRate
+  const sourceFrameRate = nativeVideoMetadata.frameRate
+  const nativeFrameRate = normalizeNativeFrameRate(frameRate)
   const useFastFeatureFramePath = shouldUseFastFeatureFramePath({ encoderPlan, frameBackground })
   const chunks = useFastFeatureFramePath
     ? buildSceneSplitFrameChunks(keptScenes, nativeFrameRate, 10)
@@ -114,6 +116,7 @@ export async function frameSourceTimelineVideo({
     },
     frameWorkerPlan: workerPlan,
     frameRate: nativeFrameRate,
+    sourceFrameRate,
     frameAlignedChunks: true,
     fastFeatureFramePath: useFastFeatureFramePath,
     fastFeatureMotionCount: sceneMotionSegments.length,
@@ -174,6 +177,7 @@ export async function frameSourceTimelineVideo({
       fastFeatureFramePath: useFastFeatureFramePath,
       frameBackgroundKind: typeof frameBackground === 'object' ? frameBackground.kind || 'custom' : 'color',
       frameRate: nativeFrameRate,
+      sourceFrameRate,
       sourceHeight: nativeVideoMetadata.height,
       sourceWidth: nativeVideoMetadata.width,
       hideWatermark,

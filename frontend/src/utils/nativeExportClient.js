@@ -1,4 +1,5 @@
 import { logExportDebug } from './desktopLogger'
+import { normalizeExportFrameRate } from './exportFrameRate'
 import { describeFrameBackground, getFramePresetById, sanitizeFrameBackground } from './frameComposer'
 import { buildDesktopExportSourceDescriptor } from './projectStorage'
 import { buildSubtitleOverlayAssets } from './subtitleOverlayAssets'
@@ -57,6 +58,7 @@ export async function runNativeExport({ inputFile, keptScenes, subtitles, frameS
 
   const framePreset = getFramePresetById(frameSettings?.presetId)
   const frameBackground = sanitizeFrameBackground(frameSettings?.backgroundColor)
+  const frameRate = normalizeExportFrameRate(frameSettings?.frameRate)
   const hideWatermark = Boolean(frameSettings?.hideWatermark)
   const source = await buildDesktopExportSourceDescriptor(inputFile)
   const subtitleOverlay = await buildSubtitleOverlayAssets(subtitles, framePreset, undefined, subtitleSettings)
@@ -78,6 +80,7 @@ export async function runNativeExport({ inputFile, keptScenes, subtitles, frameS
     frameBackground: describeFrameBackground(frameBackground),
     framePresetId: framePreset.id,
     framePresetSize: { width: framePreset.width, height: framePreset.height },
+    frameRate,
     hideWatermark,
     hasVoiceoverTrack: Boolean(voiceover),
     jobId,
@@ -112,6 +115,7 @@ export async function runNativeExport({ inputFile, keptScenes, subtitles, frameS
         height: framePreset.height,
         backgroundColor: frameBackground,
         hideWatermark,
+        frameRate,
       },
       exportQualityProfileId: exportQualityProfileId || null,
       outputTarget: outputTarget || null,

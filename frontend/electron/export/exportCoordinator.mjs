@@ -24,13 +24,14 @@ import {
   writeFrameBackgroundAsset,
   writeOverlayAssets,
 } from './nativeExportJobHelpers.mjs'
-import { getNativeEncodePlan, runNativeFfmpeg } from './nativeFfmpeg.mjs'
+import { getNativeEncodePlan, normalizeNativeFrameRate, runNativeFfmpeg } from './nativeFfmpeg.mjs'
 
 export async function runNativeExportJob(sender, payload = {}) {
   const jobId = payload.jobId || `native-export-${Date.now()}`
   const jobDirectory = buildJobDirectory(jobId)
   const framePreset = resolveFramePreset(payload.frameSettings)
   const frameBackground = sanitizeFrameBackground(payload.frameSettings?.backgroundColor)
+  const frameRate = normalizeNativeFrameRate(payload.frameSettings?.frameRate)
   const hideWatermark = Boolean(payload.frameSettings?.hideWatermark)
   const exportQualityProfileId = payload.exportQualityProfileId || null
   const returnBytes = Boolean(payload.returnBytes)
@@ -91,6 +92,7 @@ export async function runNativeExportJob(sender, payload = {}) {
         height: framePreset.height,
         requestedPresetId: payload.frameSettings?.presetId || null,
       },
+      frameRate,
       inputPath,
       overlayCount: overlayAssets.length,
       outputPath: outputTarget.filePath,
@@ -142,6 +144,7 @@ export async function runNativeExportJob(sender, payload = {}) {
       keptScenes,
       framePreset,
       frameBackground: nativeFrameBackground,
+      frameRate,
       hideWatermark,
       overlayAssets,
       emitLog,
