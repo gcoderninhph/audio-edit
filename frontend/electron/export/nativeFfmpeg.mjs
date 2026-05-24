@@ -1,5 +1,7 @@
 import { spawn } from 'node:child_process'
+import { existsSync } from 'node:fs'
 import os from 'node:os'
+import path from 'node:path'
 import ffmpegPath from 'ffmpeg-static'
 import { buildNativeEncoderOutputArgs } from '../../src/utils/exportQualityProfile.js'
 
@@ -117,12 +119,34 @@ function attachLineReader(stream, onLine) {
   })
 }
 
+function getUnpackedAsarPath(filePath = '') {
+  const normalizedPath = String(filePath || '')
+  if (!normalizedPath.includes('app.asar')) {
+    return ''
+  }
+
+  return normalizedPath.replace(/app\.asar([\\/])/i, 'app.asar.unpacked$1')
+}
+
 export function getNativeFfmpegPath() {
   if (!ffmpegPath) {
     throw createExportError('Bundled FFmpeg binary is not available in this desktop build.', 'NATIVE_EXPORT_UNAVAILABLE')
   }
 
-  return ffmpegPath
+  const candidatePaths = [
+    getUnpackedAsarPath(ffmpegPath),
+    process.resourcesPath
+      ? path.join(process.resourcesPath, 'app.asar.unpacked', 'node_modules', 'ffmpeg-static', path.basename(ffmpegPath))
+      : '',
+    ffmpegPath,
+  ].filter(Boolean)
+
+  const executablePath = candidatePaths.find((candidate) => existsSync(candidate))
+  if (!executablePath) {
+    throw createExportError('Bundled FFmpeg binary is not available in this desktop build.', 'NATIVE_EXPORT_UNAVAILABLE')
+  }
+
+  return executablePath
 }
 
 export function getSceneWorkerPlan({ sceneCount = 0, totalDurationSeconds = 0 } = {}) {

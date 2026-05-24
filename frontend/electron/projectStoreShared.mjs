@@ -13,8 +13,8 @@ function getWorkspaceProjectsRoot() {
   return path.resolve(app.getAppPath(), '..', PROJECTS_DIR_NAME)
 }
 
-function getUserDataProjectsRoot() {
-  return path.join(app.getPath('userData'), PROJECTS_DIR_NAME)
+function getPackagedExecutableProjectsRoot() {
+  return path.join(path.dirname(app.getPath('exe')), PROJECTS_DIR_NAME)
 }
 
 function normalizeRoot(rootPath) {
@@ -31,13 +31,13 @@ export function getProjectsRoot() {
     return getWorkspaceProjectsRoot()
   }
 
-  return getUserDataProjectsRoot()
+  return getPackagedExecutableProjectsRoot()
 }
 
 export function getProjectsRootCandidates(preferredRoot = getProjectsRoot()) {
   const candidateRoots = []
 
-  for (const candidateRoot of [preferredRoot, getUserDataProjectsRoot()]) {
+  for (const candidateRoot of [preferredRoot]) {
     const normalizedRoot = normalizeRoot(candidateRoot)
     if (!candidateRoots.includes(normalizedRoot)) {
       candidateRoots.push(normalizedRoot)
