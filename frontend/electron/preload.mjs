@@ -5,6 +5,14 @@ const serverUrl = 'https://audio-test.accstore.pro.vn'
 const runtimeConfig = Object.freeze({
   isDesktop: true,
   isDeveloper: process.env.ELECTRON_IS_DEVELOPER === '1',
+  exportBenchmark: process.env.ELECTRON_EXPORT_BENCHMARK_PROJECT_ID
+    ? Object.freeze({
+      enabled: true,
+      maxElapsedMs: Number(process.env.ELECTRON_EXPORT_BENCHMARK_MAX_MS) || 15000,
+      outputDirectory: process.env.ELECTRON_EXPORT_BENCHMARK_OUTPUT_DIR || '',
+      projectId: process.env.ELECTRON_EXPORT_BENCHMARK_PROJECT_ID,
+    })
+    : null,
   serverUrl,
 })
 
@@ -14,6 +22,9 @@ contextBridge.exposeInMainWorld('desktopBridge', {
     write: (entry) => ipcRenderer.invoke('debug-log:write', entry),
     getPath: () => ipcRenderer.invoke('debug-log:path'),
     tail: (maxLines) => ipcRenderer.invoke('debug-log:tail', maxLines),
+  },
+  exportBenchmark: {
+    complete: (payload) => ipcRenderer.invoke('export-benchmark:complete', payload),
   },
   nativeExport: {
     run: (payload) => ipcRenderer.invoke('native-export:run', payload),

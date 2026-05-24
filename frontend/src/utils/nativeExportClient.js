@@ -115,6 +115,7 @@ export async function runNativeExport({ inputFile, keptScenes, subtitles, frameS
       },
       exportQualityProfileId: exportQualityProfileId || null,
       outputTarget: outputTarget || null,
+      returnBytes: !outputTarget,
       audioMix: audioMix || null,
       subtitleOverlay,
       voiceover,
@@ -129,6 +130,7 @@ export async function runNativeExport({ inputFile, keptScenes, subtitles, frameS
 
       return {
         backend: result?.backend || 'native-fast',
+        diagnostics: result?.diagnostics || null,
         savedFileName: result.fileName || getFileNameFromPath(result.filePath),
         savedFilePath: result.filePath,
         size: result.size || 0,
@@ -147,6 +149,7 @@ export async function runNativeExport({ inputFile, keptScenes, subtitles, frameS
     return {
       backend: result?.backend || 'native-fast',
       blob,
+      diagnostics: result?.diagnostics || null,
       url,
       size: blob.size,
     }

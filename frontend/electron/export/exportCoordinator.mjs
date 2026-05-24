@@ -1,4 +1,4 @@
-import { mkdir, stat } from 'node:fs/promises'
+import { mkdir, readFile, stat } from 'node:fs/promises'
 import path from 'node:path'
 import {
   buildFinalMuxArgs,
@@ -26,14 +26,17 @@ import {
 } from './nativeExportJobHelpers.mjs'
 import { getNativeEncodePlan, runNativeFfmpeg } from './nativeFfmpeg.mjs'
 
-async function runNativeExportJob(sender, payload = {}) {
+export async function runNativeExportJob(sender, payload = {}) {
   const jobId = payload.jobId || `native-export-${Date.now()}`
   const jobDirectory = buildJobDirectory(jobId)
   const framePreset = resolveFramePreset(payload.frameSettings)
   const frameBackground = sanitizeFrameBackground(payload.frameSettings?.backgroundColor)
   const hideWatermark = Boolean(payload.frameSettings?.hideWatermark)
   const exportQualityProfileId = payload.exportQualityProfileId || null
-  const outputTarget = resolveExportOutputTarget(payload.outputTarget, payload.source?.fileName || 'output.mp4')
+  const returnBytes = Boolean(payload.returnBytes)
+  const outputTarget = returnBytes
+    ? { directory: jobDirectory, fileName: 'ep-output.mp4', filePath: path.join(jobDirectory, 'ep-output.mp4') }
+    : resolveExportOutputTarget(payload.outputTarget, payload.source?.fileName || 'output.mp4')
   const keptScenes = Array.isArray(payload.keptScenes)
     ? payload.keptScenes
       .map((scene) => ({
@@ -161,7 +164,7 @@ async function runNativeExportJob(sender, payload = {}) {
       })
       : null
 
-    const [{ outputPath, encoderPlan: resolvedEncoderPlan }, mixedAudioFromHybrid = null] = await Promise.all([
+    const [{ outputPath, encoderPlan: resolvedEncoderPlan, diagnostics: frameDiagnostics = {} }, mixedAudioFromHybrid = null] = await Promise.all([
       frameRenderPromise,
       audioRenderPromise,
     ])
@@ -212,19 +215,42 @@ async function runNativeExportJob(sender, payload = {}) {
     })
 
     const outputStats = await stat(finalOutputPath)
+    const diagnostics = {
+      ...frameDiagnostics,
+      audioRenderEnabled: needsAudioRender,
+      audioRenderParallel: runHybridAudioStage,
+      hasVideoAudio: wantsVideoAudio,
+      hasVoiceoverAudio: wantsVoiceoverAudio,
+      keptSceneCount: keptScenes.length,
+      returnBytes,
+      timelineDurationSeconds,
+    }
     emitLog(sender, jobId, 'done', `Native export completed (${formatMegabytes(outputStats.size)})`, 'info', {
       percent: 100,
       stagePercent: 100,
       detail: `Saved native export to ${outputTarget.fileName}`,
     }, {
+      diagnostics,
       encoder: resolvedEncoderPlan.label,
       outputPath: finalOutputPath,
     })
+
+    if (returnBytes) {
+      const bytes = await readFile(finalOutputPath)
+      return {
+        backend: 'native-fast',
+        bytes,
+        diagnostics,
+        mimeType: 'video/mp4',
+        size: outputStats.size,
+      }
+    }
 
     return {
       backend: 'native-fast',
       fileName: outputTarget.fileName,
       filePath: finalOutputPath,
+      diagnostics,
       mimeType: 'video/mp4',
       size: outputStats.size,
     }

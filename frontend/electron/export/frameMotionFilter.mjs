@@ -4,8 +4,8 @@ function formatFilterNumber(value, digits = 6) {
   return Number(value || 0).toFixed(digits).replace(/\.0+$/, '').replace(/(\.\d*?)0+$/, '$1')
 }
 
-function buildSegmentCondition(segment) {
-  return `gte(t,${formatFilterNumber(segment.start)})*lt(t,${formatFilterNumber(segment.end)})`
+function buildSegmentCondition(segment, timeExpression = 't') {
+  return `gte(${timeExpression},${formatFilterNumber(segment.start)})*lt(${timeExpression},${formatFilterNumber(segment.end)})`
 }
 
 function buildNearestEvenExpression(expression) {
@@ -16,21 +16,21 @@ function buildPixelExpression(expression) {
   return `round(${expression})`
 }
 
-function buildConditionalExpression(segments, valueBuilder, fallbackExpression) {
+function buildConditionalExpression(segments, valueBuilder, fallbackExpression, timeExpression = 't') {
   return segments.reduceRight((expression, segment) => (
-    `if(${buildSegmentCondition(segment)},${valueBuilder(segment)},${expression})`
+    `if(${buildSegmentCondition(segment, timeExpression)},${valueBuilder(segment)},${expression})`
   ), fallbackExpression)
 }
 
-function buildProgressExpression(segment) {
+function buildProgressExpression(segment, timeExpression = 't') {
   const start = formatFilterNumber(segment.start)
   const duration = formatFilterNumber(Math.max(0.001, segment.duration))
   const offset = formatFilterNumber(segment.progressOffset || 0)
-  return `min(max(((t-${start})+${offset})/${duration},0),1)`
+  return `min(max(((${timeExpression}-${start})+${offset})/${duration},0),1)`
 }
 
-function buildMotionAmountExpression(segment) {
-  const progressExpression = buildProgressExpression(segment)
+function buildMotionAmountExpression(segment, timeExpression = 't') {
+  const progressExpression = buildProgressExpression(segment, timeExpression)
 
   if (segment.mode === SCENE_MOTION_MODES.ZOOM_IN) {
     return '1'
@@ -47,24 +47,26 @@ function buildMotionAmountExpression(segment) {
   return '0'
 }
 
-function buildZoomExpression(segments) {
+function buildZoomExpression(segments, timeExpression = 't') {
   return buildConditionalExpression(
     segments,
-    (segment) => `1+(${formatFilterNumber(segment.zoomScale - 1)})*(${buildMotionAmountExpression(segment)})`,
+    (segment) => `1+(${formatFilterNumber(segment.zoomScale - 1)})*(${buildMotionAmountExpression(segment, timeExpression)})`,
     '1',
+    timeExpression,
   )
 }
 
-function buildFocusExpression(segments, axis) {
+function buildFocusExpression(segments, axis, timeExpression = 't') {
   return buildConditionalExpression(
     segments,
-    (segment) => `0.5+(${formatFilterNumber(segment[axis] - 0.5)})*(${buildMotionAmountExpression(segment)})`,
+    (segment) => `0.5+(${formatFilterNumber(segment[axis] - 0.5)})*(${buildMotionAmountExpression(segment, timeExpression)})`,
     '0.5',
+    timeExpression,
   )
 }
 
-function buildSingleSegmentMotionExpressions(segment) {
-  const amountExpression = buildMotionAmountExpression(segment)
+function buildSingleSegmentMotionExpressions(segment, timeExpression = 't') {
+  const amountExpression = buildMotionAmountExpression(segment, timeExpression)
   const zoomExpression = `1+(${formatFilterNumber(segment.zoomScale - 1)})*(${amountExpression})`
 
   return {
@@ -72,6 +74,59 @@ function buildSingleSegmentMotionExpressions(segment) {
     focusXExpression: `0.5+(${formatFilterNumber(segment.focusX - 0.5)})*(${amountExpression})`,
     focusYExpression: `0.5+(${formatFilterNumber(segment.focusY - 0.5)})*(${amountExpression})`,
   }
+}
+
+function getForegroundFitSize(framePreset, sourceSize) {
+  const sourceWidth = Math.max(0, Number(sourceSize?.width) || 0)
+  const sourceHeight = Math.max(0, Number(sourceSize?.height) || 0)
+  if (sourceWidth <= 0 || sourceHeight <= 0) {
+    return null
+  }
+
+  const scale = Math.min(framePreset.width / sourceWidth, framePreset.height / sourceHeight)
+  return {
+    width: Math.max(2, Math.round((sourceWidth * scale) / 2) * 2),
+    height: Math.max(2, Math.round((sourceHeight * scale) / 2) * 2),
+  }
+}
+
+function getZoompanSupersampleSize(fitSize) {
+  const maxDimension = Math.max(Number(fitSize?.width) || 0, Number(fitSize?.height) || 0)
+  const multiplier = maxDimension > 0 && maxDimension <= 1080 ? 3 : 1
+  return {
+    width: fitSize.width * multiplier,
+    height: fitSize.height * multiplier,
+    multiplier,
+  }
+}
+
+function buildNativeForegroundZoompanScale({ inputLabel, outputLabel, framePreset, motionSegments, sourceSize, frameRate }) {
+  const fitSize = getForegroundFitSize(framePreset, sourceSize)
+  if (!fitSize) {
+    return ''
+  }
+
+  const supersampleSize = getZoompanSupersampleSize(fitSize)
+  const zoomInputLabel = supersampleSize.multiplier > 1 ? `${outputLabel}_zoom_src` : inputLabel
+  const zoompanFrameRate = Math.max(1, Number(frameRate) || 30)
+  const timeExpression = `(on/${formatFilterNumber(zoompanFrameRate, 6)})`
+  const zoomExpression = buildZoomExpression(motionSegments, timeExpression)
+  const focusXExpression = buildFocusExpression(motionSegments, 'focusX', timeExpression)
+  const focusYExpression = buildFocusExpression(motionSegments, 'focusY', timeExpression)
+  const cropWidthExpression = `iw/(${zoomExpression})`
+  const cropHeightExpression = `ih/(${zoomExpression})`
+  const xExpression = `min(max(iw*(${focusXExpression})-(${cropWidthExpression})/2,0),iw-(${cropWidthExpression}))`
+  const yExpression = `min(max(ih*(${focusYExpression})-(${cropHeightExpression})/2,0),ih-(${cropHeightExpression}))`
+
+  const zoompanFilter = `[${zoomInputLabel}]zoompan=z='${zoomExpression}':x='${xExpression}':y='${yExpression}':d=1:s=${fitSize.width}x${fitSize.height}:fps=${formatFilterNumber(zoompanFrameRate, 3)},setsar=1[${outputLabel}]`
+  if (supersampleSize.multiplier <= 1) {
+    return zoompanFilter
+  }
+
+  return [
+    `[${inputLabel}]scale=${supersampleSize.width}:${supersampleSize.height}:flags=fast_bilinear,setsar=1[${zoomInputLabel}]`,
+    zoompanFilter,
+  ].join(';')
 }
 
 export function buildFrameSceneMotionSegments(keptScenes) {
@@ -107,9 +162,9 @@ export function hasSceneMotionSegments(motionSegments) {
   return Array.isArray(motionSegments) && motionSegments.length > 0
 }
 
-export function buildNativeForegroundScale({ inputLabel, outputLabel, framePreset, motionSegments }) {
+export function buildNativeForegroundScale({ inputLabel, outputLabel, framePreset, motionSegments, scaleFlags = 'bicubic+accurate_rnd+full_chroma_int' }) {
   if (!hasSceneMotionSegments(motionSegments)) {
-    return `[${inputLabel}]scale=w=${framePreset.width}:h=${framePreset.height}:force_original_aspect_ratio=decrease,setsar=1[${outputLabel}]`
+    return `[${inputLabel}]scale=w=${framePreset.width}:h=${framePreset.height}:force_original_aspect_ratio=decrease:flags=${scaleFlags},setsar=1[${outputLabel}]`
   }
 
   const baseSourceLabel = `${outputLabel}_base_src`
@@ -129,26 +184,19 @@ export function buildNativeForegroundScale({ inputLabel, outputLabel, framePrese
 
   return [
     `[${inputLabel}]split=2[${baseSourceLabel}][${zoomSourceLabel}]`,
-    `[${baseSourceLabel}]scale=w=${framePreset.width}:h=${framePreset.height}:force_original_aspect_ratio=decrease:flags=bicubic+accurate_rnd+full_chroma_int,setsar=1,format=yuv444p[${boxLabel}]`,
-    `[${zoomSourceLabel}]scale=w='${zoomWidthExpression}':h=-2:eval=frame:flags=bicubic+accurate_rnd+full_chroma_int,setsar=1,format=yuv444p[${zoomLabel}]`,
+    `[${baseSourceLabel}]scale=w=${framePreset.width}:h=${framePreset.height}:force_original_aspect_ratio=decrease:flags=${scaleFlags},setsar=1,format=yuv444p[${boxLabel}]`,
+    `[${zoomSourceLabel}]scale=w='${zoomWidthExpression}':h=-2:eval=frame:flags=${scaleFlags},setsar=1,format=yuv444p[${zoomLabel}]`,
     `[${boxLabel}][${zoomLabel}]overlay=x='${xExpression}':y='${yExpression}':shortest=1:eof_action=pass:eval=frame[${outputLabel}]`,
   ].join(';')
 }
 
-export function buildNativeForegroundCropZoomScale({ inputLabel, outputLabel, framePreset, motionSegments }) {
+export function buildNativeForegroundCropZoomScale({ inputLabel, outputLabel, framePreset, motionSegments, sourceSize = null, frameRate = 30 }) {
   if (!hasSceneMotionSegments(motionSegments)) {
-    return buildNativeForegroundScale({ inputLabel, outputLabel, framePreset, motionSegments })
+    return buildNativeForegroundScale({ inputLabel, outputLabel, framePreset, motionSegments, scaleFlags: 'fast_bilinear' })
   }
 
-  const zoomExpression = buildZoomExpression(motionSegments)
-  const focusXExpression = buildFocusExpression(motionSegments, 'focusX')
-  const focusYExpression = buildFocusExpression(motionSegments, 'focusY')
-  const cropWidthExpression = `2*floor((iw/(${zoomExpression}))/2)`
-  const cropHeightExpression = `2*floor((ih/(${zoomExpression}))/2)`
-  const xExpression = `min(max((iw-out_w)*(${focusXExpression}),0),iw-out_w)`
-  const yExpression = `min(max((ih-out_h)*(${focusYExpression}),0),ih-out_h)`
-
-  return `[${inputLabel}]crop=w='${cropWidthExpression}':h='${cropHeightExpression}':x='${xExpression}':y='${yExpression}',scale=w=${framePreset.width}:h=${framePreset.height}:force_original_aspect_ratio=decrease:flags=fast_bilinear,setsar=1[${outputLabel}]`
+  return buildNativeForegroundZoompanScale({ inputLabel, outputLabel, framePreset, motionSegments, sourceSize, frameRate })
+    || buildNativeForegroundScale({ inputLabel, outputLabel, framePreset, motionSegments, scaleFlags: 'fast_bilinear' })
 }
 
 export function buildNativeForegroundOverlay({ backgroundLabel, foregroundLabel, outputLabel, motionSegments }) {

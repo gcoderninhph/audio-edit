@@ -33,7 +33,7 @@ function mergeProgress(current, update) {
   };
 }
 
-export default function useSeriesExport(seriesName = 'series') {
+export default function useSeriesExport(seriesName = 'series', { hideWatermark = false } = {}) {
   const [qualityProfileId, setQualityProfileId] = useState(DEFAULT_EXPORT_QUALITY_PROFILE_ID);
   const [outputDirectory, setOutputDirectory] = useState('');
   const [outputFileName, setOutputFileName] = useState(() => {
@@ -93,6 +93,7 @@ export default function useSeriesExport(seriesName = 'series') {
       const result = await exportSeriesEpisodes(
         sorted,
         {
+          hideWatermark,
           qualityProfileId: resolvedProfileId,
           outputDirectory: resolvedDirectory,
           outputFileName,
@@ -111,7 +112,7 @@ export default function useSeriesExport(seriesName = 'series') {
     } finally {
       setIsExporting(false);
     }
-  }, [isExporting, ensureOutputDirectory, qualityProfileId, outputFileName]);
+  }, [hideWatermark, isExporting, ensureOutputDirectory, qualityProfileId, outputFileName]);
 
   return {
     qualityProfileId,

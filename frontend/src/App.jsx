@@ -1,4 +1,5 @@
-import { useCallback, useState, useEffect, useMemo } from 'react';
+import { useCallback, useState, useEffect, useMemo, useRef } from 'react';
+import { createPortal } from 'react-dom';
 import './App.css';
 import { useVideoEditor } from './hooks/useVideoEditor';
 import { useAuthSession } from './hooks/useAuthSession';
@@ -11,12 +12,14 @@ import PremiumPackagesDialog from './components/AppShell/PremiumPackagesDialog';
 import AdminBootstrapSetup from './components/Admin/AdminBootstrapSetup';
 import AdminConsole from './components/Admin/AdminConsole';
 import ProjectDashboard from './components/ProjectDashboard/ProjectDashboard';
+import DeveloperLocator from './components/DeveloperLocator/DeveloperLocator';
 import { useI18n } from './i18n/useI18n';
 
 function App() {
   const { t } = useI18n();
   const editor = useVideoEditor();
   const auth = useAuthSession();
+  const detectionOverlayShownAtRef = useRef(0);
   const [activeRightTab, setActiveRightTab] = useState('scenes');
   const [activePlayerSidebarSection, setActivePlayerSidebarSection] = useState(null);
   const [selectedSceneConfigId, setSelectedSceneConfigId] = useState(null);
@@ -31,7 +34,9 @@ function App() {
   const [isCreditDialogOpen, setIsCreditDialogOpen] = useState(false);
   const [premiumDialogSourceCode, setPremiumDialogSourceCode] = useState('header.dashboard');
   const [isPremiumDialogOpen, setIsPremiumDialogOpen] = useState(false);
+  const [isDetectionOverlayLatched, setIsDetectionOverlayLatched] = useState(false);
   const { redo, setCurrentTime, undo, videoRef } = editor;
+  const isDetectionOverlayVisible = editor.isDetecting || isDetectionOverlayLatched;
   const hasVideo = !!editor.videoUrl;
   const hasActiveBackgroundTask = Boolean(
     editor.isUploading
@@ -66,6 +71,38 @@ function App() {
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
   }, [redo, undo]);
+
+  useEffect(() => {
+    if (editor.isDetecting) {
+      detectionOverlayShownAtRef.current = Date.now();
+      const timeoutId = window.setTimeout(() => {
+        setIsDetectionOverlayLatched(true);
+      }, 0);
+      return () => window.clearTimeout(timeoutId);
+    }
+
+    const visibleFor = Date.now() - detectionOverlayShownAtRef.current;
+    const remainingVisibleMs = Math.max(0, 320 - visibleFor);
+    const timeoutId = window.setTimeout(() => {
+      setIsDetectionOverlayLatched(false);
+    }, remainingVisibleMs);
+
+    return () => window.clearTimeout(timeoutId);
+  }, [editor.isDetecting]);
+
+  useEffect(() => {
+    if (!isDetectionOverlayVisible) {
+      return undefined;
+    }
+
+    const blockKeyDown = (event) => {
+      event.preventDefault();
+      event.stopPropagation();
+    };
+
+    window.addEventListener('keydown', blockKeyDown, true);
+    return () => window.removeEventListener('keydown', blockKeyDown, true);
+  }, [isDetectionOverlayVisible]);
 
   const handleTogglePlayerSidebarSection = useCallback((section) => {
     setActivePlayerSidebarSection((currentSection) => (currentSection === section ? null : section));
@@ -313,6 +350,7 @@ function App() {
         />
         <main className="app-main">
           <ProjectDashboard
+            auth={auth}
             onOpenProject={handleOpenProject}
             onNewProject={handleNewProject}
             onSeriesContextChange={setDashboardSeriesContext}
@@ -368,6 +406,20 @@ function App() {
         selectedSceneConfig={selectedSceneConfig}
         selectedSceneConfigIndex={selectedSceneConfigIndex}
       />
+      {isDetectionOverlayVisible && typeof document !== 'undefined' && createPortal(
+        <div className="export-modal-layer processing-lock-modal dev-locator-host" style={{ zIndex: 180 }} role="dialog" aria-modal="true" aria-label="Scene detection in progress">
+          <DeveloperLocator code="panel.scene-list.detecting.modal" title="Scene Detection Blocking Modal" />
+          <div className="processing-lock-dialog">
+            <div className="detecting-spinner" />
+            <div className="processing-lock-title">Analyzing video...</div>
+            <div className="processing-lock-progress-bar">
+              <div className="processing-lock-progress-fill" style={{ width: `${editor.detectProgress}%` }} />
+            </div>
+            <div className="processing-lock-progress-text">{editor.detectProgress}%</div>
+          </div>
+        </div>,
+        document.body,
+      )}
       {authDialog}
       {creditDialog}
       {premiumDialog}

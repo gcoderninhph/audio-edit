@@ -138,27 +138,27 @@ export function buildFrameFilter(framePreset, frameBackground, overlayAssets, mo
   }
 }
 
-export function buildFastFeatureFrameFilter(framePreset, frameBackground, overlayAssets, motionSegments, { frameRate = DEFAULT_NATIVE_FRAME_RATE, timeOffset = 0, duration = 0, hideWatermark = false, sourceVideoLabel = '0:v', mediaInputOffset = 1 } = {}) {
+export function buildFastFeatureFrameFilter(framePreset, frameBackground, overlayAssets, motionSegments, { frameRate = DEFAULT_NATIVE_FRAME_RATE, timeOffset = 0, duration = 0, hideWatermark = false, sourceVideoLabel = '0:v', mediaInputOffset = 1, sourceSize = null } = {}) {
   const safeOverlayAssets = Array.isArray(overlayAssets) ? overlayAssets : []
   const safeMotionSegments = Array.isArray(motionSegments) ? motionSegments : []
   const nativeFrameRate = formatFrameRate(frameRate)
   const fadePreset = getVideoFadePresetById(frameBackground?.presetId)
   const sourceLabel = 'src'
-  const filterChain = [`[${sourceVideoLabel}]fps=${nativeFrameRate},setpts=N/(${nativeFrameRate}*TB)[${sourceLabel}]`]
+  const filterChain = [`[${sourceVideoLabel}]setpts=N/(${nativeFrameRate}*TB)[${sourceLabel}]`]
 
   if (isNativeVideoFadeBackground(frameBackground)) {
     const fastBlur = getFastVideoFadeBlurPlan(framePreset, fadePreset)
     filterChain.push(
       `[${sourceLabel}]split=2[bgsrc][fgsrc]`,
-      `[bgsrc]scale=w=${framePreset.width}:h=${framePreset.height}:force_original_aspect_ratio=increase:flags=fast_bilinear,crop=${framePreset.width}:${framePreset.height},scale=${fastBlur.scale}:flags=fast_bilinear,gblur=sigma=${fastBlur.sigma}:steps=1,scale=${framePreset.width}:${framePreset.height}:flags=bicubic,eq=brightness=${formatFilterNumber(fadePreset.nativeBrightness, 3)}:saturation=${formatFilterNumber(fadePreset.nativeSaturation, 3)},drawbox=x=0:y=0:w=iw:h=ih:color=${toFfmpegColor(DEFAULT_FRAME_BACKGROUND)}@${formatFilterNumber(fadePreset.nativeOverlayOpacity, 3)}:t=fill[bg]`,
-      buildNativeForegroundCropZoomScale({ inputLabel: 'fgsrc', outputLabel: 'fg', framePreset, motionSegments: safeMotionSegments }),
-      '[bg][fg]overlay=(W-w)/2:(H-h)/2:shortest=1:eof_action=pass[v0]',
+      `[bgsrc]scale=${fastBlur.scale}:force_original_aspect_ratio=increase:flags=fast_bilinear,crop=${fastBlur.scale},gblur=sigma=${fastBlur.sigma}:steps=1,eq=brightness=${formatFilterNumber(fadePreset.nativeBrightness, 3)}:saturation=${formatFilterNumber(fadePreset.nativeSaturation, 3)},drawbox=x=0:y=0:w=iw:h=ih:color=${toFfmpegColor(DEFAULT_FRAME_BACKGROUND)}@${formatFilterNumber(fadePreset.nativeOverlayOpacity, 3)}:t=fill,scale=${framePreset.width}:${framePreset.height}:flags=fast_bilinear[bg]`,
+      buildNativeForegroundCropZoomScale({ inputLabel: 'fgsrc', outputLabel: 'fg', framePreset, motionSegments: safeMotionSegments, frameRate, sourceSize }),
+      buildNativeForegroundOverlay({ backgroundLabel: 'bg', foregroundLabel: 'fg', outputLabel: 'v0', motionSegments: safeMotionSegments }),
     )
   } else {
     filterChain.push(
       `color=c=${toFfmpegColor(frameBackground)}:s=${framePreset.width}x${framePreset.height}:r=${nativeFrameRate}[bg]`,
-      buildNativeForegroundCropZoomScale({ inputLabel: sourceLabel, outputLabel: 'fg', framePreset, motionSegments: safeMotionSegments }),
-      '[bg][fg]overlay=(W-w)/2:(H-h)/2:shortest=1:eof_action=pass[v0]',
+      buildNativeForegroundCropZoomScale({ inputLabel: sourceLabel, outputLabel: 'fg', framePreset, motionSegments: safeMotionSegments, frameRate, sourceSize }),
+      buildNativeForegroundOverlay({ backgroundLabel: 'bg', foregroundLabel: 'fg', outputLabel: 'v0', motionSegments: safeMotionSegments }),
     )
   }
 
@@ -178,7 +178,7 @@ export function buildFastFeatureFrameFilter(framePreset, frameBackground, overla
     currentLabel = nextLabel
   })
 
-  filterChain.push(`[${currentLabel}]format=yuv420p[vout]`)
+  filterChain.push(`[${currentLabel}]setsar=1,format=yuv420p[vout]`)
 
   return {
     filterComplex: filterChain.join(';'),

@@ -65,6 +65,20 @@ function parseVideoFrameRate(output) {
   return parseFrameRateValue(fpsMatch?.[1]) || parseFrameRateValue(tbrMatch?.[1])
 }
 
+function parseVideoDimensions(output) {
+  const lines = String(output || '').split(/\r?\n/)
+  const videoLine = lines.find((line) => /video:/i.test(line)) || lines.join(' ')
+  const match = videoLine.match(/,\s*(\d{2,5})x(\d{2,5})(?:[\s,\[]|$)/i)
+  if (!match) {
+    return { height: 0, width: 0 }
+  }
+
+  return {
+    height: Number(match[2]) || 0,
+    width: Number(match[1]) || 0,
+  }
+}
+
 export function normalizeNativeFrameRate(frameRate) {
   const normalizedFrameRate = Number(frameRate) || 0
   if (normalizedFrameRate < 1 || normalizedFrameRate > 120) {
@@ -280,7 +294,7 @@ async function canUseHardwareEncoder(codec) {
   }
 }
 
-export async function readNativeVideoFrameRate(inputPath) {
+export async function readNativeVideoMetadata(inputPath) {
   const outputLines = []
 
   try {
@@ -301,10 +315,19 @@ export async function readNativeVideoFrameRate(inputPath) {
       onStderrLine: (line) => outputLines.push(line),
     })
   } catch {
-    return DEFAULT_NATIVE_FRAME_RATE
+    return { frameRate: DEFAULT_NATIVE_FRAME_RATE, height: 0, width: 0 }
   }
 
-  return normalizeNativeFrameRate(parseVideoFrameRate(outputLines.join('\n')))
+  const output = outputLines.join('\n')
+  const dimensions = parseVideoDimensions(output)
+  return {
+    ...dimensions,
+    frameRate: normalizeNativeFrameRate(parseVideoFrameRate(output)),
+  }
+}
+
+export async function readNativeVideoFrameRate(inputPath) {
+  return (await readNativeVideoMetadata(inputPath)).frameRate
 }
 
 export async function getNativeEncodePlan(exportQualityProfileId) {

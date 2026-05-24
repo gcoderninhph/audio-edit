@@ -6,7 +6,7 @@ import { DEFAULT_FRAME_PRESET_ID, DEFAULT_FRAME_BACKGROUND } from './frameCompos
 import { DEFAULT_SUBTITLE_SETTINGS, normalizeSubtitleSettings } from './subtitleRenderModel';
 import { DEFAULT_SUBTITLE_LANGUAGE_KEY, getSubtitlesForLanguage, normalizeActiveSubtitleLanguage } from './subtitleTracks';
 
-async function loadEpisodeExportData(projectId) {
+async function loadEpisodeExportData(projectId, { hideWatermark = false } = {}) {
   const [fullProject, videoRef, voiceoverData] = await Promise.all([
     getLocalProject(projectId),
     getLocalProjectVideoReference(projectId),
@@ -57,7 +57,7 @@ async function loadEpisodeExportData(projectId) {
     frameSettings: {
       presetId: fullProject?.frame_preset_id || DEFAULT_FRAME_PRESET_ID,
       backgroundColor: fullProject?.frame_background || DEFAULT_FRAME_BACKGROUND,
-      hideWatermark: false,
+      hideWatermark,
     },
     subtitleSettings: normalizeSubtitleSettings(fullProject?.subtitle_settings || DEFAULT_SUBTITLE_SETTINGS),
     audioMix: fullProject?.export_audio_mix || {},
@@ -119,7 +119,9 @@ export async function exportSeriesEpisodes(sortedEpisodes, exportConfig, onProgr
       detail: `Loading ${episodeLabel}...`,
     });
 
-    const episodeData = await loadEpisodeExportData(episode.id);
+    const episodeData = await loadEpisodeExportData(episode.id, {
+      hideWatermark: Boolean(exportConfig?.hideWatermark),
+    });
     if (!episodeData) {
       skipped.push(i + 1);
       onProgress({
@@ -153,6 +155,7 @@ export async function exportSeriesEpisodes(sortedEpisodes, exportConfig, onProgr
         frameSettings: episodeData.frameSettings,
         subtitleSettings: episodeData.subtitleSettings,
         audioMix: episodeData.audioMix,
+        hideWatermark: Boolean(exportConfig?.hideWatermark),
         voiceoverTrack: episodeData.voiceoverTrack,
       },
       (update) => {

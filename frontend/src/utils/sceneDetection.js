@@ -12,6 +12,19 @@
 
 import { getPlayableVideoUrl, releaseVideoUrl } from './projectStorage';
 
+function waitForNextPaint() {
+  return new Promise((resolve) => {
+    if (typeof requestAnimationFrame === 'function') {
+      requestAnimationFrame(() => {
+        requestAnimationFrame(() => resolve());
+      });
+      return;
+    }
+
+    setTimeout(resolve, 0);
+  });
+}
+
 /**
  * Detect scenes in a video file
  * @param {File} videoFile - The video file to analyze
@@ -30,6 +43,9 @@ export async function detectScenes(videoFile, options = {}) {
     onProgress = () => { },
     signal
   } = options;
+
+  // Yield one frame so React can paint detecting UI before analysis starts.
+  await waitForNextPaint();
 
   return new Promise((resolve, reject) => {
     const video = document.createElement('video');

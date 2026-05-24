@@ -120,7 +120,7 @@ function buildChunkOutputPath(jobDirectory, index) {
   return path.join(jobDirectory, `frame-chunk-${String(index).padStart(3, '0')}.mp4`)
 }
 
-function buildChunkArgs({ inputPath, chunk, timelineSlices, chunkOverlayAssets, workerPlan, framePreset, frameBackground, encoderPlan, outputPath, motionSegments, nativeFrameRate, hideWatermark, useFastFeatureFramePath }) {
+function buildChunkArgs({ inputPath, chunk, timelineSlices, chunkOverlayAssets, workerPlan, framePreset, frameBackground, encoderPlan, outputPath, motionSegments, nativeFrameRate, hideWatermark, useFastFeatureFramePath, sourceSize }) {
   if (!Array.isArray(timelineSlices) || timelineSlices.length === 0) {
     throw new Error(`No source slices were generated for frame chunk ${chunk.index + 1}.`)
   }
@@ -129,6 +129,7 @@ function buildChunkArgs({ inputPath, chunk, timelineSlices, chunkOverlayAssets, 
     const sourceInputArgs = buildFastFeatureInputArgs(inputPath, timelineSlices)
     const filterPlan = buildFastFeatureFrameFilter(framePreset, frameBackground, chunkOverlayAssets, motionSegments, {
       frameRate: nativeFrameRate,
+      sourceSize,
       timeOffset: chunk.start,
       duration: chunk.duration,
       hideWatermark,
@@ -227,6 +228,7 @@ async function runChunks({
   workerPlan,
   chunkPaths,
   useFastFeatureFramePath,
+  sourceSize,
 }) {
   const chunkProgressMicroseconds = chunks.map(() => 0)
   const latestSpeedByChunk = chunks.map(() => '')
@@ -275,6 +277,7 @@ async function runChunks({
       hideWatermark,
       motionSegments: chunkSceneMotionSegments,
       nativeFrameRate,
+      sourceSize,
       useFastFeatureFramePath,
     }), {
       cwd: jobDirectory,
@@ -331,6 +334,7 @@ export async function runFrameChunksWithRetry({
   initialWorkerCount,
   initialWorkerPlan,
   useFastFeatureFramePath = false,
+  sourceSize = null,
 }) {
   const chunkPaths = new Array(chunks.length)
 
@@ -378,6 +382,7 @@ export async function runFrameChunksWithRetry({
         workerPlan,
         chunkPaths,
         useFastFeatureFramePath,
+        sourceSize,
       })
       return chunkPaths
     } catch (error) {

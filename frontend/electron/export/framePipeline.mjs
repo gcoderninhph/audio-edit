@@ -3,7 +3,7 @@ import path from 'node:path'
 import { buildSceneSplitFrameChunks } from './frameCudaTurboPath.mjs'
 import { buildFrameSceneMotionSegments } from './frameMotionFilter.mjs'
 import { buildFrameChunks, getTimelineDurationSeconds, runFrameChunksWithRetry } from './frameChunkRunner.mjs'
-import { getFrameChunkPlan, getFrameWorkerPlan, getNativeEncodePlan, readNativeVideoFrameRate, runNativeFfmpeg } from './nativeFfmpeg.mjs'
+import { getFrameChunkPlan, getFrameWorkerPlan, getNativeEncodePlan, readNativeVideoMetadata, runNativeFfmpeg } from './nativeFfmpeg.mjs'
 
 function escapeConcatPath(filePath) {
   return filePath.replace(/\\/g, '/').replace(/'/g, String.raw`'\\''`)
@@ -84,10 +84,11 @@ export async function frameSourceTimelineVideo({
     totalDurationSeconds,
   })
   const sceneMotionSegments = buildFrameSceneMotionSegments(keptScenes)
-  const nativeFrameRate = await readNativeVideoFrameRate(inputPath)
+  const nativeVideoMetadata = await readNativeVideoMetadata(inputPath)
+  const nativeFrameRate = nativeVideoMetadata.frameRate
   const useFastFeatureFramePath = shouldUseFastFeatureFramePath({ encoderPlan, frameBackground })
   const chunks = useFastFeatureFramePath
-    ? buildSceneSplitFrameChunks(keptScenes, nativeFrameRate, 7)
+    ? buildSceneSplitFrameChunks(keptScenes, nativeFrameRate, 10)
     : buildFrameChunks(totalDurationSeconds, chunkPlan.targetChunkDurationSeconds, nativeFrameRate)
   if (chunks.length === 0) {
     throw new Error('No frame chunks were generated for native export.')
@@ -136,6 +137,7 @@ export async function frameSourceTimelineVideo({
     encoderPlan,
     hideWatermark,
     nativeFrameRate,
+    sourceSize: nativeVideoMetadata,
     chunks,
     initialWorkerCount: effectiveWorkerCount,
     initialWorkerPlan: workerPlan,
@@ -166,5 +168,19 @@ export async function frameSourceTimelineVideo({
   return {
     outputPath: finalOutputPath,
     encoderPlan,
+    diagnostics: {
+      chunkCount: chunks.length,
+      encoder: encoderPlan.label,
+      fastFeatureFramePath: useFastFeatureFramePath,
+      frameBackgroundKind: typeof frameBackground === 'object' ? frameBackground.kind || 'custom' : 'color',
+      frameRate: nativeFrameRate,
+      sourceHeight: nativeVideoMetadata.height,
+      sourceWidth: nativeVideoMetadata.width,
+      hideWatermark,
+      motionSegmentCount: sceneMotionSegments.length,
+      overlayCount: overlayAssets.length,
+      timelineDurationSeconds: totalDurationSeconds,
+      workerCount: effectiveWorkerCount,
+    },
   }
 }

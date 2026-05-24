@@ -3,6 +3,7 @@ import { FolderPlus } from 'lucide-react';
 import { deleteLocalProject, listLocalProjects, saveLocalProject } from '../../utils/projectStorage';
 import DeveloperLocator from '../DeveloperLocator/DeveloperLocator';
 import { useI18n } from '../../i18n/useI18n';
+import { isPremiumActiveForUser } from '../../utils/authClient';
 import { NewProjectCard, ProjectCard, SeriesCard } from './ProjectDashboardCards';
 import { CreateSeriesDialog, ProjectInfoDialog } from './ProjectDashboardDialogs';
 import SeriesDetailView from './SeriesDetailView';
@@ -18,6 +19,7 @@ import {
 import './ProjectDashboard.css';
 
 export default function ProjectDashboard({
+  auth,
   onOpenProject,
   onNewProject,
   onSeriesContextChange,
@@ -64,6 +66,7 @@ export default function ProjectDashboard({
     () => seriesGroups.find((group) => group.id === selectedSeriesId) || null,
     [selectedSeriesId, seriesGroups],
   );
+  const hideWatermark = isPremiumActiveForUser(auth?.user);
 
   const syncSeriesContext = useCallback((nextSeriesId, nextEpisodeId) => {
     const normalizedSeriesId = String(nextSeriesId || '');
@@ -194,6 +197,7 @@ export default function ProjectDashboard({
     return (
       <>
         <SeriesDetailView
+          hideWatermark={hideWatermark}
           menuPosition={menuPosition}
           menuProjectId={menuProjectId}
           onBack={() => syncSeriesContext('', '')}

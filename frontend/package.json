@@ -8,6 +8,7 @@
     "dev": "vite",
     "dev:renderer": "vite build --watch --mode development",
     "build": "vite build",
+    "benchmark:export": "electron . --export-benchmark",
     "lint": "eslint .",
     "preview": "vite preview",
     "desktop:launch": "wait-on dist/index.html && electron .",

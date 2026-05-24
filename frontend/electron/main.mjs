@@ -38,6 +38,58 @@ app.commandLine.appendSwitch('enable-experimental-web-platform-features')
 
 const rendererDevUrl = process.env.ELECTRON_RENDERER_URL
 
+function getCliOptionValue(names) {
+  for (const arg of process.argv.slice(2)) {
+    for (const name of names) {
+      if (arg === name) {
+        return '1'
+      }
+
+      const prefix = `${name}=`
+      if (arg.startsWith(prefix)) {
+        return arg.slice(prefix.length)
+      }
+    }
+  }
+
+  return ''
+}
+
+function parseExportBenchmarkOptions() {
+  const benchmarkEnabled = Boolean(getCliOptionValue(['--export-benchmark']))
+  const projectId = getCliOptionValue(['--export-benchmark-project-id', '--project-id'])
+
+  if (!benchmarkEnabled && !projectId) {
+    return null
+  }
+
+  if (!projectId) {
+    throw new Error('Export benchmark mode requires --project-id=<project-id>.')
+  }
+
+  return {
+    maxElapsedMs: Number(getCliOptionValue(['--export-benchmark-max-ms', '--max-ms'])) || 15000,
+    outputDirectory: getCliOptionValue(['--export-benchmark-output-dir', '--output-dir']),
+    projectId,
+  }
+}
+
+const exportBenchmarkOptions = parseExportBenchmarkOptions()
+
+function syncExportBenchmarkEnvironment() {
+  if (!exportBenchmarkOptions) {
+    return
+  }
+
+  if (!exportBenchmarkOptions.outputDirectory) {
+    exportBenchmarkOptions.outputDirectory = path.join(app.getPath('temp'), 'audio-edit-export-benchmarks')
+  }
+
+  process.env.ELECTRON_EXPORT_BENCHMARK_PROJECT_ID = exportBenchmarkOptions.projectId
+  process.env.ELECTRON_EXPORT_BENCHMARK_MAX_MS = String(exportBenchmarkOptions.maxElapsedMs)
+  process.env.ELECTRON_EXPORT_BENCHMARK_OUTPUT_DIR = exportBenchmarkOptions.outputDirectory
+}
+
 const mimeTypes = new Map([
   ['.css', 'text/css; charset=utf-8'],
   ['.html', 'text/html; charset=utf-8'],
@@ -74,6 +126,21 @@ registerSubtitleFontIpc(ipcMain)
 registerNativeExportIpc(ipcMain)
 registerExportOutputIpc(ipcMain)
 registerNarratorComposeIpc(ipcMain)
+
+if (exportBenchmarkOptions) {
+  ipcMain.handle('export-benchmark:complete', async (_event, payload = {}) => {
+    const result = {
+      type: 'export-benchmark',
+      ...payload,
+    }
+
+    console.log(JSON.stringify(result, null, 2))
+    logDesktopEvent('export-benchmark', payload.ok ? 'Export benchmark completed' : 'Export benchmark failed', result, payload.ok ? 'info' : 'error')
+    process.exitCode = payload.ok ? 0 : 1
+    setTimeout(() => app.quit(), 100)
+    return { accepted: true }
+  })
+}
 
 function logDesktopEvent(scope, message, data = {}, level = 'info') {
   void appendDebugLog({ scope, message, data, level })
@@ -185,7 +252,9 @@ async function createMainWindow() {
   })
 
   mainWindow.once('ready-to-show', () => {
-    mainWindow?.show()
+    if (!exportBenchmarkOptions) {
+      mainWindow?.show()
+    }
   })
 
   await mainWindow.loadURL(rendererStartUrl)
@@ -200,8 +269,12 @@ async function bootstrapDesktopApp() {
   })
   registerDesktopAppProtocol({ distDir, getContentType })
   rendererStartUrl = rendererDevUrl || 'desktop://app/index.html'
-  await waitForBackendReady()
-  logDesktopEvent('desktop-main', 'Backend became ready', { serverUrl })
+  if (exportBenchmarkOptions) {
+    logDesktopEvent('desktop-main', 'Export benchmark mode skips backend health gate', { serverUrl })
+  } else {
+    await waitForBackendReady()
+    logDesktopEvent('desktop-main', 'Backend became ready', { serverUrl })
+  }
   await createMainWindow()
 }
 
@@ -213,6 +286,7 @@ app.on('before-quit', cleanupRuntime)
 
 app.whenReady().then(async () => {
   try {
+    syncExportBenchmarkEnvironment()
     await bootstrapDesktopApp()
   } catch (error) {
     logDesktopEvent('desktop-main', 'Desktop startup failed', error, 'error')
