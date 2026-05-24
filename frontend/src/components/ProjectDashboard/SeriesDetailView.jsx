@@ -1,5 +1,7 @@
-import { ArrowLeft, ExternalLink, Pause, Play } from 'lucide-react';
+import { ArrowLeft, Download, ExternalLink, Pause, Play } from 'lucide-react';
 import { useEffect, useMemo, useRef, useState } from 'react';
+import useSeriesExport from '../../hooks/useSeriesExport';
+import SeriesExportModal from './SeriesExportModal';
 import DeveloperLocator from '../DeveloperLocator/DeveloperLocator';
 import { useI18n } from '../../i18n/useI18n';
 import {
@@ -325,11 +327,22 @@ export default function SeriesDetailView({
 }) {
   const { t } = useI18n();
   const [editingEpisodeId, setEditingEpisodeId] = useState('');
+  const [isExportModalOpen, setIsExportModalOpen] = useState(false);
   const selectedProject = series.projects.find((project) => project.id === selectedEpisodeId) || series.projects[0];
+  const seriesExport = useSeriesExport(series.name);
 
   const handleEpisodeSave = (project, value) => {
     setEditingEpisodeId('');
     onEpisodeNumberChange(project, value);
+  };
+
+  const handleOpenExportModal = () => {
+    seriesExport.resetExport();
+    setIsExportModalOpen(true);
+  };
+
+  const handleCloseExportModal = () => {
+    if (!seriesExport.isExporting) setIsExportModalOpen(false);
   };
 
   return (
@@ -340,6 +353,16 @@ export default function SeriesDetailView({
           <button type="button" className="btn btn-ghost btn-sm" onClick={onBack}><ArrowLeft size={16} /> {t('dashboard.back')}</button>
           <h1 className="dashboard-title gradient-text">{series.name}</h1>
           <p className="dashboard-subtitle">{t('dashboard.episodes', { count: series.projects.length })}</p>
+        </div>
+        <div className="series-detail-header-actions">
+          <button
+            type="button"
+            className="btn btn-primary btn-sm"
+            onClick={handleOpenExportModal}
+            disabled={series.projects.length === 0}
+          >
+            <Download size={15} /> {t('dashboard.exportSeries')}
+          </button>
         </div>
       </div>
 
@@ -360,6 +383,22 @@ export default function SeriesDetailView({
 
         <aside className="series-episode-panel dev-locator-host">
           <DeveloperLocator code={`dashboard.series.${series.id}.episodes`} title="Series Episode List" />
+          {isExportModalOpen && (
+            <SeriesExportModal
+              series={series}
+              qualityProfileId={seriesExport.qualityProfileId}
+              onQualityProfileChange={seriesExport.setQualityProfileId}
+              outputFileName={seriesExport.outputFileName}
+              onOutputFileNameChange={seriesExport.setOutputFileName}
+              outputDirectory={seriesExport.outputDirectory}
+              onChooseDirectory={seriesExport.chooseDirectory}
+              isExporting={seriesExport.isExporting}
+              exportProgress={seriesExport.exportProgress}
+              exportResult={seriesExport.exportResult}
+              onExport={() => seriesExport.startSeriesExport(series.projects)}
+              onClose={handleCloseExportModal}
+            />
+          )}
           {series.projects.map((project) => {
             const episodeNumber = normalizeEpisodeNumber(project.episode_number) || 1;
             const isSelected = project.id === selectedProject?.id;
