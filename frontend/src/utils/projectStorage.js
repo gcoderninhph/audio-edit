@@ -234,3 +234,20 @@ export function releaseVideoUrl(videoUrl) {
 export function deleteLocalProject(projectId) {
   return getProjectStore().deleteProject(projectId)
 }
+
+export async function saveLocalProjectSceneGrid(projectId, payload) {
+  const bytes = normalizeBinaryPayload(payload?.bytes)
+
+  return getProjectStore().saveSceneGrid({
+    projectId,
+    columns: Number.isFinite(payload?.columns) ? payload.columns : 0,
+    cellHeight: Number.isFinite(payload?.cellHeight) ? payload.cellHeight : 0,
+    cellWidth: Number.isFinite(payload?.cellWidth) ? payload.cellWidth : 0,
+    count: Number.isFinite(payload?.count) ? payload.count : 0,
+    bytes,
+  })
+}
+
+export function getLocalProjectSceneGrid(projectId) {
+  return getProjectStore().getProjectSceneGrid(projectId)
+}

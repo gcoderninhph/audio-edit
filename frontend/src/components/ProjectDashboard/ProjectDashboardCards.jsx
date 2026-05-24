@@ -2,7 +2,8 @@ import { MoreVertical, Pencil, Play, Plus, Trash2 } from 'lucide-react';
 import { createPortal } from 'react-dom';
 import { useRef, useState } from 'react';
 import DeveloperLocator from '../DeveloperLocator/DeveloperLocator';
-import { formatDate, getProjectTitle, normalizeEpisodeNumber } from './projectDashboardModel';
+import { useI18n } from '../../i18n/useI18n';
+import { formatDateByLocale, getProjectTitle, normalizeEpisodeNumber } from './projectDashboardModel';
 
 export function ProjectCardThumbnail({ previewUrl, title }) {
   const videoRef = useRef(null);
@@ -45,21 +46,22 @@ export function ProjectCardThumbnail({ previewUrl, title }) {
 }
 
 export function ProjectActionMenu({ isOpen, menuPosition, onDelete, onEdit, onToggle }) {
+  const { t } = useI18n();
   const menu = isOpen && menuPosition && typeof document !== 'undefined' ? createPortal(
     <div
       className="project-card-menu project-card-menu-floating"
       style={{ left: `${menuPosition.left}px`, top: `${menuPosition.top}px` }}
       onClick={(event) => event.stopPropagation()}
     >
-      <button type="button" onClick={onEdit}><Pencil size={15} /> Edit info</button>
-      <button type="button" className="danger" onClick={onDelete}><Trash2 size={15} /> Delete video</button>
+      <button type="button" onClick={onEdit}><Pencil size={15} /> {t('dashboard.editInfo')}</button>
+      <button type="button" className="danger" onClick={onDelete}><Trash2 size={15} /> {t('dashboard.deleteVideo')}</button>
     </div>,
     document.body,
   ) : null;
 
   return (
     <div className={`project-card-menu-wrap${isOpen ? ' is-open' : ''}`}>
-      <button type="button" className="project-card-menu-button" onClick={onToggle} aria-label="Video options" title="Options">
+      <button type="button" className="project-card-menu-button" onClick={onToggle} aria-label={t('dashboard.videoOptions')} title={t('dashboard.options')}>
         <MoreVertical size={17} />
       </button>
       {menu}
@@ -68,17 +70,19 @@ export function ProjectActionMenu({ isOpen, menuPosition, onDelete, onEdit, onTo
 }
 
 export function NewProjectCard({ onClick }) {
+  const { t } = useI18n();
   return (
     <button type="button" className="project-card project-card-new dev-locator-host" onClick={onClick}>
       <DeveloperLocator code="dashboard.project.new" title="New Project Card" />
       <Plus size={34} />
-      <span>New</span>
+      <span>{t('dashboard.newCard')}</span>
     </button>
   );
 }
 
-export function ProjectCard({ isMenuOpen, menuPosition, onDelete, onEdit, onMenuToggle, onOpen, project }) {
-  const title = getProjectTitle(project);
+export function ProjectCard({ isMenuOpen, locale, menuPosition, onDelete, onEdit, onMenuToggle, onOpen, project }) {
+  const { t } = useI18n();
+  const title = getProjectTitle(project) || t('dashboard.untitledVideo');
   return (
     <article className="project-card dev-locator-host" onClick={onOpen}>
       <DeveloperLocator code={`dashboard.project.${project.id}`} title="Saved Project Card" style={{ right: '42px' }} />
@@ -88,7 +92,7 @@ export function ProjectCard({ isMenuOpen, menuPosition, onDelete, onEdit, onMenu
       </div>
       <div className="project-card-info">
         <div className="project-card-name" title={title}>{title}</div>
-        <div className="project-card-date">Created {formatDate(project.created_at || project.updated_at)}</div>
+        <div className="project-card-date">{t('dashboard.created', { date: formatDateByLocale(project.created_at || project.updated_at, locale) })}</div>
       </div>
       <ProjectActionMenu isOpen={isMenuOpen} menuPosition={menuPosition} onDelete={onDelete} onEdit={onEdit} onToggle={onMenuToggle} />
     </article>
@@ -96,6 +100,7 @@ export function ProjectCard({ isMenuOpen, menuPosition, onDelete, onEdit, onMenu
 }
 
 export function SeriesCard({ group, onOpen }) {
+  const { t } = useI18n();
   const firstProject = group.projects[0];
   const lastEpisode = group.projects[group.projects.length - 1];
   return (
@@ -103,11 +108,11 @@ export function SeriesCard({ group, onOpen }) {
       <DeveloperLocator code={`dashboard.series.${group.id}`} title="Dashboard Series Card" />
       <div className="series-card-thumb">
         <ProjectCardThumbnail previewUrl={firstProject?.preview_url} title={group.name} />
-        <div className="series-card-count">{group.projects.length} episodes</div>
+        <div className="series-card-count">{t('dashboard.episodes', { count: group.projects.length })}</div>
       </div>
       <div className="series-card-info">
         <strong>{group.name}</strong>
-        <span>Episode {normalizeEpisodeNumber(lastEpisode?.episode_number) || group.projects.length}</span>
+        <span>{t('dashboard.episode', { number: normalizeEpisodeNumber(lastEpisode?.episode_number) || group.projects.length })}</span>
       </div>
     </button>
   );

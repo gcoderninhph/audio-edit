@@ -3,7 +3,7 @@ import { createReadStream } from 'node:fs'
 import { readFile, stat } from 'node:fs/promises'
 import { Readable } from 'node:stream'
 import path from 'node:path'
-import { resolveProjectVideoPath } from './projectStore.mjs'
+import { resolveProjectSceneGridPath, resolveProjectVideoPath } from './projectStore.mjs'
 
 const rendererHeaders = {
   'Cross-Origin-Embedder-Policy': 'require-corp',
@@ -184,17 +184,32 @@ export function registerDesktopAppProtocol({ distDir, getContentType }) {
 
       const requestPath = decodeURIComponent(requestUrl.pathname || '/')
       if (requestPath.startsWith('/project-media/')) {
-        const projectId = requestPath.slice('/project-media/'.length)
+        const mediaPath = requestPath.slice('/project-media/'.length)
+        const [projectId, ...assetSegments] = mediaPath.split('/').filter(Boolean)
         if (!projectId) {
           return buildProtocolErrorResponse('Invalid project media request.', 400)
         }
 
-        const videoPath = await resolveProjectVideoPath(projectId)
-        if (!videoPath) {
-          return buildProtocolErrorResponse('Project video not found.', 404)
+        const requestedAsset = assetSegments.join('/')
+        if (!requestedAsset) {
+          const videoPath = await resolveProjectVideoPath(projectId)
+          if (!videoPath) {
+            return buildProtocolErrorResponse('Project video not found.', 404)
+          }
+
+          return buildProjectMediaResponse(videoPath, request, getContentType)
         }
 
-        return buildProjectMediaResponse(videoPath, request, getContentType)
+        if (requestedAsset === 'scene-grid.png') {
+          const sceneGridPath = await resolveProjectSceneGridPath(projectId)
+          if (!sceneGridPath) {
+            return buildProtocolErrorResponse('Scene grid image not found.', 404)
+          }
+
+          return buildProjectMediaResponse(sceneGridPath, request, getContentType)
+        }
+
+        return buildProtocolErrorResponse('Project media asset not found.', 404)
       }
 
       const targetPath = await resolveRendererTarget(distDir, requestPath)

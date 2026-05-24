@@ -1,5 +1,6 @@
 import { useState, useEffect, useRef, useMemo } from 'react';
 import DeveloperLocator from '../DeveloperLocator/DeveloperLocator';
+import SubtitleCardList from './SubtitleCardList';
 import SubtitleProgressPanel from './SubtitleProgressPanel';
 import {
   DEFAULT_SUBTITLE_LANGUAGE_KEY,
@@ -7,18 +8,13 @@ import {
   isVoiceoverSubtitleLanguageSupported,
 } from '../../utils/subtitleTracks';
 import { fetchVoiceoverClientConfig } from '../../utils/voiceoverUtils';
+import { useI18n } from '../../i18n/useI18n';
 import './SubtitlePanel.css';
-
-function formatTime(seconds) {
-  if (!seconds || !isFinite(seconds)) return '00:00';
-  const mins = Math.floor(seconds / 60);
-  const secs = Math.floor(seconds % 60);
-  return `${String(mins).padStart(2, '0')}:${String(secs).padStart(2, '0')}`;
-}
 
 export default function SubtitlePanel({
   subtitles,
   currentTime,
+  onDeleteSubtitle,
   onUpdateSubtitle,
   onSeekToTime,
   activeSubtitleLanguage,
@@ -40,17 +36,18 @@ export default function SubtitlePanel({
   authCredits = 0,
   onRequireAuth,
 }) {
+  const { t } = useI18n();
   const [editingId, setEditingId] = useState(null);
   const [editingText, setEditingText] = useState('');
   const [toolsExpanded, setToolsExpanded] = useState(false);
   const [enabledVoiceoverLanguageCodes, setEnabledVoiceoverLanguageCodes] = useState(null);
-  const listRef = useRef(null);
+  const listContainerRef = useRef(null);
   const activeItemRef = useRef(null);
 
   const hasVisibleSubs = subtitles && subtitles.length > 0;
   const selectedLanguageOption = subtitleLanguageOptions?.find((option) => option.id === activeSubtitleLanguage)
     || subtitleLanguageOptions?.find((option) => option.id === DEFAULT_SUBTITLE_LANGUAGE_KEY)
-    || { id: DEFAULT_SUBTITLE_LANGUAGE_KEY, label: 'Original', hasSubtitles: false, translatable: false };
+    || { id: DEFAULT_SUBTITLE_LANGUAGE_KEY, label: t('panel.subtitleList.original'), hasSubtitles: false, translatable: false };
   const hasOriginalSubtitles = Boolean(subtitleLanguageOptions?.find((option) => option.id === DEFAULT_SUBTITLE_LANGUAGE_KEY)?.hasSubtitles);
   const isOriginalLanguageSelected = selectedLanguageOption.id === DEFAULT_SUBTITLE_LANGUAGE_KEY;
   const canTranslateSelectedLanguage = hasOriginalSubtitles && selectedLanguageOption.translatable;
@@ -60,7 +57,7 @@ export default function SubtitlePanel({
     ? true
     : Boolean(voiceoverLanguageCode) && enabledVoiceoverLanguageCodes.includes(voiceoverLanguageCode);
   const canGenerateVoiceover = isVoiceoverSupportedLanguage && isVoiceoverEnabledByConfig && hasVisibleSubs;
-  const authRequiredLabel = 'Login required';
+  const authRequiredLabel = t('panel.subtitleList.authRequired');
   const creditBalance = Math.max(0, Number(authCredits) || 0);
   const transcriptionCreditCost = 20;
   const translationCreditCost = 100;
@@ -79,12 +76,31 @@ export default function SubtitlePanel({
     return 0;
   }, [subtitles, currentTime, hasVisibleSubs]);
 
-  // Auto-scroll logic
+  // Auto-scroll logic: only scroll inside subtitle list container.
   useEffect(() => {
-    if (activeItemRef.current && !editingId) {
-      activeItemRef.current.scrollIntoView({
+    if (editingId) return;
+    const listContainer = listContainerRef.current;
+    const activeItem = activeItemRef.current;
+    if (!listContainer || !activeItem) return;
+
+    const itemTop = activeItem.offsetTop;
+    const itemBottom = itemTop + activeItem.offsetHeight;
+    const viewportTop = listContainer.scrollTop;
+    const viewportBottom = viewportTop + listContainer.clientHeight;
+    const padding = 20;
+
+    if (itemTop < viewportTop + padding) {
+      listContainer.scrollTo({
+        top: Math.max(itemTop - padding, 0),
         behavior: 'smooth',
-        block: 'center',
+      });
+      return;
+    }
+
+    if (itemBottom > viewportBottom - padding) {
+      listContainer.scrollTo({
+        top: itemBottom - listContainer.clientHeight + padding,
+        behavior: 'smooth',
       });
     }
   }, [activeSubIndex, editingId]);
@@ -124,6 +140,14 @@ export default function SubtitlePanel({
       onUpdateSubtitle(id, editingText);
     }
     setEditingId(null);
+  };
+
+  const handleDeleteSubtitle = (id) => {
+    if (editingId === id) {
+      setEditingId(null);
+      setEditingText('');
+    }
+    onDeleteSubtitle?.(id);
   };
 
   const handleKeyDown = (e, id) => {
@@ -166,9 +190,9 @@ export default function SubtitlePanel({
         code="panel.subtitle.transcribing"
         title="Subtitle Progress Panel"
         color="#10b981"
-        phase={transcribeProgress?.phase || 'Generating subtitles...'}
+        phase={transcribeProgress?.phase || t('panel.subtitleList.transcribePhase')}
         percent={transcribeProgress?.percent}
-        hint="This may take a few minutes"
+        hint={t('panel.subtitleList.transcribeHint')}
       />
     );
   }
@@ -179,9 +203,9 @@ export default function SubtitlePanel({
         code="panel.subtitle.translating"
         title="Translation Progress Panel"
         color="#3b82f6"
-        phase={translateProgress?.phase || 'Translating subtitles...'}
+        phase={translateProgress?.phase || t('panel.subtitleList.translatePhase')}
         percent={translateProgress?.percent}
-        hint="The model is processing..."
+        hint={t('panel.subtitleList.translateHint')}
       />
     );
   }
@@ -192,9 +216,9 @@ export default function SubtitlePanel({
         code="panel.subtitle.voiceover"
         title="Voiceover Progress Panel"
         color="#f59e0b"
-        phase={voiceoverProgress?.phase || 'Generating voiceover...'}
+        phase={voiceoverProgress?.phase || t('panel.subtitleList.voiceoverPhase')}
         percent={voiceoverProgress?.percent}
-        hint="Polling the service every 0.5 seconds"
+        hint={t('panel.subtitleList.voiceoverHint')}
       />
     );
   }
@@ -210,7 +234,7 @@ export default function SubtitlePanel({
           className="subtitle-tools-toggle"
           onClick={() => setToolsExpanded(!toolsExpanded)}
         >
-          <span>🛠️ Subtitle tools</span>
+          <span>{t('panel.subtitleList.tools')}</span>
           <span className={`toggle-arrow ${toolsExpanded ? 'open' : ''}`}>▼</span>
         </button>
       )}
@@ -220,7 +244,7 @@ export default function SubtitlePanel({
         <div className="subtitle-tools-content">
           {isAuthenticated && (
             <div className="subtitle-tool-note">
-              Current balance: <strong>{creditBalance} credits</strong>
+              {t('panel.subtitleList.currentBalance', { credits: creditBalance })}
             </div>
           )}
 
@@ -231,14 +255,14 @@ export default function SubtitlePanel({
             {!isAuthenticated
               ? authRequiredLabel
               : hasOriginalSubtitles
-                ? `🔄 Recreate subtitles (original · ${transcriptionCreditCost} credits)`
-                : `📝 Generate subtitles automatically · ${transcriptionCreditCost} credits`}
+                ? t('panel.subtitleList.recreateSubtitles', { credits: transcriptionCreditCost })
+                : t('panel.subtitleList.generateSubtitles', { credits: transcriptionCreditCost })}
           </button>
 
           {hasOriginalSubtitles && (
             <>
               <div className="subtitle-language-row">
-                <label className="subtitle-tools-label" htmlFor="subtitle-language-select">Display language</label>
+                <label className="subtitle-tools-label" htmlFor="subtitle-language-select">{t('panel.subtitleList.displayLanguage')}</label>
                 <div className="subtitle-input-button-group">
                   <select
                     id="subtitle-language-select"
@@ -248,7 +272,7 @@ export default function SubtitlePanel({
                   >
                     {subtitleLanguageOptions?.map((option) => (
                       <option key={option.id} value={option.id}>
-                        {option.label}{option.translatable && !option.hasSubtitles ? ' (not translated)' : ''}
+                        {option.label}{option.translatable && !option.hasSubtitles ? ` ${t('panel.subtitleList.notTranslatedSuffix')}` : ''}
                       </option>
                     ))}
                   </select>
@@ -262,19 +286,19 @@ export default function SubtitlePanel({
                     {!isAuthenticated
                       ? authRequiredLabel
                       : selectedLanguageOption.hasSubtitles
-                        ? `🌐 Retranslate · ${translationCreditCost} credits`
-                        : `🌐 Translate · ${translationCreditCost} credits`}
+                        ? t('panel.subtitleList.retranslate', { credits: translationCreditCost })
+                        : t('panel.subtitleList.translate', { credits: translationCreditCost })}
                   </button>
                 </div>
               </div>
 
               <div className="subtitle-tool-note">
-                Translation always starts from the original subtitle track, so the generated subtitles from the video are never overwritten.
+                {t('panel.subtitleList.translationHint')}
               </div>
 
               {missingSelectedTranslation && (
                 <div className="subtitle-tool-note subtitle-tool-warning">
-                  {selectedLanguageOption.label} has not been translated yet. Press Translate to create that language from the original subtitles.
+                  {t('panel.subtitleList.languageNotTranslated', { language: selectedLanguageOption.label })}
                 </div>
               )}
 
@@ -289,41 +313,41 @@ export default function SubtitlePanel({
                     {!isAuthenticated
                       ? authRequiredLabel
                       : !isVoiceoverSupportedLanguage
-                        ? '🔒 Unsupported language for voiceover'
+                        ? t('panel.subtitleList.unsupportedVoiceoverLanguage')
                         : !isVoiceoverEnabledByConfig
-                          ? '🔒 Disabled in Vbee config'
+                          ? t('panel.subtitleList.voiceoverDisabledByConfig')
                           : canGenerateVoiceover
-                            ? `🔊 Generate voiceover · ${voiceoverCreditCost} credits`
-                            : '🔒 Translate this display language first'}
+                            ? t('panel.subtitleList.generateVoiceover', { credits: voiceoverCreditCost })
+                            : t('panel.subtitleList.translateLanguageFirst')}
                   </button>
 
                   {!isOriginalLanguageSelected && isVoiceoverSupportedLanguage && !isVoiceoverEnabledByConfig && (
                     <div className="subtitle-tool-note subtitle-tool-warning">
-                      Voiceover is disabled for <strong>{selectedLanguageOption.label}</strong> in Service/Vbee config.
+                      {t('panel.subtitleList.voiceoverDisabledForLanguage', { language: selectedLanguageOption.label })}
                     </div>
                   )}
 
                   {!selectedLanguageOption.hasSubtitles && selectedLanguageOption.translatable && (
                     <div className="subtitle-tool-note subtitle-tool-warning">
-                      {selectedLanguageOption.label} subtitles are not available yet. Translate this display language first, then generate voiceover.
+                      {t('panel.subtitleList.languageSubtitlesUnavailable', { language: selectedLanguageOption.label })}
                     </div>
                   )}
 
                   {!isOriginalLanguageSelected && selectedLanguageOption.hasSubtitles && isVoiceoverSupportedLanguage && isVoiceoverEnabledByConfig && (
                     <div className="subtitle-tool-note">
-                      Voiceover will use the current Display language: <strong>{selectedLanguageOption.label}</strong>.
+                      {t('panel.subtitleList.voiceoverUsesDisplayLanguage', { language: selectedLanguageOption.label })}
                     </div>
                   )}
 
                   {isOriginalLanguageSelected && hasOriginalSubtitles && (
                     <div className="subtitle-tool-note subtitle-tool-warning">
-                      Voiceover needs a specific translated language. Switch Display language away from Original before generating narration.
+                      {t('panel.subtitleList.voiceoverNeedsTranslatedLanguage')}
                     </div>
                   )}
 
                   {lastVoiceoverAudioName && (
                     <div className="subtitle-tool-note">
-                      Latest internal audio: <strong>{lastVoiceoverAudioName}</strong> • stored in the project and attached to the timeline from 00:00
+                      {t('panel.subtitleList.latestInternalAudio', { name: lastVoiceoverAudioName })}
                     </div>
                   )}
                 </>
@@ -342,19 +366,21 @@ export default function SubtitlePanel({
         <DeveloperLocator code={missingSelectedTranslation ? 'panel.subtitle.language-empty' : 'panel.subtitle.empty'} title="Subtitle Empty Panel" />
         {hasOriginalSubtitles && (
           <div className="subtitle-panel-header">
-            <span className="subtitle-panel-title">Subtitles ({selectedLanguageOption.label} · 0 lines)</span>
+            <span className="subtitle-panel-title">{t('panel.subtitleList.subtitlesHeader', { language: selectedLanguageOption.label, count: 0 })}</span>
           </div>
         )}
         {toolsSection}
         <div className="subtitle-panel-empty-inner">
           <div className="empty-icon">📝</div>
           <div style={{ fontWeight: 600, marginBottom: '4px' }}>
-            {missingSelectedTranslation ? `No ${selectedLanguageOption.label} subtitles saved yet` : 'No subtitles yet'}
+            {missingSelectedTranslation
+              ? t('panel.subtitleList.noSubtitlesForLanguage', { language: selectedLanguageOption.label })
+              : t('panel.subtitleList.noSubtitles')}
           </div>
           <div className="subtitle-empty-hint">
             {missingSelectedTranslation
-              ? 'Choose Translate to create this language from the original subtitle track.'
-              : 'Generate subtitles automatically from the audio with AI.'}
+              ? t('panel.subtitleList.translateToCreateLanguage')
+              : t('panel.subtitleList.noSubtitlesHint')}
           </div>
         </div>
       </div>
@@ -366,57 +392,26 @@ export default function SubtitlePanel({
     <div className="subtitle-panel-container dev-locator-host">
       <DeveloperLocator code="panel.subtitle.list" title="Subtitle Panel" />
       <div className="subtitle-panel-header">
-        <span className="subtitle-panel-title">Subtitles ({selectedLanguageOption.label} · {subtitles.length} lines)</span>
+        <span className="subtitle-panel-title">{t('panel.subtitleList.subtitlesHeader', { language: selectedLanguageOption.label, count: subtitles.length })}</span>
       </div>
 
       {/* Collapsible tools */}
       {toolsSection}
 
-      <div className="subtitle-panel-list" ref={listRef}>
-        {subtitles.map((sub, index) => {
-          const isActive = index === activeSubIndex;
-          const isEditing = editingId === sub.id;
-
-          return (
-            <div
-              key={sub.id}
-              ref={isActive ? activeItemRef : null}
-              className={`subtitle-card dev-locator-host ${isActive ? 'active' : ''}`}
-            >
-              <DeveloperLocator code={`subtitle.card.${sub.id}`} title="Subtitle Card" />
-              <div
-                className="subtitle-card-time"
-                onClick={() => onSeekToTime?.(sub.start)}
-              >
-                {formatTime(sub.start)}
-              </div>
-
-              <div className="subtitle-card-content">
-                {isEditing ? (
-                  <div className="subtitle-edit-mode">
-                    <textarea
-                      autoFocus
-                      value={editingText}
-                      onChange={(e) => setEditingText(e.target.value)}
-                      onKeyDown={(e) => handleKeyDown(e, sub.id)}
-                      onBlur={() => handleSave(sub.id)}
-                      className="subtitle-textarea"
-                      rows={2}
-                    />
-                    <div className="subtitle-edit-hint">Press Enter to save, Esc to cancel</div>
-                  </div>
-                ) : (
-                  <div
-                    className="subtitle-text"
-                    onClick={() => handleEditClick(sub)}
-                  >
-                    {sub.text}
-                  </div>
-                )}
-              </div>
-            </div>
-          );
-        })}
+      <div className="subtitle-panel-list" ref={listContainerRef}>
+        <SubtitleCardList
+          activeItemRef={activeItemRef}
+          activeSubIndex={activeSubIndex}
+          editingId={editingId}
+          editingText={editingText}
+          onDeleteSubtitle={handleDeleteSubtitle}
+          onEditClick={handleEditClick}
+          onEditingTextChange={setEditingText}
+          onKeyDown={handleKeyDown}
+          onSave={handleSave}
+          onSeekToTime={onSeekToTime}
+          subtitles={subtitles}
+        />
       </div>
     </div>
   );

@@ -4,14 +4,17 @@ import { useVideoEditor } from './hooks/useVideoEditor';
 import { useAuthSession } from './hooks/useAuthSession';
 import AuthDialog from './components/Auth/AuthDialog';
 import AppHeader from './components/AppShell/AppHeader';
+import AppEditorHeaderStatus from './components/AppShell/AppEditorHeaderStatus';
 import AppEditorWorkspace from './components/AppShell/AppEditorWorkspace';
 import CreditPackagesDialog from './components/AppShell/CreditPackagesDialog';
 import PremiumPackagesDialog from './components/AppShell/PremiumPackagesDialog';
 import AdminBootstrapSetup from './components/Admin/AdminBootstrapSetup';
 import AdminConsole from './components/Admin/AdminConsole';
 import ProjectDashboard from './components/ProjectDashboard/ProjectDashboard';
+import { useI18n } from './i18n/useI18n';
 
 function App() {
+  const { t } = useI18n();
   const editor = useVideoEditor();
   const auth = useAuthSession();
   const [activeRightTab, setActiveRightTab] = useState('scenes');
@@ -19,6 +22,10 @@ function App() {
   const [selectedSceneConfigId, setSelectedSceneConfigId] = useState(null);
   const [isAdminConsoleOpen, setIsAdminConsoleOpen] = useState(false);
   const [isProjectBrowserOpen, setIsProjectBrowserOpen] = useState(false);
+  const [dashboardSeriesContext, setDashboardSeriesContext] = useState({
+    selectedEpisodeId: '',
+    selectedSeriesId: '',
+  });
   const [isAuthDialogOpen, setIsAuthDialogOpen] = useState(false);
   const [creditDialogSourceCode, setCreditDialogSourceCode] = useState('header.dashboard');
   const [isCreditDialogOpen, setIsCreditDialogOpen] = useState(false);
@@ -104,12 +111,19 @@ function App() {
     [editor.keptScenes, selectedSceneConfig?.id],
   );
 
-  const handleOpenProject = useCallback((sessionId) => {
+  const handleOpenProject = useCallback((sessionId, dashboardContext = null) => {
     setActivePlayerSidebarSection(null);
 
     if (hasActiveBackgroundTask && editor.sessionId && editor.sessionId !== sessionId) {
-      alert('The current project still has a background task running. Return to that project or wait for it to finish before opening another one.');
+      alert(t('app.alerts.openProjectBusy'));
       return;
+    }
+
+    if (dashboardContext && typeof dashboardContext === 'object') {
+      setDashboardSeriesContext({
+        selectedEpisodeId: String(dashboardContext.selectedEpisodeId || ''),
+        selectedSeriesId: String(dashboardContext.selectedSeriesId || ''),
+      });
     }
 
     setIsProjectBrowserOpen(false);
@@ -119,18 +133,18 @@ function App() {
     }
 
     editor.loadSession(sessionId);
-  }, [editor, hasActiveBackgroundTask, hasVideo]);
+  }, [editor, hasActiveBackgroundTask, hasVideo, t]);
 
   const handleNewProject = useCallback((file) => {
     if (hasActiveBackgroundTask && hasVideo) {
-      alert('The current project still has a background task running. Wait for it to finish before creating a new project.');
+      alert(t('app.alerts.newProjectBusy'));
       return;
     }
 
     setActivePlayerSidebarSection(null);
     setIsProjectBrowserOpen(false);
     editor.setVideoFile(file);
-  }, [editor, hasActiveBackgroundTask, hasVideo]);
+  }, [editor, hasActiveBackgroundTask, hasVideo, t]);
 
   const handleCloseProject = useCallback(() => {
     setActivePlayerSidebarSection(null);
@@ -215,7 +229,7 @@ function App() {
           onOpenAuthDialog={handleOpenAuthDialog}
           onOpenCreditDialog={handleOpenCreditDialog}
           onOpenPremiumDialog={handleOpenPremiumDialog}
-          title="VideoForge Admin"
+          title={t('app.titles.admin')}
         />
         <AdminBootstrapSetup auth={auth} />
         {authDialog}
@@ -236,10 +250,10 @@ function App() {
           onOpenAuthDialog={handleOpenAuthDialog}
           onOpenCreditDialog={handleOpenCreditDialog}
           onOpenPremiumDialog={handleOpenPremiumDialog}
-          title="VideoForge Admin"
+          title={t('app.titles.admin')}
         >
           <button className="btn btn-ghost btn-sm" type="button" onClick={handleCloseAdminConsole}>
-            ← Studio
+            {`← ${t('dashboard.title')}`}
           </button>
         </AppHeader>
         <main className="app-main">
@@ -271,7 +285,7 @@ function App() {
           <div className="restore-loading">
             <div className="detecting-spinner" />
             <div style={{ marginTop: '16px', color: 'var(--text-secondary)' }}>
-              Loading project...
+              {t('app.loadingProject')}
             </div>
           </div>
         </main>
@@ -301,6 +315,9 @@ function App() {
           <ProjectDashboard
             onOpenProject={handleOpenProject}
             onNewProject={handleNewProject}
+            onSeriesContextChange={setDashboardSeriesContext}
+            selectedEpisodeId={dashboardSeriesContext.selectedEpisodeId}
+            selectedSeriesId={dashboardSeriesContext.selectedSeriesId}
           />
         </main>
         {authDialog}
@@ -323,42 +340,7 @@ function App() {
         onOpenPremiumDialog={handleOpenPremiumDialog}
         showPremiumButton
       >
-          {editor.isUploading && (
-            <span className="status-badge uploading">
-              ⬆️ Uploading {editor.uploadProgress}%
-            </span>
-          )}
-          {editor.autoSaveStatus === 'saving' && (
-            <span className="status-badge saving">💾 Saving...</span>
-          )}
-          {editor.autoSaveStatus === 'saved' && (
-            <span className="status-badge saved">✅ Saved</span>
-          )}
-          <div className="undo-redo-btns">
-            <button
-              className="btn btn-ghost btn-sm"
-              onClick={editor.undo}
-              disabled={!editor.canUndo}
-              title="Undo (Ctrl+Z)"
-            >
-              ↩
-            </button>
-            <button
-              className="btn btn-ghost btn-sm"
-              onClick={editor.redo}
-              disabled={!editor.canRedo}
-              title="Redo (Ctrl+Y)"
-            >
-              ↪
-            </button>
-          </div>
-          <button
-            className="btn btn-ghost btn-sm"
-            onClick={handleCloseProject}
-            title="Back to Projects"
-          >
-            ← Projects
-          </button>
+        <AppEditorHeaderStatus editor={editor} onCloseProject={handleCloseProject} />
       </AppHeader>
 
       {/* Upload progress bar */}

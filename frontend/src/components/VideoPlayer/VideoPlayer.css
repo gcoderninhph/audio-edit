@@ -277,7 +277,25 @@
 .volume-control {
   display: flex;
   align-items: center;
+  gap: 8px;
+}
+
+.volume-group {
+  display: inline-flex;
+  align-items: center;
   gap: 4px;
+}
+
+.volume-group-voiceover {
+  gap: 6px;
+}
+
+.volume-group-label {
+  min-width: 18px;
+  color: rgba(255, 255, 255, 0.72);
+  font-size: 0.68rem;
+  font-weight: 700;
+  text-align: center;
 }
 
 .volume-slider {

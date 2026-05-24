@@ -7,6 +7,7 @@ const PROJECT_METADATA_FILE = 'project.json'
 const PROJECT_SUBTITLES_DIR_NAME = 'subtitles'
 const PROJECT_VOICEOVER_SEGMENTS_DIR_NAME = 'voiceover-segments'
 const PROJECT_VOICEOVERS_DIR_NAME = 'voiceovers'
+const PROJECT_SCENE_GRID_FILE_NAME = 'scene-grid.png'
 
 function getWorkspaceProjectsRoot() {
   return path.resolve(app.getAppPath(), '..', PROJECTS_DIR_NAME)
@@ -79,6 +80,10 @@ export function getProjectVideoPath(projectId, fileName, projectsRoot = getProje
   return path.join(getProjectDirectory(projectId, projectsRoot), fileName)
 }
 
+export function getProjectSceneGridPath(projectId, projectsRoot = getProjectsRoot()) {
+  return path.join(getProjectDirectory(projectId, projectsRoot), PROJECT_SCENE_GRID_FILE_NAME)
+}
+
 export function getProjectVoiceoverPath(projectId, fileName, projectsRoot = getProjectsRoot()) {
   return path.join(getProjectVoiceoverDirectory(projectId, projectsRoot), fileName)
 }
@@ -97,6 +102,10 @@ export function getLegacyProjectVoiceoverPath(projectId, fileName, projectsRoot 
 
 export function buildProjectVideoUrl(projectId) {
   return `desktop://app/project-media/${encodeURIComponent(projectId)}`
+}
+
+export function buildProjectSceneGridUrl(projectId) {
+  return `desktop://app/project-media/${encodeURIComponent(projectId)}/${PROJECT_SCENE_GRID_FILE_NAME}`
 }
 
 export function assertProjectId(projectId) {

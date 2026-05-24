@@ -1,5 +1,6 @@
 import { useMemo, useState } from 'react';
 import DeveloperLocator from '../DeveloperLocator/DeveloperLocator';
+import { useI18n } from '../../i18n/useI18n';
 import {
   buildSeriesId,
   getNextEpisodeNumber,
@@ -11,6 +12,7 @@ import {
 } from './projectDashboardModel';
 
 export function ProjectInfoDialog({ onClose, onSave, project, seriesGroups }) {
+  const { t } = useI18n();
   const currentSeriesId = project?.series_id || SERIES_NONE_VALUE;
   const [episodeNumber, setEpisodeNumber] = useState(String(normalizeEpisodeNumber(project?.episode_number) || 1));
   const [newSeriesName, setNewSeriesName] = useState('');
@@ -19,6 +21,7 @@ export function ProjectInfoDialog({ onClose, onSave, project, seriesGroups }) {
   const selectedSeries = seriesGroups.find((group) => group.id === selectedSeriesId);
   const isSeriesSelected = selectedSeriesId !== SERIES_NONE_VALUE;
   const isNewSeries = selectedSeriesId === SERIES_NEW_VALUE;
+  const defaultTitle = getProjectTitle(project) || t('dashboard.untitledVideo');
 
   const resolvedEpisodeNumber = useMemo(() => {
     const normalizedEpisode = normalizeEpisodeNumber(episodeNumber);
@@ -29,7 +32,7 @@ export function ProjectInfoDialog({ onClose, onSave, project, seriesGroups }) {
 
   const handleSubmit = (event) => {
     event.preventDefault();
-    const cleanTitle = title.trim() || getProjectTitle(project);
+    const cleanTitle = title.trim() || defaultTitle;
     if (selectedSeriesId === SERIES_NONE_VALUE) {
       onSave({ episodeNumber: 0, seriesId: '', seriesName: '', title: cleanTitle });
       return;
@@ -53,36 +56,36 @@ export function ProjectInfoDialog({ onClose, onSave, project, seriesGroups }) {
       <form className="dashboard-dialog dev-locator-host" onSubmit={handleSubmit} onMouseDown={(event) => event.stopPropagation()}>
         <DeveloperLocator code="dashboard.project.edit-dialog" title="Project Info Dialog" />
         <div className="dashboard-dialog-heading">
-          <p>Video info</p>
-          <h2>Edit video</h2>
+          <p>{t('dashboard.videoInfo')}</p>
+          <h2>{t('dashboard.editVideo')}</h2>
         </div>
         <label className="dashboard-field">
-          <span>Video name</span>
+          <span>{t('dashboard.videoName')}</span>
           <input value={title} onChange={(event) => setTitle(event.target.value)} autoFocus />
         </label>
         <label className="dashboard-field">
-          <span>Series</span>
+          <span>{t('dashboard.seriesField')}</span>
           <select value={selectedSeriesId} onChange={(event) => handleSeriesChange(event.target.value)}>
-            <option value={SERIES_NONE_VALUE}>None</option>
+            <option value={SERIES_NONE_VALUE}>{t('dashboard.none')}</option>
             {seriesGroups.map((group) => <option key={group.id} value={group.id}>{group.name}</option>)}
-            <option value={SERIES_NEW_VALUE}>New series</option>
+            <option value={SERIES_NEW_VALUE}>{t('dashboard.newSeries')}</option>
           </select>
         </label>
         {isNewSeries && (
           <label className="dashboard-field">
-            <span>Series name</span>
+            <span>{t('dashboard.seriesName')}</span>
             <input value={newSeriesName} onChange={(event) => setNewSeriesName(event.target.value)} />
           </label>
         )}
         {isSeriesSelected && (
           <label className="dashboard-field">
-            <span>Episode</span>
+            <span>{t('dashboard.episodeField')}</span>
             <input type="number" min="1" step="1" value={episodeNumber} onChange={(event) => setEpisodeNumber(event.target.value)} />
           </label>
         )}
         <div className="dashboard-dialog-actions">
-          <button type="button" className="btn btn-ghost" onClick={onClose}>Cancel</button>
-          <button type="submit" className="btn btn-primary">Save</button>
+          <button type="button" className="btn btn-ghost" onClick={onClose}>{t('dashboard.cancel')}</button>
+          <button type="submit" className="btn btn-primary">{t('dashboard.save')}</button>
         </div>
       </form>
     </div>
@@ -90,6 +93,7 @@ export function ProjectInfoDialog({ onClose, onSave, project, seriesGroups }) {
 }
 
 export function CreateSeriesDialog({ onClose, onCreate, standaloneProjects }) {
+  const { t } = useI18n();
   const [seriesName, setSeriesName] = useState('');
   const [selectedIds, setSelectedIds] = useState(() => new Set(standaloneProjects.map((project) => project.id)));
   const canCreate = normalizeSeriesName(seriesName) && selectedIds.size > 0;
@@ -114,11 +118,11 @@ export function CreateSeriesDialog({ onClose, onCreate, standaloneProjects }) {
       <form className="dashboard-dialog dev-locator-host" onSubmit={handleSubmit} onMouseDown={(event) => event.stopPropagation()}>
         <DeveloperLocator code="dashboard.series.create-dialog" title="Create Series Dialog" />
         <div className="dashboard-dialog-heading">
-          <p>Series</p>
-          <h2>Create series</h2>
+          <p>{t('dashboard.series')}</p>
+          <h2>{t('dashboard.createSeriesTitle')}</h2>
         </div>
         <label className="dashboard-field">
-          <span>Series name</span>
+          <span>{t('dashboard.seriesName')}</span>
           <input value={seriesName} onChange={(event) => setSeriesName(event.target.value)} autoFocus />
         </label>
         <div className="dashboard-video-checklist">
@@ -130,8 +134,8 @@ export function CreateSeriesDialog({ onClose, onCreate, standaloneProjects }) {
           ))}
         </div>
         <div className="dashboard-dialog-actions">
-          <button type="button" className="btn btn-ghost" onClick={onClose}>Cancel</button>
-          <button type="submit" className="btn btn-primary" disabled={!canCreate}>Create</button>
+          <button type="button" className="btn btn-ghost" onClick={onClose}>{t('dashboard.cancel')}</button>
+          <button type="submit" className="btn btn-primary" disabled={!canCreate}>{t('dashboard.create')}</button>
         </div>
       </form>
     </div>

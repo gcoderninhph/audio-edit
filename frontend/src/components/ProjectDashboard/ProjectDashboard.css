@@ -369,6 +369,31 @@
   text-align: center;
   white-space: nowrap;
 }
+
+.series-volume-controls {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.series-volume-group {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.series-volume-label {
+  min-width: 18px;
+  color: rgba(255, 255, 255, 0.7);
+  font-size: 0.68rem;
+  font-weight: 700;
+  text-align: center;
+}
+
+.series-volume-group .volume-slider {
+  width: 80px;
+}
+
 .series-video-empty { min-height: 320px; display: grid; place-items: center; color: var(--text-muted); }
 .series-player-meta { margin-top: 14px; align-items: center; }
 .series-player-meta span { color: var(--text-muted); font-size: 0.78rem; font-weight: 700; }

@@ -13,6 +13,10 @@ import { useSubtitleTracks } from './useSubtitleTracks';
 import { useVideoEditorVoiceoverState } from './useVideoEditorVoiceoverState';
 import { DEFAULT_EXPORT_QUALITY_PROFILE_ID } from '../utils/exportQualityProfile';
 import { DEFAULT_SUBTITLE_SETTINGS } from '../utils/subtitleRenderModel';
+import { getLocalProjectSceneGrid, saveLocalProjectSceneGrid } from '../utils/projectStorage';
+import { buildSceneGridImage, extractSceneGridThumbnails } from '../utils/sceneGridThumbnails';
+
+const FIXED_SCENE_DETECTION_SENSITIVITY = 0.5;
 
 export function useVideoEditor() {
   const [videoFile, setVideoFileState] = useState(null);
@@ -45,6 +49,7 @@ export function useVideoEditor() {
     activeSubtitleLanguage,
     originalSubtitles,
     resetSubtitleState,
+    removeActiveSubtitle,
     restoreSubtitleState,
     setActiveSubtitleLanguage,
     setSubtitleTracks,
@@ -263,6 +268,51 @@ export function useVideoEditor() {
     resetHistory();
   }, [clearExportResult, isDetecting, resetHistory, resetSubtitleState, restoreExportAudioMix, setAutoSaveStatus, setExportQualityProfileId, setFrameBackground, setFramePresetId, setSceneBulkMotionRules, setSubtitleSettings, videoUrl]);
 
+  const hydrateThumbnailsFromSceneGrid = useCallback(async (projectId, indexedScenes) => {
+    const sceneGridRecord = await getLocalProjectSceneGrid(projectId);
+    if (!sceneGridRecord?.url) {
+      return null;
+    }
+
+    const thumbnailsFromGrid = await extractSceneGridThumbnails(sceneGridRecord.url, indexedScenes, {
+      cellHeight: sceneGridRecord.cellHeight,
+      cellWidth: sceneGridRecord.cellWidth,
+      columns: sceneGridRecord.columns,
+    });
+
+    setThumbnails(thumbnailsFromGrid);
+    return thumbnailsFromGrid;
+  }, []);
+
+  useEffect(() => {
+    if (!sessionId || scenes.length === 0 || Object.keys(thumbnails).length > 0) {
+      return;
+    }
+
+    let isDisposed = false;
+
+    const hydrateStoredGrid = async () => {
+      try {
+        const indexedScenes = scenes.map((scene, sceneIndex) => ({
+          ...scene,
+          thumbnailIndex: Number.isFinite(scene.thumbnailIndex) ? scene.thumbnailIndex : sceneIndex,
+        }));
+        const thumbnailsFromGrid = await hydrateThumbnailsFromSceneGrid(sessionId, indexedScenes);
+        if (!isDisposed && thumbnailsFromGrid && Object.keys(thumbnailsFromGrid).length > 0) {
+          setScenes(indexedScenes);
+        }
+      } catch {
+        // Keep empty thumbnails; detection flow can regenerate if needed.
+      }
+    };
+
+    void hydrateStoredGrid();
+
+    return () => {
+      isDisposed = true;
+    };
+  }, [hydrateThumbnailsFromSceneGrid, scenes, sessionId, thumbnails]);
+
   const startDetection = useCallback(async () => {
     if (!videoFile) return;
     const currentSessionId = sessionIdRef.current;
@@ -282,30 +332,70 @@ export function useVideoEditor() {
 
     try {
       const detectedScenes = await detectScenes(videoFile, {
-        sensitivity,
+        sensitivity: FIXED_SCENE_DETECTION_SENSITIVITY,
         signal: detectAbortControllerRef.current.signal,
         onProgress: (p) => {
           if (sessionIdRef.current === currentSessionId) setDetectProgress(p);
         },
       });
       if (sessionIdRef.current !== currentSessionId) return;
-      
-      setScenes(detectedScenes);
+
+      const indexedScenes = detectedScenes.map((scene, sceneIndex) => ({
+        ...scene,
+        thumbnailIndex: sceneIndex,
+      }));
+
+      setScenes(indexedScenes);
       setIsDetecting(false);
       if (videoUrl) {
         (async () => {
-          for (const scene of detectedScenes) {
+          const thumbnailUrlsByIndex = [];
+          const nextThumbnails = {};
+
+          for (const scene of indexedScenes) {
             if (sessionIdRef.current !== currentSessionId) break;
             const midTime = scene.start + scene.duration / 2;
             try {
               const thumbUrl = await generateThumbnail(videoUrl, midTime);
+              if (!thumbUrl) {
+                continue;
+              }
+
+              thumbnailUrlsByIndex[scene.thumbnailIndex] = thumbUrl;
+              nextThumbnails[scene.thumbnailIndex] = thumbUrl;
+              nextThumbnails[scene.id] = thumbUrl;
+
               if (sessionIdRef.current === currentSessionId) {
-                setThumbnails(prev => ({ ...prev, [scene.id]: thumbUrl }));
+                setThumbnails({ ...nextThumbnails });
               }
             } catch {
               console.warn(`Failed to generate thumbnail for scene ${scene.id}`);
             }
           }
+
+          if (sessionIdRef.current !== currentSessionId) {
+            return;
+          }
+
+          const sceneGridImage = await buildSceneGridImage(thumbnailUrlsByIndex, {
+            columns: 10,
+            cellHeight: 108,
+            cellWidth: 192,
+          });
+
+          if (!sceneGridImage || !sessionIdRef.current) {
+            return;
+          }
+
+          await saveLocalProjectSceneGrid(sessionIdRef.current, {
+            bytes: sceneGridImage.bytes,
+            cellHeight: sceneGridImage.cellHeight,
+            cellWidth: sceneGridImage.cellWidth,
+            columns: sceneGridImage.columns,
+            count: sceneGridImage.count,
+          });
+
+          await hydrateThumbnailsFromSceneGrid(sessionIdRef.current, indexedScenes);
         })();
       }
     } catch (error) {
@@ -319,7 +409,7 @@ export function useVideoEditor() {
       alert('Scene detection failed: ' + error.message);
       setIsDetecting(false);
     }
-  }, [videoFile, videoUrl, sensitivity, scenes, pushState, getCurrentSnapshot]);
+  }, [videoFile, videoUrl, scenes, pushState, getCurrentSnapshot, hydrateThumbnailsFromSceneGrid]);
 
   const { deleteAllScenes, restoreAllScenes, seekToScene, toggleDeleteScene } = useEditorSceneListActions({
     clearExportResult,
@@ -331,7 +421,7 @@ export function useVideoEditor() {
     videoRef,
   });
 
-  const { clearSubtitles, clearVoiceover, startTranscription, startTranslation, startVoiceover, updateSubtitle } = useVideoEditorSubtitleActions({
+  const { clearSubtitles, clearVoiceover, removeSubtitle, startTranscription, startTranslation, startVoiceover, updateSubtitle } = useVideoEditorSubtitleActions({
     activeSubtitleLanguage,
     deletedSceneIds,
     getCurrentSnapshot,
@@ -356,6 +446,7 @@ export function useVideoEditor() {
     subtitleTracks,
     transcriptionJobId,
     translationJobId,
+    removeActiveSubtitle,
     updateActiveSubtitle,
     voiceoverTrack,
     videoDuration,
@@ -393,7 +484,7 @@ export function useVideoEditor() {
     activeSubtitleLanguage, setActiveSubtitleLanguage, subtitleLanguageOptions,
     subtitles, filteredSubtitles, isTranscribing, transcribeProgress, startTranscription,
     isTranslating, translateProgress, startTranslation,
-    isGeneratingVoiceover, voiceoverProgress, lastVoiceoverAudioName: localizedVoiceoverAudioName, voiceoverTrack: localizedVoiceoverTrack, clearSubtitles, clearVoiceover, startVoiceover, updateSubtitle,
+    isGeneratingVoiceover, voiceoverProgress, lastVoiceoverAudioName: localizedVoiceoverAudioName, voiceoverTrack: localizedVoiceoverTrack, clearSubtitles, clearVoiceover, startVoiceover, updateSubtitle, removeSubtitle,
     undo: performUndo, redo: performRedo, canUndo, canRedo, historyList, loadHistoryList, loadSession, deleteSession,
   };
 }

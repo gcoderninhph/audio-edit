@@ -3,6 +3,7 @@ import { appendDebugLog } from './debugLog.mjs'
 import { getCurrentProjectVoiceoverTrack, migrateStoredVoiceover, normalizeVoiceoverTrackManifest } from './projectVoiceoverStore.mjs'
 import {
   assertProjectId,
+  buildProjectSceneGridUrl,
   buildProjectVideoUrl,
   buildStoredVideoName,
   buildStoredVoiceoverName,
@@ -14,6 +15,7 @@ import {
   getProjectsRootCandidates,
   getLegacyProjectVoiceoverPath,
   getProjectDirectory,
+  getProjectSceneGridPath,
   getProjectVideoPath,
   getProjectVoiceoverDirectory,
   getProjectVoiceoverPath,
@@ -65,6 +67,7 @@ function buildProjectRecord(projectId, payload, existingRecord = null) {
       payload.subtitleTrackManifest ?? existingRecord?.subtitle_tracks ?? null,
     ),
     sensitivity: payload.sensitivity ?? existingRecord?.sensitivity ?? 2.5,
+    scene_grid: payload.sceneGrid ?? existingRecord?.scene_grid ?? null,
     transcription_job_id: hasTranscriptionJobId ? payload.transcriptionJobId : existingRecord?.transcription_job_id ?? null,
     translation_job_id: hasTranslationJobId ? payload.translationJobId : existingRecord?.translation_job_id ?? null,
     voiceover_filename: hasVoiceoverFilename ? payload.voiceoverFilename : existingRecord?.voiceover_filename ?? null,
@@ -183,6 +186,39 @@ async function saveVoiceoverFile(payload) {
   }
 }
 
+async function saveSceneGrid(payload) {
+  const projectId = assertProjectId(payload?.projectId)
+  const existingRecord = await readProjectMetadata(projectId)
+  await ensureProjectDirectory(projectId)
+
+  const sceneGridBytes = toBuffer(payload?.bytes)
+  if (!sceneGridBytes) {
+    throw new Error('Missing scene grid image content for desktop persistence.')
+  }
+
+  const targetPath = getProjectSceneGridPath(projectId)
+  await writeFile(targetPath, sceneGridBytes)
+  const fileStats = await stat(targetPath)
+
+  const sceneGrid = {
+    file_name: 'scene-grid.png',
+    columns: Number.isFinite(payload?.columns) ? payload.columns : 0,
+    cell_height: Number.isFinite(payload?.cellHeight) ? payload.cellHeight : 0,
+    cell_width: Number.isFinite(payload?.cellWidth) ? payload.cellWidth : 0,
+    count: Number.isFinite(payload?.count) ? payload.count : 0,
+    size: fileStats.size,
+  }
+
+  const nextRecord = buildProjectRecord(projectId, { sceneGrid }, existingRecord)
+  await writeProjectMetadata(projectId, nextRecord)
+
+  return {
+    ...sceneGrid,
+    projectId,
+    url: buildProjectSceneGridUrl(projectId),
+  }
+}
+
 async function saveProject(payload) {
   const projectId = assertProjectId(payload?.sessionId)
   const existingRecord = await readProjectMetadata(projectId)
@@ -288,6 +324,46 @@ export async function resolveProjectVideoPath(projectId) {
   }
 
   return null
+}
+
+export async function resolveProjectSceneGridPath(projectId) {
+  const projectRecord = await getProject(projectId)
+
+  for (const projectsRoot of getProjectsRootCandidates(projectRecord._storage_root)) {
+    const candidatePath = getProjectSceneGridPath(projectRecord.id, projectsRoot)
+
+    try {
+      await stat(candidatePath)
+      return candidatePath
+    } catch (error) {
+      if (error?.code !== 'ENOENT') {
+        throw error
+      }
+    }
+  }
+
+  return null
+}
+
+async function getProjectSceneGrid(projectId) {
+  const projectRecord = await getProject(projectId)
+  const resolvedPath = await resolveProjectSceneGridPath(projectId)
+  if (!resolvedPath) {
+    return null
+  }
+
+  const sceneGrid = projectRecord.scene_grid || {}
+
+  return {
+    columns: sceneGrid.columns || 0,
+    count: sceneGrid.count || 0,
+    fileName: sceneGrid.file_name || 'scene-grid.png',
+    cellHeight: sceneGrid.cell_height || 0,
+    cellWidth: sceneGrid.cell_width || 0,
+    projectId: projectRecord.id,
+    size: sceneGrid.size || 0,
+    url: buildProjectSceneGridUrl(projectRecord.id),
+  }
 }
 
 async function getProjectVideo(projectId) {
@@ -440,10 +516,12 @@ async function deleteProject(projectId) {
 export function registerProjectStoreIpc(ipcMain) {
   ipcMain.handle('projects:save-video', (_event, payload) => saveVideoFile(payload))
   ipcMain.handle('projects:save-voiceover', (_event, payload) => saveVoiceoverFile(payload))
+  ipcMain.handle('projects:save-scene-grid', (_event, payload) => saveSceneGrid(payload))
   ipcMain.handle('projects:save-project', (_event, payload) => saveProject(payload))
   ipcMain.handle('projects:list', () => listProjects())
   ipcMain.handle('projects:get', (_event, projectId) => getProject(projectId))
   ipcMain.handle('projects:get-video', (_event, projectId) => getProjectVideo(projectId))
+  ipcMain.handle('projects:get-scene-grid', (_event, projectId) => getProjectSceneGrid(projectId))
   ipcMain.handle('projects:read-video-bytes', (_event, projectId) => readProjectVideoBytes(projectId))
   ipcMain.handle('projects:get-voiceover', (_event, projectId) => getProjectVoiceover(projectId))
   ipcMain.handle('projects:read-voiceover-bytes', (_event, projectId) => readProjectVoiceoverBytes(projectId))

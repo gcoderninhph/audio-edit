@@ -1,11 +1,13 @@
 import { useEffect, useRef, useState } from 'react';
 import DeveloperLocator from '../DeveloperLocator/DeveloperLocator';
+import { useI18n } from '../../i18n/useI18n';
 import './AuthDialog.css';
 
 export default function AuthHeaderActions({ auth, headerLocatorCode, onOpenAdminConsole, onOpenCreditsDialog, onOpenLogin }) {
+  const { t } = useI18n();
   const menuRef = useRef(null);
   const [isUserMenuOpen, setIsUserMenuOpen] = useState(false);
-  const userLabel = auth.user?.displayName || auth.user?.email || 'Signed in';
+  const userLabel = auth.user?.displayName || auth.user?.email || t('auth.signedIn');
   const creditBalance = Math.max(0, Number(auth.user?.credits) || 0);
   const canOpenAdminConsole = auth.isAdmin && !auth.requiresAdminSetup;
   const canOpenCreditsDialog = auth.isAuthenticated && typeof onOpenCreditsDialog === 'function';
@@ -48,15 +50,17 @@ export default function AuthHeaderActions({ auth, headerLocatorCode, onOpenAdmin
       {auth.isAuthenticated ? (
         <>
           {canOpenAdminConsole && typeof onOpenAdminConsole === 'function' && (
-            <button type="button" className="btn btn-ghost btn-sm" onClick={onOpenAdminConsole}>Admin</button>
+            <button type="button" className="btn btn-ghost btn-sm" onClick={onOpenAdminConsole}>{t('auth.admin')}</button>
           )}
           <button
             type="button"
             className={`auth-credit-pill auth-credit-pill-button${canOpenCreditsDialog ? '' : ' auth-credit-pill-static'}`}
-            title={canOpenCreditsDialog ? `${creditBalance} credits remaining. Click to view credit packages.` : `${creditBalance} credits remaining`}
+            title={canOpenCreditsDialog
+              ? t('auth.creditsRemainingOpen', { credits: creditBalance })
+              : t('auth.creditsRemaining', { credits: creditBalance })}
             onClick={canOpenCreditsDialog ? () => onOpenCreditsDialog(headerLocatorCode || 'header.dashboard') : undefined}
           >
-            {creditBalance} credits
+            {t('auth.creditsLabel', { credits: creditBalance })}
           </button>
           <div className="auth-user-menu dev-locator-host" ref={menuRef}>
             <button
@@ -74,7 +78,7 @@ export default function AuthHeaderActions({ auth, headerLocatorCode, onOpenAdmin
               <div className="auth-user-dropdown dev-locator-host" role="menu">
                 <DeveloperLocator code={`${headerLocatorCode || 'header.dashboard'}.account-dropdown`} title="Header Account Dropdown" />
                 <button type="button" className="auth-user-dropdown-item" role="menuitem" onClick={handleLogout}>
-                  Logout
+                  {t('auth.logout')}
                 </button>
               </div>
             )}
@@ -82,7 +86,7 @@ export default function AuthHeaderActions({ auth, headerLocatorCode, onOpenAdmin
         </>
       ) : (
         <button type="button" className="btn btn-primary btn-sm" onClick={onOpenLogin} disabled={auth.isBusy}>
-          Login
+          {t('auth.login')}
         </button>
       )}
     </div>

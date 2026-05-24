@@ -26,6 +26,7 @@ export function useVideoEditorSubtitleActions({
   subtitleTracks,
   transcriptionJobId,
   translationJobId,
+  removeActiveSubtitle,
   updateActiveSubtitle,
   videoDuration,
   videoFile,
@@ -94,10 +95,16 @@ export function useVideoEditorSubtitleActions({
     updateActiveSubtitle(id, newText)
   }, [getCurrentSnapshot, pushState, updateActiveSubtitle])
 
+  const removeSubtitle = useCallback((id) => {
+    pushState(getCurrentSnapshot())
+    removeActiveSubtitle(id)
+  }, [getCurrentSnapshot, pushState, removeActiveSubtitle])
+
   return {
     startTranscription,
     startTranslation,
     startVoiceover,
+    removeSubtitle,
     updateSubtitle,
   }
 }

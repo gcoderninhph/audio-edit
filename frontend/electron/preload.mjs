@@ -36,16 +36,21 @@ contextBridge.exposeInMainWorld('desktopBridge', {
     saveBytes: (payload) => ipcRenderer.invoke('export-output:save-bytes', payload),
     revealFile: (filePath) => ipcRenderer.invoke('export-output:reveal-file', filePath),
   },
+  windowGuard: {
+    setExportRunning: (isRunning) => ipcRenderer.invoke('window-guard:set-export-running', Boolean(isRunning)),
+  },
   systemResources: {
     getSubtitleFont: () => ipcRenderer.invoke('system-resources:get-subtitle-font'),
   },
   projectStore: {
     saveVideoFile: (payload) => ipcRenderer.invoke('projects:save-video', payload),
     saveVoiceoverFile: (payload) => ipcRenderer.invoke('projects:save-voiceover', payload),
+    saveSceneGrid: (payload) => ipcRenderer.invoke('projects:save-scene-grid', payload),
     saveProject: (payload) => ipcRenderer.invoke('projects:save-project', payload),
     listProjects: () => ipcRenderer.invoke('projects:list'),
     getProject: (projectId) => ipcRenderer.invoke('projects:get', projectId),
     getProjectVideo: (projectId) => ipcRenderer.invoke('projects:get-video', projectId),
+    getProjectSceneGrid: (projectId) => ipcRenderer.invoke('projects:get-scene-grid', projectId),
     readProjectVideoBytes: (projectId) => ipcRenderer.invoke('projects:read-video-bytes', projectId),
     getProjectVoiceover: (projectId) => ipcRenderer.invoke('projects:get-voiceover', projectId),
     readProjectVoiceoverBytes: (projectId) => ipcRenderer.invoke('projects:read-voiceover-bytes', projectId),

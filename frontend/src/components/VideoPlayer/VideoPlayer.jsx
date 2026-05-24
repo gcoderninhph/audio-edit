@@ -6,6 +6,13 @@ import {
 } from '../../utils/frameComposer';
 import { getSubtitleAnchorOption } from '../../utils/subtitleRenderModel';
 import { getKeptScenes, getKeptDuration, mapRealToKeptTime, mapKeptToRealTime } from '../../utils/timeMapping';
+import {
+  applyMediaVolume,
+  formatPlaybackTimestamp,
+  getPlaybackProgress,
+  resolvePointerSeekTime,
+  toggleMediaPlayback,
+} from '../../utils/videoDisplayLogic';
 import VideoPlayerFrameControls from './VideoPlayerFrameControls';
 import VideoPlayerFrameSummaryBar from './VideoPlayerFrameSummaryBar';
 import VideoPlayerPreviewStage from './VideoPlayerPreviewStage';
@@ -13,6 +20,7 @@ import VideoPlayerSidebar from './VideoPlayerSidebar';
 import VideoPlayerTransportControls from './VideoPlayerTransportControls';
 import useVideoPlayerVoiceover from './useVideoPlayerVoiceover';
 import DeveloperLocator from '../DeveloperLocator/DeveloperLocator';
+import { useI18n } from '../../i18n/useI18n';
 import './VideoPlayer.css';
 
 const FRAME_SIDEBAR_SECTIONS = Object.freeze({
@@ -24,23 +32,6 @@ const FRAME_SIDEBAR_SECTIONS = Object.freeze({
   SCENE: 'scene',
   SCENE_BULK: 'scene-bulk',
 });
-
-const SIDEBAR_TITLES = Object.freeze({
-  [FRAME_SIDEBAR_SECTIONS.FRAME]: 'Adjust video frame',
-  [FRAME_SIDEBAR_SECTIONS.EXPORT]: 'Adjust export output',
-  [FRAME_SIDEBAR_SECTIONS.BACKGROUND]: 'Adjust video background',
-  [FRAME_SIDEBAR_SECTIONS.AUDIO]: 'Adjust preview and export audio',
-  [FRAME_SIDEBAR_SECTIONS.SUBTITLE]: 'Adjust preview and export subtitles',
-  [FRAME_SIDEBAR_SECTIONS.SCENE]: 'Adjust scene motion',
-  [FRAME_SIDEBAR_SECTIONS.SCENE_BULK]: 'Apply scene motion rules',
-});
-
-function formatTime(seconds) {
-  if (!seconds || !isFinite(seconds)) return '00:00';
-  const mins = Math.floor(seconds / 60);
-  const secs = Math.floor(seconds % 60);
-  return `${String(mins).padStart(2, '0')}:${String(secs).padStart(2, '0')}`;
-}
 
 export default function VideoPlayer({
   videoUrl,
@@ -81,6 +72,7 @@ export default function VideoPlayer({
   onCloseSidebarSection,
   hideWatermark = false,
 }) {
+  const { t } = useI18n();
   const [isPlaying, setIsPlaying] = useState(false);
   const [duration, setDuration] = useState(0);
   const [realCurrentTime, setRealCurrentTime] = useState(0);
@@ -99,7 +91,16 @@ export default function VideoPlayer({
     return keptDuration;
   }, [duration, hasSceneCuts, keptDuration]);
   const frameBackgroundLabel = useMemo(() => getFrameBackgroundLabel(frameBackground), [frameBackground]);
-  const sidebarTitle = SIDEBAR_TITLES[activeSidebarSection] || 'Adjust video';
+  const sidebarTitleBySection = useMemo(() => ({
+    [FRAME_SIDEBAR_SECTIONS.FRAME]: t('panel.videoPlayer.sidebar.frame'),
+    [FRAME_SIDEBAR_SECTIONS.EXPORT]: t('panel.videoPlayer.sidebar.export'),
+    [FRAME_SIDEBAR_SECTIONS.BACKGROUND]: t('panel.videoPlayer.sidebar.background'),
+    [FRAME_SIDEBAR_SECTIONS.AUDIO]: t('panel.videoPlayer.sidebar.audio'),
+    [FRAME_SIDEBAR_SECTIONS.SUBTITLE]: t('panel.videoPlayer.sidebar.subtitle'),
+    [FRAME_SIDEBAR_SECTIONS.SCENE]: t('panel.videoPlayer.sidebar.scene'),
+    [FRAME_SIDEBAR_SECTIONS.SCENE_BULK]: t('panel.videoPlayer.sidebar.sceneBulk'),
+  }), [t]);
+  const sidebarTitle = sidebarTitleBySection[activeSidebarSection] || t('panel.videoPlayer.sidebar.defaultTitle');
   const subtitleAnchorLabel = useMemo(() => getSubtitleAnchorOption(subtitleSettings?.anchor).label, [subtitleSettings]);
   const {
     voiceoverRef,
@@ -162,50 +163,35 @@ export default function VideoPlayer({
   const handlePlayPause = useCallback(() => {
     const mediaElement = videoRef.current;
     if (!mediaElement) return;
-
-    if (!mediaElement.paused) {
-      mediaElement.pause();
-      return;
-    }
-
-    const reachedEnd = mediaElement.ended
-      || (Number.isFinite(mediaElement.duration)
-        && mediaElement.duration > 0
-        && mediaElement.currentTime >= mediaElement.duration - 0.05);
-
-    if (reachedEnd) {
-      const restartTime = keptScenes[0]?.start ?? 0;
-      mediaElement.currentTime = restartTime;
-      setRealCurrentTime(restartTime);
-      onTimeUpdate?.(restartTime);
-    }
-
-    const playPromise = mediaElement.play();
-    if (playPromise && typeof playPromise.then === 'function') {
-      playPromise
-        .then(() => {
-          syncPlaybackState();
-        })
-        .catch((error) => {
-          console.error('Video playback failed:', error);
-          setIsPlaying(false);
-        });
-      return;
-    }
-
-    syncPlaybackState();
+    void toggleMediaPlayback(mediaElement, {
+      restartTime: keptScenes[0]?.start ?? 0,
+      onPaused: () => setIsPlaying(false),
+      onPlaying: () => syncPlaybackState(),
+      onRestart: (nextTime) => {
+        setRealCurrentTime(nextTime);
+        onTimeUpdate?.(nextTime);
+      },
+      onError: (error) => {
+        console.error('Video playback failed:', error);
+        setIsPlaying(false);
+      },
+    });
   }, [keptScenes, onTimeUpdate, syncPlaybackState, videoRef]);
 
   const handleSeek = useCallback((event) => {
     if (!seekBarRef.current || !videoRef.current || displayedDuration <= 0) return;
 
-    const rect = seekBarRef.current.getBoundingClientRect();
-    const x = event.clientX - rect.left;
-    const percent = Math.max(0, Math.min(1, x / rect.width));
-    const targetDisplayedTime = percent * displayedDuration;
-    const targetRealTime = hasSceneCuts
-      ? mapKeptToRealTime(targetDisplayedTime, keptScenes)
-      : targetDisplayedTime;
+    const targetRealTime = resolvePointerSeekTime({
+      event,
+      seekContainer: seekBarRef.current,
+      duration: displayedDuration,
+      mapTargetTime: (targetDisplayedTime) => (hasSceneCuts
+        ? mapKeptToRealTime(targetDisplayedTime, keptScenes)
+        : targetDisplayedTime),
+    });
+    if (!Number.isFinite(targetRealTime)) {
+      return;
+    }
 
     videoRef.current.currentTime = targetRealTime;
     setRealCurrentTime(targetRealTime);
@@ -221,7 +207,7 @@ export default function VideoPlayer({
       onFrameBackgroundChange?.(nextBackground);
     } catch (error) {
       console.error('Background image selection failed:', error);
-      alert(`Unable to use the selected cover image: ${error.message}`);
+      alert(error?.message || 'Unable to use the selected cover image.');
     } finally {
       event.target.value = '';
     }
@@ -259,14 +245,14 @@ export default function VideoPlayer({
       return;
     }
 
-    mediaElement.volume = videoVolume;
+    applyMediaVolume(mediaElement, videoVolume, 1);
   }, [videoRef, videoVolume]);
 
   const handlePlay = useCallback(() => syncPlaybackState(), [syncPlaybackState]);
   const handlePause = useCallback(() => setIsPlaying(false), []);
   const handleEnded = useCallback(() => setIsPlaying(false), []);
 
-  const progress = displayedDuration > 0 ? (displayedTime / displayedDuration) * 100 : 0;
+  const progress = getPlaybackProgress(displayedTime, displayedDuration);
 
   const activeSubtitle = subtitles?.find(
     (subtitle) => realCurrentTime >= subtitle.start && realCurrentTime <= subtitle.end,
@@ -347,19 +333,22 @@ export default function VideoPlayer({
       <VideoPlayerTransportControls
         isPlaying={isPlaying}
         onPlayPause={handlePlayPause}
-        timeLabel={`${formatTime(displayedTime)} / ${formatTime(displayedDuration)}`}
+        timeLabel={`${formatPlaybackTimestamp(displayedTime)} / ${formatPlaybackTimestamp(displayedDuration)}`}
         progress={progress}
         onSeek={handleSeek}
         seekBarRef={seekBarRef}
+        hasVoiceoverTrack={hasVoiceoverTrack}
         videoVolume={videoVolume}
+        voiceoverVolume={voiceoverVolume}
         onVideoVolumeChange={onVideoVolumeChange}
+        onVoiceoverVolumeChange={onVoiceoverVolumeChange}
         onToggleVideoMute={onToggleVideoMute}
       />
 
       {currentScene && (
         <div className="scene-indicator">
-          Scene <span className="current-scene-label">#{keptScenes.findIndex((scene) => scene.id === currentScene.id) + 1}</span>
-          {' '}({formatTime(currentScene.start)} - {formatTime(currentScene.end)})
+          {t('panel.videoPlayer.sceneIndicator.scene')} <span className="current-scene-label">#{keptScenes.findIndex((scene) => scene.id === currentScene.id) + 1}</span>
+          {' '}({formatPlaybackTimestamp(currentScene.start)} - {formatPlaybackTimestamp(currentScene.end)})
         </div>
       )}
     </div>

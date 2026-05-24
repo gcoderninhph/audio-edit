@@ -32,10 +32,20 @@ export function useEditorSceneListActions({
     setDeletedSceneIds(new Set(scenes.map((scene) => scene.id)));
   }, [clearExportResult, getCurrentSnapshot, pushState, scenes, setDeletedSceneIds]);
 
-  const seekToScene = useCallback((scene) => {
+  const seekToScene = useCallback((scene, shouldPlay = false) => {
     if (!scene) return;
     setCurrentTime(scene.start);
-    if (videoRef.current) videoRef.current.currentTime = scene.start;
+    if (!videoRef.current) {
+      return;
+    }
+
+    videoRef.current.currentTime = scene.start;
+    if (shouldPlay) {
+      const playPromise = videoRef.current.play();
+      if (playPromise && typeof playPromise.catch === 'function') {
+        playPromise.catch(() => {});
+      }
+    }
   }, [setCurrentTime, videoRef]);
 
   return { deleteAllScenes, restoreAllScenes, seekToScene, toggleDeleteScene };

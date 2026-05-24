@@ -134,6 +134,98 @@
   line-height: 1;
 }
 
+.header-language-switcher {
+  position: relative;
+}
+
+.header-language-trigger {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-height: 32px;
+  padding: 4px 10px;
+  border-radius: 10px;
+  border: 1px solid rgba(148, 163, 184, 0.24);
+  background: rgba(15, 23, 42, 0.22);
+  color: #cbd5e1;
+  cursor: pointer;
+  transition: border-color 0.2s var(--ease-out), background 0.2s var(--ease-out), transform 0.2s var(--ease-out);
+}
+
+.header-language-trigger:hover,
+.header-language-trigger.is-open {
+  border-color: rgba(148, 163, 184, 0.36);
+  background: rgba(30, 41, 59, 0.34);
+  transform: translateY(-1px);
+}
+
+.header-language-trigger-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.header-language-trigger-text {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  line-height: 1.05;
+}
+
+.header-language-trigger-label {
+  font-size: 0.6rem;
+  color: var(--text-muted);
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.header-language-trigger-value {
+  font-size: 0.75rem;
+  color: var(--text-primary);
+  font-weight: 600;
+}
+
+.header-language-menu {
+  position: absolute;
+  right: 0;
+  top: calc(100% + 8px);
+  width: 170px;
+  border-radius: 12px;
+  border: 1px solid var(--border-color);
+  background: rgba(15, 23, 42, 0.96);
+  box-shadow: 0 16px 28px rgba(2, 6, 23, 0.42);
+  overflow: hidden;
+  z-index: 70;
+}
+
+.header-language-option {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 10px 12px;
+  border: none;
+  background: transparent;
+  color: var(--text-secondary);
+  font-size: 0.8rem;
+  cursor: pointer;
+  text-align: left;
+}
+
+.header-language-option:hover {
+  background: rgba(148, 163, 184, 0.12);
+  color: var(--text-primary);
+}
+
+.header-language-option.is-active {
+  color: #c4b5fd;
+  background: rgba(124, 58, 237, 0.18);
+}
+
+.header-language-option-check {
+  font-size: 0.95rem;
+}
+
 .status-badge {
   font-size: 0.75rem;
   padding: 4px 10px;
@@ -322,6 +414,14 @@
 
   .premium-header-button {
     padding: 0 10px;
+  }
+
+  .header-language-trigger {
+    padding: 4px 8px;
+  }
+
+  .header-language-trigger-text {
+    display: none;
   }
 
   .editor-right {

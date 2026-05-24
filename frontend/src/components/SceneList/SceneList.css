@@ -1,4 +1,8 @@
 .scene-list-container {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  min-height: 0;
   animation: fadeIn 0.4s var(--ease-out) forwards;
 }
 
@@ -38,8 +42,9 @@
 .scene-list-scroll {
   display: flex;
   flex-direction: column;
+  flex: 1;
+  min-height: 0;
   gap: 8px;
-  max-height: 400px;
   overflow-y: auto;
   padding-right: 4px;
 }
@@ -306,6 +311,7 @@
   background: var(--bg-secondary);
   flex-shrink: 0;
   position: relative;
+  cursor: pointer;
 }
 
 .scene-thumbnail img {
@@ -360,11 +366,18 @@
   flex-shrink: 0;
 }
 
+.scene-action-group {
+  gap: 0;
+  overflow: hidden;
+  border: 1px solid rgba(148, 163, 184, 0.18);
+  border-radius: 9px;
+}
+
 .scene-btn {
   width: 32px;
   height: 32px;
   border: none;
-  border-radius: 8px;
+  border-radius: 0;
   cursor: pointer;
   display: flex;
   align-items: center;
@@ -386,6 +399,7 @@
 .scene-btn-config {
   background: rgba(59, 130, 246, 0.1);
   color: #93c5fd;
+  border-right: 1px solid rgba(148, 163, 184, 0.16);
 }
 
 .scene-btn-config:hover {

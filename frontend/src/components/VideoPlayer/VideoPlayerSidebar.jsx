@@ -1,7 +1,10 @@
 import { createPortal } from 'react-dom';
 import DeveloperLocator from '../DeveloperLocator/DeveloperLocator';
+import { useI18n } from '../../i18n/useI18n';
 
 export default function VideoPlayerSidebar({ activeSection, title, onClose, children }) {
+  const { t } = useI18n();
+
   if (!activeSection || typeof document === 'undefined') {
     return null;
   }
@@ -19,7 +22,7 @@ export default function VideoPlayerSidebar({ activeSection, title, onClose, chil
         <DeveloperLocator code="panel.video-player.sidebar" title="Video Player Sidebar" />
         <div className="video-player-sidebar-head">
           <div>
-            <span className="video-player-sidebar-kicker">Left sidebar</span>
+            <span className="video-player-sidebar-kicker">{t('panel.videoPlayer.sidebar.kicker')}</span>
             <h3 id="video-player-sidebar-title" className="video-player-sidebar-title">{title}</h3>
           </div>
         </div>

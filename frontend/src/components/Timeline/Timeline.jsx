@@ -1,6 +1,7 @@
 import { useState, useRef, useCallback, useMemo } from 'react';
 import { getKeptScenes, getKeptDuration, mapRealToKeptTime, mapKeptToRealTime } from '../../utils/timeMapping';
 import DeveloperLocator from '../DeveloperLocator/DeveloperLocator';
+import { useI18n } from '../../i18n/useI18n';
 import './Timeline.css';
 
 const SCENE_COLORS = [
@@ -29,6 +30,7 @@ export default function Timeline({
   onSubtitleClick,
   onVoiceoverClick,
 }) {
+  const { t } = useI18n();
   const [hoveredScene, setHoveredScene] = useState(null);
   const [tooltipX, setTooltipX] = useState(0);
   const barRef = useRef(null);
@@ -153,7 +155,7 @@ export default function Timeline({
     <div className="timeline-container dev-locator-host" id="timeline">
       <DeveloperLocator code="panel.timeline.content" title="Timeline Content" />
       <div className="timeline-header">
-        <span className="timeline-title">Timeline</span>
+        <span className="timeline-title">{t('panel.timeline.title')}</span>
         <span className="timeline-title" style={{ opacity: 0.6 }}>
           {formatTime(displayedTime)} / {formatTime(totalDuration)}
         </span>
@@ -181,7 +183,11 @@ export default function Timeline({
                   }}
                   onMouseEnter={() => setHoveredScene(scene)}
                   onMouseLeave={() => setHoveredScene(null)}
-                  title={`Scene ${index + 1}: ${formatTime(scene.start)} - ${formatTime(scene.end)}`}
+                  title={t('panel.timeline.sceneTitle', {
+                    index: index + 1,
+                    start: formatTime(scene.start),
+                    end: formatTime(scene.end),
+                  })}
                 >
                   {widthPercent > 4 && (
                     <span className="timeline-scene-label">{index + 1}</span>
@@ -196,9 +202,9 @@ export default function Timeline({
                 width: '100%',
                 background: 'linear-gradient(135deg, rgba(34, 197, 94, 0.85), rgba(14, 165, 233, 0.55))',
               }}
-              title={totalDuration > 0 ? `Full video: 00:00 - ${formatTime(totalDuration)}` : 'Loading video duration'}
+              title={totalDuration > 0 ? t('panel.timeline.fullVideo', { duration: formatTime(totalDuration) }) : t('panel.timeline.loadingDuration')}
             >
-              <span className="timeline-scene-label">Video</span>
+              <span className="timeline-scene-label">{t('panel.timeline.video')}</span>
             </div>
           )}
 
@@ -211,7 +217,7 @@ export default function Timeline({
 
         {/* Subtitles Track */}
         {timelineSubtitles.length > 0 && (
-          <div className="timeline-subtitles-bar dev-locator-host" role="button" tabIndex={0} onClick={handleSubtitleClick} onKeyDown={handleSubtitleKeyDown} title="Subtitle track • click to adjust font settings and anchor">
+          <div className="timeline-subtitles-bar dev-locator-host" role="button" tabIndex={0} onClick={handleSubtitleClick} onKeyDown={handleSubtitleKeyDown} title={t('panel.timeline.subtitleTrackTitle')}>
             <DeveloperLocator code="panel.timeline.subtitles" title="Timeline Subtitle Track" />
             {timelineSubtitles.map((subtitle) => (
               <div
@@ -236,13 +242,13 @@ export default function Timeline({
                 left: `${timelineVoiceover.leftPercent}%`,
                 width: `${timelineVoiceover.widthPercent}%`,
               }}
-              title={`Voiceover: ${timelineVoiceover.fileName} • starts at 00:00 • click to adjust audio`}
+              title={t('panel.timeline.voiceoverTitle', { fileName: timelineVoiceover.fileName })}
               role="button"
               tabIndex={0}
               onClick={handleVoiceoverClick}
               onKeyDown={handleVoiceoverKeyDown}
             >
-              <span className="timeline-voiceover-label">Voiceover</span>
+              <span className="timeline-voiceover-label">{t('panel.timeline.voiceover')}</span>
             </div>
           </div>
         )}
@@ -250,7 +256,12 @@ export default function Timeline({
         {/* Tooltip */}
         {hasDetectedScenes && hoveredScene && (
           <div className="timeline-tooltip" style={{ left: tooltipX }}>
-            Scene {keptScenes.findIndex(s => s.id === hoveredScene.id) + 1} | {formatTime(hoveredScene.start)} - {formatTime(hoveredScene.end)} | {hoveredScene.duration.toFixed(1)}s
+            {t('panel.timeline.tooltip', {
+              index: keptScenes.findIndex((scene) => scene.id === hoveredScene.id) + 1,
+              start: formatTime(hoveredScene.start),
+              end: formatTime(hoveredScene.end),
+              duration: hoveredScene.duration.toFixed(1),
+            })}
           </div>
         )}
       </div>

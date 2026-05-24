@@ -7,6 +7,7 @@ import {
   normalizeSubtitleSettings,
 } from '../../utils/subtitleRenderModel'
 import DeveloperLocator from '../DeveloperLocator/DeveloperLocator'
+import { useI18n } from '../../i18n/useI18n'
 import './VideoPlayerSubtitleControls.css'
 
 const SUBTITLE_ANCHOR_GRID_ROWS = [
@@ -23,6 +24,7 @@ export default function VideoPlayerSubtitleControls({
   subtitleSettings = DEFAULT_SUBTITLE_SETTINGS,
   onSubtitleSettingsChange,
 }) {
+  const { t } = useI18n()
   const normalizedSubtitleSettings = normalizeSubtitleSettings(subtitleSettings)
   const activeSubtitleAnchor = getSubtitleAnchorOption(normalizedSubtitleSettings.anchor)
   const activeSubtitleFont = getSubtitleFontOption(normalizedSubtitleSettings.fontFamily)
@@ -41,16 +43,16 @@ export default function VideoPlayerSubtitleControls({
       <DeveloperLocator code="panel.video-player.subtitle-controls" title="Subtitle Controls" />
       <div className="video-frame-section-head">
         <div>
-          <span className="video-frame-section-label">Subtitle</span>
+          <span className="video-frame-section-label">{t('panel.videoPlayer.subtitleControls.subtitle')}</span>
           <strong className="video-frame-section-value">{activeSubtitleFont.label} • {subtitleFontScalePercent}% • {activeSubtitleAnchor.label}</strong>
         </div>
       </div>
 
       <div className="video-frame-detail-panel dev-locator-host">
         <DeveloperLocator code="panel.video-player.subtitle-controls.font" title="Subtitle Font Controls" />
-        <div className="video-frame-detail-title">Font</div>
+        <div className="video-frame-detail-title">{t('panel.videoPlayer.subtitleControls.font')}</div>
         <div className="video-frame-field-row">
-          <label className="video-frame-field-label" htmlFor="subtitle-font-scale-range">Size</label>
+          <label className="video-frame-field-label" htmlFor="subtitle-font-scale-range">{t('panel.videoPlayer.subtitleControls.size')}</label>
           <div className="video-audio-slider-row">
             <input
               id="subtitle-font-scale-range"
@@ -68,7 +70,7 @@ export default function VideoPlayerSubtitleControls({
           </div>
         </div>
         <div className="video-frame-field-row">
-          <label className="video-frame-field-label" htmlFor="subtitle-font-family-select">Font</label>
+          <label className="video-frame-field-label" htmlFor="subtitle-font-family-select">{t('panel.videoPlayer.subtitleControls.font')}</label>
           <select
             id="subtitle-font-family-select"
             className="video-frame-field-select"
@@ -81,7 +83,7 @@ export default function VideoPlayerSubtitleControls({
           </select>
         </div>
         <div className="video-frame-field-row">
-          <label className="video-frame-field-label" htmlFor="subtitle-font-color-input">Color</label>
+          <label className="video-frame-field-label" htmlFor="subtitle-font-color-input">{t('panel.videoPlayer.subtitleControls.color')}</label>
           <label className="subtitle-color-control" htmlFor="subtitle-font-color-input">
             <input
               id="subtitle-font-color-input"
@@ -97,9 +99,9 @@ export default function VideoPlayerSubtitleControls({
 
       <div className="video-frame-detail-panel dev-locator-host">
         <DeveloperLocator code="panel.video-player.subtitle-controls.background" title="Subtitle Background Controls" />
-        <div className="video-frame-detail-title">Text background</div>
+        <div className="video-frame-detail-title">{t('panel.videoPlayer.subtitleControls.textBackground')}</div>
         <div className="video-frame-field-row">
-          <label className="video-frame-field-label" htmlFor="subtitle-background-color-input">Color</label>
+          <label className="video-frame-field-label" htmlFor="subtitle-background-color-input">{t('panel.videoPlayer.subtitleControls.color')}</label>
           <label className="subtitle-color-control" htmlFor="subtitle-background-color-input">
             <input
               id="subtitle-background-color-input"
@@ -112,7 +114,7 @@ export default function VideoPlayerSubtitleControls({
           </label>
         </div>
         <div className="video-frame-field-row">
-          <label className="video-frame-field-label" htmlFor="subtitle-background-opacity-range">Opacity</label>
+          <label className="video-frame-field-label" htmlFor="subtitle-background-opacity-range">{t('panel.videoPlayer.subtitleControls.opacity')}</label>
           <div className="video-audio-slider-row">
             <input
               id="subtitle-background-opacity-range"
@@ -130,8 +132,8 @@ export default function VideoPlayerSubtitleControls({
           </div>
         </div>
         <div className="video-frame-field-row">
-          <span className="video-frame-field-label">Anchor</span>
-          <div className="subtitle-anchor-grid" role="grid" aria-label="Choose subtitle anchor point">
+          <span className="video-frame-field-label">{t('panel.videoPlayer.subtitleControls.anchor')}</span>
+          <div className="subtitle-anchor-grid" role="grid" aria-label={t('panel.videoPlayer.subtitleControls.chooseAnchorPoint')}>
             {SUBTITLE_ANCHOR_GRID_ROWS.map((anchorRow, rowIndex) => (
               <div key={`subtitle-anchor-row-${rowIndex}`} className="subtitle-anchor-grid-row" role="row">
                 {anchorRow.map((anchorId) => {

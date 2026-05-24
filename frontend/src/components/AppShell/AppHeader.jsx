@@ -1,6 +1,8 @@
 import DeveloperLocator from '../DeveloperLocator/DeveloperLocator';
 import AuthHeaderActions from '../Auth/AuthHeaderActions';
 import { isPremiumActiveForUser } from '../../utils/authClient';
+import HeaderLanguageSwitcher from './HeaderLanguageSwitcher';
+import { useI18n } from '../../i18n/useI18n';
 
 function CrownIcon() {
   return (
@@ -23,14 +25,15 @@ export default function AppHeader({
   showClientBadge = false,
   title = 'VideoForge',
 }) {
+  const { t } = useI18n();
   const isPremium = isPremiumActiveForUser(auth.user);
   const shouldShowPremiumButton = showPremiumButton && auth.isAuthenticated;
   const canOpenPremiumDialog = typeof onOpenPremiumDialog === 'function';
   const premiumTitle = isPremium
-    ? 'Premium active. Click to view premium plans.'
+    ? t('header.premiumTitleActive')
     : canOpenPremiumDialog
-      ? 'View premium plans.'
-      : 'Premium is enabled per account by an admin.';
+      ? t('header.premiumTitleOpen')
+      : t('header.premiumTitleStatic');
 
   return (
     <header className="app-header dev-locator-host">
@@ -38,10 +41,11 @@ export default function AppHeader({
       <div className="app-logo">
         <div className="app-logo-icon">🎬</div>
         <span className="app-logo-text gradient-text">{title}</span>
-        {showClientBadge && <span className="app-logo-badge">CLIENT-SIDE</span>}
+        {showClientBadge && <span className="app-logo-badge">{t('header.clientBadge')}</span>}
       </div>
       <div className="header-status">
         {children}
+        <HeaderLanguageSwitcher locatorCode={locatorCode} />
         {shouldShowPremiumButton && (
           <button
             type="button"
@@ -54,7 +58,7 @@ export default function AppHeader({
             <span className="premium-header-button-icon">
               <CrownIcon />
             </span>
-            <span className="premium-header-button-text">Premium</span>
+            <span className="premium-header-button-text">{t('header.premium')}</span>
           </button>
         )}
         <AuthHeaderActions

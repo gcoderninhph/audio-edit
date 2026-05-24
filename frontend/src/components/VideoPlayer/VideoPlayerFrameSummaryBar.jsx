@@ -1,4 +1,5 @@
 import DeveloperLocator from '../DeveloperLocator/DeveloperLocator';
+import { useI18n } from '../../i18n/useI18n';
 
 const FRAME_SIDEBAR_SECTIONS = Object.freeze({
   FRAME: 'frame',
@@ -11,6 +12,8 @@ export default function VideoPlayerFrameSummaryBar({
   frameBackgroundLabel,
   onToggleSection,
 }) {
+  const { t } = useI18n();
+
   return (
     <div className="video-player-summary-bar dev-locator-host">
       <DeveloperLocator code="panel.video-player.frame-summary" title="Frame Summary Bar" />
@@ -22,7 +25,7 @@ export default function VideoPlayerFrameSummaryBar({
           aria-controls="video-player-frame-sidebar"
           aria-expanded={activeSection === FRAME_SIDEBAR_SECTIONS.FRAME}
         >
-          <span className="video-player-summary-toggle-label">Frame</span>
+          <span className="video-player-summary-toggle-label">{t('panel.videoPlayer.summaryBar.frame')}</span>
           <span className="video-player-summary-toggle-value">{framePresetLabel}</span>
         </button>
         <button
@@ -32,7 +35,7 @@ export default function VideoPlayerFrameSummaryBar({
           aria-controls="video-player-frame-sidebar"
           aria-expanded={activeSection === FRAME_SIDEBAR_SECTIONS.BACKGROUND}
         >
-          <span className="video-player-summary-toggle-label">Background</span>
+          <span className="video-player-summary-toggle-label">{t('panel.videoPlayer.summaryBar.background')}</span>
           <span className="video-player-summary-toggle-value">{frameBackgroundLabel}</span>
         </button>
       </div>

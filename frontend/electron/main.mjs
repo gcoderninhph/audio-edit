@@ -61,6 +61,12 @@ const mimeTypes = new Map([
 
 let mainWindow = null
 let rendererStartUrl = null
+let isExportRunning = false
+
+ipcMain.handle('window-guard:set-export-running', (_event, isRunning) => {
+  isExportRunning = Boolean(isRunning)
+  return { isExportRunning }
+})
 
 registerProjectStoreIpc(ipcMain)
 registerDebugLogIpc(ipcMain)
@@ -120,7 +126,25 @@ async function createMainWindow() {
   })
 
   mainWindow.on('closed', () => {
+    isExportRunning = false
     mainWindow = null
+  })
+
+  mainWindow.on('close', (event) => {
+    if (!isExportRunning) {
+      return
+    }
+
+    event.preventDefault()
+    dialog.showMessageBox(mainWindow, {
+      type: 'warning',
+      buttons: ['OK'],
+      defaultId: 0,
+      cancelId: 0,
+      title: 'Export in progress',
+      message: 'Cannot close while export is running.',
+      detail: 'Please wait for the export process to finish before closing this window.',
+    })
   })
 
   mainWindow.webContents.on('did-fail-load', (_event, errorCode, errorDescription, validatedURL) => {
@@ -135,6 +159,7 @@ async function createMainWindow() {
     }, details.level === 'error' || details.level === 'warning' ? 'error' : 'info')
   })
   mainWindow.webContents.on('render-process-gone', (_event, details) => {
+    isExportRunning = false
     logDesktopEvent('renderer', 'Renderer process gone', details, 'error')
   })
   mainWindow.webContents.on('did-finish-load', async () => {

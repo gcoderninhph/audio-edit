@@ -6,6 +6,7 @@ import {
   getSubtitlesForLanguage,
   normalizeActiveSubtitleLanguage,
   normalizeSubtitleTracks,
+  removeSubtitleFromTrack,
   updateSubtitleTrackText,
 } from '../utils/subtitleTracks'
 
@@ -43,6 +44,10 @@ export function useSubtitleTracks() {
     setSubtitleTracks((currentTracks) => updateSubtitleTrackText(currentTracks, activeSubtitleLanguageState, subtitleId, nextText))
   }, [activeSubtitleLanguageState, setSubtitleTracks])
 
+  const removeActiveSubtitle = useCallback((subtitleId) => {
+    setSubtitleTracks((currentTracks) => removeSubtitleFromTrack(currentTracks, activeSubtitleLanguageState, subtitleId))
+  }, [activeSubtitleLanguageState, setSubtitleTracks])
+
   const restoreSubtitleState = useCallback((nextSubtitleTracks, nextActiveLanguage = DEFAULT_SUBTITLE_LANGUAGE_KEY) => {
     const normalizedTracks = normalizeSubtitleTracks(nextSubtitleTracks)
     setSubtitleTracksState(normalizedTracks)
@@ -63,6 +68,7 @@ export function useSubtitleTracks() {
     setSubtitleTracks,
     subtitleLanguageOptions,
     subtitleTracks: subtitleTracksState,
+    removeActiveSubtitle,
     updateActiveSubtitle,
     visibleSubtitles,
   }

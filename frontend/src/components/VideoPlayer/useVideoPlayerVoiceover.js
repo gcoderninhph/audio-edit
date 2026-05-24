@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useRef } from 'react';
+import { applyMediaVolume } from '../../utils/videoDisplayLogic';
 
 export default function useVideoPlayerVoiceover({ displayedTime, isPlaying, voiceoverTrack, voiceoverVolume = 1 }) {
   const voiceoverRef = useRef(null);
@@ -86,7 +87,7 @@ export default function useVideoPlayerVoiceover({ displayedTime, isPlaying, voic
       return;
     }
 
-    audioElement.volume = Math.max(0, Math.min(1, voiceoverVolume));
+    applyMediaVolume(audioElement, voiceoverVolume, 1);
     const currentDisplayedTime = displayedTimeRef.current;
     syncVoiceoverTime(true, currentDisplayedTime);
 

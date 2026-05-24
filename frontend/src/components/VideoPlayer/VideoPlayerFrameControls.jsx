@@ -20,14 +20,8 @@ import SceneBulkMotionConfig from '../SceneList/SceneBulkMotionConfig'
 import VideoPlayerExportControls from './VideoPlayerExportControls'
 import VideoPlayerSceneMotionControls from './VideoPlayerSceneMotionControls'
 import VideoPlayerSubtitleControls from './VideoPlayerSubtitleControls'
+import { useI18n } from '../../i18n/useI18n'
 import './VideoPlayerFrameControls.css'
-
-const FRAME_PRESET_COPY = {
-  'landscape-16-9': 'Landscape frame for desktop and YouTube',
-  'portrait-9-16': 'Vertical frame for Reels, Stories, and Shorts',
-  'square-1-1': 'Compact square layout for social posts',
-  'portrait-4-5': 'Feed-friendly ratio focused on the center subject',
-}
 
 export default function VideoPlayerFrameControls({
   visibleSection,
@@ -58,6 +52,7 @@ export default function VideoPlayerFrameControls({
   onBulkMotionRulesChange,
   onApplyBulkMotionConfig,
 }) {
+  const { t } = useI18n()
   const backgroundInputRef = useRef(null)
   const activeFramePreset = getFramePresetById(framePresetId)
   const fadePreset = getVideoFadePresetById(frameBackground?.presetId)
@@ -78,44 +73,50 @@ export default function VideoPlayerFrameControls({
   const videoVolumePercent = Math.round((videoVolume || 0) * 100)
   const voiceoverVolumePercent = Math.round((voiceoverVolume || 0) * 100)
   const controlsKicker = visibleSection === 'background'
-    ? 'Background'
+    ? t('panel.videoPlayer.frameControls.kicker.background')
     : visibleSection === 'export'
-      ? 'Export'
+      ? t('panel.videoPlayer.frameControls.kicker.export')
     : visibleSection === 'scene-bulk'
-      ? 'Scenes'
+      ? t('panel.videoPlayer.frameControls.kicker.sceneBulk')
     : visibleSection === 'scene'
-      ? 'Scene'
+      ? t('panel.videoPlayer.frameControls.kicker.scene')
     : visibleSection === 'subtitle'
-      ? 'Subtitles'
+      ? t('panel.videoPlayer.frameControls.kicker.subtitle')
     : visibleSection === 'audio'
-      ? 'Audio'
-      : 'Frame'
+      ? t('panel.videoPlayer.frameControls.kicker.audio')
+      : t('panel.videoPlayer.frameControls.kicker.frame')
   const controlsTitle = visibleSection === 'background'
-    ? 'Video background settings'
+    ? t('panel.videoPlayer.frameControls.title.background')
     : visibleSection === 'export'
-      ? 'Export output settings'
+      ? t('panel.videoPlayer.frameControls.title.export')
     : visibleSection === 'scene-bulk'
-      ? 'Quick scene config'
+      ? t('panel.videoPlayer.frameControls.title.sceneBulk')
     : visibleSection === 'scene'
-      ? 'Scene motion settings'
+      ? t('panel.videoPlayer.frameControls.title.scene')
     : visibleSection === 'subtitle'
-      ? 'Preview and export subtitle settings'
+      ? t('panel.videoPlayer.frameControls.title.subtitle')
     : visibleSection === 'audio'
-      ? 'Preview and export audio settings'
-      : 'Video frame settings'
+      ? t('panel.videoPlayer.frameControls.title.audio')
+      : t('panel.videoPlayer.frameControls.title.frame')
   const controlsSubtitle = visibleSection === 'background'
-    ? 'Only the active background controls stay visible so the sidebar remains focused.'
+    ? t('panel.videoPlayer.frameControls.subtitle.background')
     : visibleSection === 'export'
-      ? 'Choose the file size profile, local output folder, and final export file name before rendering.'
+      ? t('panel.videoPlayer.frameControls.subtitle.export')
     : visibleSection === 'scene-bulk'
-      ? 'Add conditions and actions to configure matching scenes from the scene list.'
+      ? t('panel.videoPlayer.frameControls.subtitle.sceneBulk')
     : visibleSection === 'scene'
-      ? 'Configure face-targeted zoom mode for the selected scene card.'
+      ? t('panel.videoPlayer.frameControls.subtitle.scene')
     : visibleSection === 'subtitle'
-      ? 'Open this from the timeline subtitle track to adjust subtitle styling for both preview and export.'
+      ? t('panel.videoPlayer.frameControls.subtitle.subtitle')
     : visibleSection === 'audio'
-      ? 'Adjust source video and voiceover levels separately. These values are used for both preview and export.'
-      : 'Keep the frame ratio controls close at hand without cluttering the preview area.'
+      ? t('panel.videoPlayer.frameControls.subtitle.audio')
+      : t('panel.videoPlayer.frameControls.subtitle.frame')
+  const framePresetCopy = {
+    'landscape-16-9': t('panel.videoPlayer.frameControls.presetCopy.landscape169'),
+    'portrait-9-16': t('panel.videoPlayer.frameControls.presetCopy.portrait916'),
+    'square-1-1': t('panel.videoPlayer.frameControls.presetCopy.square11'),
+    'portrait-4-5': t('panel.videoPlayer.frameControls.presetCopy.portrait45'),
+  }
 
   const handleChooseBackgroundImage = useCallback(() => {
     backgroundInputRef.current?.click()
@@ -151,10 +152,10 @@ export default function VideoPlayerFrameControls({
           <DeveloperLocator code="panel.video-player.frame-controls.preset" title="Frame Preset Control" />
           <div className="video-frame-section-head">
             <div>
-              <span className="video-frame-section-label">Export ratio</span>
+              <span className="video-frame-section-label">{t('panel.videoPlayer.frameControls.exportRatio')}</span>
               <strong className="video-frame-section-value">{activeFramePreset.label}</strong>
             </div>
-            <span className="video-frame-section-caption">{FRAME_PRESET_COPY[activeFramePreset.id]}</span>
+            <span className="video-frame-section-caption">{framePresetCopy[activeFramePreset.id]}</span>
           </div>
           <div className="video-frame-preset-grid">
             {FRAME_PRESETS.map((preset) => (
@@ -164,10 +165,10 @@ export default function VideoPlayerFrameControls({
                 className={`frame-option-btn ${preset.id === framePresetId ? 'active' : ''}`}
                 onClick={() => onFramePresetChange?.(preset.id)}
                 aria-pressed={preset.id === framePresetId}
-                title={FRAME_PRESET_COPY[preset.id] || preset.label}
+                title={framePresetCopy[preset.id] || preset.label}
               >
                 <span className="frame-option-btn-label">{preset.label}</span>
-                <span className="frame-option-btn-meta">{FRAME_PRESET_COPY[preset.id] || 'Export frame ratio'}</span>
+                <span className="frame-option-btn-meta">{framePresetCopy[preset.id] || t('panel.videoPlayer.frameControls.exportFrameRatio')}</span>
               </button>
             ))}
           </div>
@@ -190,20 +191,20 @@ export default function VideoPlayerFrameControls({
           <DeveloperLocator code="panel.video-player.frame-controls.background" title="Frame Background Control" />
           <div className="video-frame-section-head">
             <div>
-              <span className="video-frame-section-label">Cover background</span>
+              <span className="video-frame-section-label">{t('panel.videoPlayer.frameControls.coverBackground')}</span>
               <strong className="video-frame-section-value">{activeBackgroundLabel}</strong>
             </div>
-            <span className="video-frame-section-caption">Only the active background mode shows detailed controls</span>
+            <span className="video-frame-section-caption">{t('panel.videoPlayer.frameControls.activeBackgroundOnly')}</span>
           </div>
 
-          <div className="video-frame-mode-switcher" role="tablist" aria-label="Choose background mode">
+          <div className="video-frame-mode-switcher" role="tablist" aria-label={t('panel.videoPlayer.frameControls.chooseBackgroundMode')}>
             <button
               type="button"
               className={`frame-mode-btn ${activeBackgroundMode === 'color' ? 'active' : ''}`}
               onClick={handleActivateColorMode}
               aria-pressed={activeBackgroundMode === 'color'}
             >
-              Color
+              {t('panel.videoPlayer.frameControls.color')}
             </button>
             <button
               type="button"
@@ -211,7 +212,7 @@ export default function VideoPlayerFrameControls({
               onClick={handleActivateFadeMode}
               aria-pressed={activeBackgroundMode === 'fade'}
             >
-              Fade
+              {t('panel.videoPlayer.frameControls.fade')}
             </button>
             <button
               type="button"
@@ -219,7 +220,7 @@ export default function VideoPlayerFrameControls({
               onClick={handleActivateImageMode}
               aria-pressed={activeBackgroundMode === 'image'}
             >
-              Image
+              {t('panel.videoPlayer.frameControls.image')}
             </button>
           </div>
 
@@ -227,8 +228,8 @@ export default function VideoPlayerFrameControls({
             <div className="video-frame-detail-panel dev-locator-host">
               <DeveloperLocator code="panel.video-player.frame-controls.background-color" title="Color Background Detail" />
               <div>
-                <div className="video-frame-detail-title">Background color</div>
-                <p className="video-frame-detail-copy">Use a clean solid background when subtitle readability matters most.</p>
+                <div className="video-frame-detail-title">{t('panel.videoPlayer.frameControls.backgroundColor')}</div>
+                <p className="video-frame-detail-copy">{t('panel.videoPlayer.frameControls.backgroundColorHint')}</p>
               </div>
               <div className="video-frame-color-grid">
                 {FRAME_BACKGROUND_OPTIONS.map((option) => (
@@ -253,11 +254,11 @@ export default function VideoPlayerFrameControls({
             <div className="video-frame-detail-panel dev-locator-host">
               <DeveloperLocator code="panel.video-player.frame-controls.fade-config" title="Fade Config" />
               <div>
-                <div className="video-frame-detail-title">Video fade strength</div>
-                <p className="video-frame-detail-copy">Increase or reduce the fade treatment to balance atmosphere and subject focus.</p>
+                <div className="video-frame-detail-title">{t('panel.videoPlayer.frameControls.fadeStrength')}</div>
+                <p className="video-frame-detail-copy">{t('panel.videoPlayer.frameControls.fadeHint')}</p>
               </div>
               <div className="video-frame-field-row">
-                <label className="video-frame-field-label" htmlFor="video-fade-preset-select">Fade preset</label>
+                <label className="video-frame-field-label" htmlFor="video-fade-preset-select">{t('panel.videoPlayer.frameControls.fadePreset')}</label>
                 <select
                   id="video-fade-preset-select"
                   className="video-frame-field-select"
@@ -276,20 +277,20 @@ export default function VideoPlayerFrameControls({
             <div className="video-frame-detail-panel dev-locator-host">
               <DeveloperLocator code="panel.video-player.frame-controls.background-image" title="Image Background Detail" />
               <div>
-                <div className="video-frame-detail-title">Custom background image</div>
-                <p className="video-frame-detail-copy">Use this when you already have artwork or a dedicated cover image.</p>
+                <div className="video-frame-detail-title">{t('panel.videoPlayer.frameControls.customBackgroundImage')}</div>
+                <p className="video-frame-detail-copy">{t('panel.videoPlayer.frameControls.customBackgroundImageHint')}</p>
               </div>
               <button
                 type="button"
                 className="video-frame-upload-btn"
                 onClick={handleChooseBackgroundImage}
               >
-                {isImageActive ? 'Replace background image' : 'Upload background image'}
+                {isImageActive ? t('panel.videoPlayer.frameControls.replaceBackgroundImage') : t('panel.videoPlayer.frameControls.uploadBackgroundImage')}
               </button>
               <div className="video-frame-image-note">
                 {isImageActive
-                  ? <>Using: <strong>{frameBackground.name || 'Selected background image'}</strong></>
-                  : 'No background image selected yet.'}
+                  ? <>{t('panel.videoPlayer.frameControls.usingImage', { name: frameBackground.name || t('panel.videoPlayer.frameControls.selectedBackgroundImage') })}</>
+                  : t('panel.videoPlayer.frameControls.noBackgroundImage')}
               </div>
             </div>
           )}
@@ -301,19 +302,19 @@ export default function VideoPlayerFrameControls({
           <DeveloperLocator code="panel.video-player.audio-controls" title="Audio Controls" />
           <div className="video-frame-section-head">
             <div>
-              <span className="video-frame-section-label">Preview mix</span>
-              <strong className="video-frame-section-value">Video {videoVolumePercent}% • Voiceover {voiceoverVolumePercent}%</strong>
+              <span className="video-frame-section-label">{t('panel.videoPlayer.frameControls.previewMix')}</span>
+              <strong className="video-frame-section-value">{t('panel.videoPlayer.frameControls.videoVoiceoverMix', { video: videoVolumePercent, voiceover: voiceoverVolumePercent })}</strong>
             </div>
-            <span className="video-frame-section-caption">Open this directly from the voiceover track on the timeline.</span>
+            <span className="video-frame-section-caption">{t('panel.videoPlayer.frameControls.openFromVoiceoverTrack')}</span>
           </div>
 
           <div className="video-frame-detail-panel">
             <div>
-              <div className="video-frame-detail-title">Source video volume</div>
-              <p className="video-frame-detail-copy">Lower the video bed when the voiceover needs to stand out, or raise it to keep more of the original sound.</p>
+              <div className="video-frame-detail-title">{t('panel.videoPlayer.frameControls.sourceVideoVolume')}</div>
+              <p className="video-frame-detail-copy">{t('panel.videoPlayer.frameControls.sourceVideoVolumeHint')}</p>
             </div>
             <div className="video-frame-field-row">
-              <label className="video-frame-field-label" htmlFor="video-preview-volume-range">Video volume</label>
+              <label className="video-frame-field-label" htmlFor="video-preview-volume-range">{t('panel.videoPlayer.frameControls.videoVolume')}</label>
               <div className="video-audio-slider-row">
                 <input
                   id="video-preview-volume-range"
@@ -332,11 +333,11 @@ export default function VideoPlayerFrameControls({
 
           <div className="video-frame-detail-panel">
             <div>
-              <div className="video-frame-detail-title">Voiceover volume</div>
-              <p className="video-frame-detail-copy">Adjust narration level so speech stays clear without overpowering the rest of the track.</p>
+              <div className="video-frame-detail-title">{t('panel.videoPlayer.frameControls.voiceoverVolume')}</div>
+              <p className="video-frame-detail-copy">{t('panel.videoPlayer.frameControls.voiceoverVolumeHint')}</p>
             </div>
             <div className="video-frame-field-row">
-              <label className="video-frame-field-label" htmlFor="voiceover-preview-volume-range">Voiceover volume</label>
+              <label className="video-frame-field-label" htmlFor="voiceover-preview-volume-range">{t('panel.videoPlayer.frameControls.voiceoverVolume')}</label>
               <div className="video-audio-slider-row">
                 <input
                   id="voiceover-preview-volume-range"
@@ -354,8 +355,8 @@ export default function VideoPlayerFrameControls({
             </div>
             <div className="video-frame-image-note">
               {hasVoiceoverTrack
-                ? 'The voiceover track is active on the timeline and uses this level for both preview and export.'
-                : 'No voiceover track is attached yet. Generate one first, then return here.'}
+                ? t('panel.videoPlayer.frameControls.voiceoverActiveHint')
+                : t('panel.videoPlayer.frameControls.voiceoverMissingHint')}
             </div>
           </div>
         </section>

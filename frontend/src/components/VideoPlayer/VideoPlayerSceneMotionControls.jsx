@@ -6,20 +6,7 @@ import {
   normalizeSceneMotionConfig,
 } from '../../utils/sceneMotion'
 import { isFaceDetectionAvailable } from '../../utils/faceDetection'
-
-const SCENE_MOTION_MODE_OPTIONS = [
-  { value: SCENE_MOTION_MODES.NONE, label: 'None' },
-  { value: SCENE_MOTION_MODES.ZOOM_IN, label: 'Zoom in' },
-  { value: SCENE_MOTION_MODES.ANIMATION_ZOOM_OUT, label: 'Animation zoom out' },
-  { value: SCENE_MOTION_MODES.ANIMATION_ZOOM_IN, label: 'Animation zoom in' },
-]
-
-const SCENE_MOTION_MODE_SUMMARY = {
-  [SCENE_MOTION_MODES.NONE]: 'No zoom is applied to this scene.',
-  [SCENE_MOTION_MODES.ZOOM_IN]: 'Static zoom for the full scene.',
-  [SCENE_MOTION_MODES.ANIMATION_ZOOM_OUT]: 'Starts zoomed in, then returns to normal.',
-  [SCENE_MOTION_MODES.ANIMATION_ZOOM_IN]: 'Starts normal, then zooms toward the target.',
-}
+import { useI18n } from '../../i18n/useI18n'
 
 function formatTime(seconds) {
   if (!seconds || !isFinite(seconds)) return '00:00'
@@ -38,15 +25,28 @@ export default function VideoPlayerSceneMotionControls({
   onSceneMotionChange,
   onDetectSceneFace,
 }) {
+  const { t } = useI18n()
   const [statusText, setStatusText] = useState('')
   const [isDetectingFace, setIsDetectingFace] = useState(false)
   const motionConfig = useMemo(() => normalizeSceneMotionConfig(scene?.motion), [scene?.motion])
   const faceDetectionAvailable = isFaceDetectionAvailable()
+  const sceneMotionModeOptions = useMemo(() => ([
+    { value: SCENE_MOTION_MODES.NONE, label: t('panel.videoPlayer.sceneMotion.none') },
+    { value: SCENE_MOTION_MODES.ZOOM_IN, label: t('panel.videoPlayer.sceneMotion.zoomIn') },
+    { value: SCENE_MOTION_MODES.ANIMATION_ZOOM_OUT, label: t('panel.videoPlayer.sceneMotion.animationZoomOut') },
+    { value: SCENE_MOTION_MODES.ANIMATION_ZOOM_IN, label: t('panel.videoPlayer.sceneMotion.animationZoomIn') },
+  ]), [t])
+  const sceneMotionModeSummary = useMemo(() => ({
+    [SCENE_MOTION_MODES.NONE]: t('panel.videoPlayer.sceneMotion.summaryNone'),
+    [SCENE_MOTION_MODES.ZOOM_IN]: t('panel.videoPlayer.sceneMotion.summaryZoomIn'),
+    [SCENE_MOTION_MODES.ANIMATION_ZOOM_OUT]: t('panel.videoPlayer.sceneMotion.summaryAnimationZoomOut'),
+    [SCENE_MOTION_MODES.ANIMATION_ZOOM_IN]: t('panel.videoPlayer.sceneMotion.summaryAnimationZoomIn'),
+  }), [t])
   const targetStatusText = statusText || (motionConfig.detectionStatus === 'center-fallback'
-    ? 'No face target found. Center target will be used.'
+    ? t('panel.videoPlayer.sceneMotion.noFaceTargetFound')
     : faceDetectionAvailable
-      ? 'Detection uses the middle frame of this scene.'
-      : 'Face detection is not available. Center target is used unless X/Y is edited.')
+      ? t('panel.videoPlayer.sceneMotion.detectionMiddleFrame')
+      : t('panel.videoPlayer.sceneMotion.detectionUnavailable'))
 
   if (!scene) {
     return (
@@ -54,10 +54,10 @@ export default function VideoPlayerSceneMotionControls({
         <DeveloperLocator code="panel.video-player.scene-motion.empty" title="Scene Motion Empty State" />
         <div className="video-frame-section-head">
           <div>
-            <span className="video-frame-section-label">Scene motion</span>
-            <strong className="video-frame-section-value">No scene selected</strong>
+            <span className="video-frame-section-label">{t('panel.videoPlayer.sceneMotion.sectionLabel')}</span>
+            <strong className="video-frame-section-value">{t('panel.videoPlayer.sceneMotion.noSceneSelected')}</strong>
           </div>
-          <span className="video-frame-section-caption">Select a scene card to edit its motion settings.</span>
+          <span className="video-frame-section-caption">{t('panel.videoPlayer.sceneMotion.selectSceneHint')}</span>
         </div>
       </section>
     )
@@ -76,14 +76,17 @@ export default function VideoPlayerSceneMotionControls({
     }
 
     setIsDetectingFace(true)
-    setStatusText('Detecting face...')
+    setStatusText(t('panel.videoPlayer.sceneMotion.detectingFace'))
     try {
       const face = await onDetectSceneFace(scene.id)
       setStatusText(face.fallback
-        ? 'No face target found. Center target will be used.'
-        : `Face target set at ${formatPercent(face.focusX)} / ${formatPercent(face.focusY)}.`)
+        ? t('panel.videoPlayer.sceneMotion.noFaceTargetFound')
+        : t('panel.videoPlayer.sceneMotion.faceTargetSet', {
+          x: formatPercent(face.focusX),
+          y: formatPercent(face.focusY),
+        }))
     } catch (error) {
-      setStatusText(error?.message || 'Face detection failed.')
+      setStatusText(error?.message || t('panel.videoPlayer.sceneMotion.faceDetectionFailed'))
     } finally {
       setIsDetectingFace(false)
     }
@@ -94,44 +97,48 @@ export default function VideoPlayerSceneMotionControls({
       <DeveloperLocator code="panel.video-player.scene-motion" title="Scene Motion Controls" />
       <div className="video-frame-section-head">
         <div>
-          <span className="video-frame-section-label">Scene motion</span>
+          <span className="video-frame-section-label">{t('panel.videoPlayer.sceneMotion.sectionLabel')}</span>
           <strong className="video-frame-section-value">
-            Scene {sceneIndex >= 0 ? sceneIndex + 1 : scene.id}
+            {t('panel.videoPlayer.sceneMotion.sceneValue', { index: sceneIndex >= 0 ? sceneIndex + 1 : scene.id })}
           </strong>
         </div>
         <span className="video-frame-section-caption">
-          {formatTime(scene.start)} - {formatTime(scene.end)} • {scene.duration.toFixed(1)}s
+          {t('panel.videoPlayer.sceneMotion.sceneTimeInfo', {
+            start: formatTime(scene.start),
+            end: formatTime(scene.end),
+            duration: scene.duration.toFixed(1),
+          })}
         </span>
       </div>
 
       <div className="video-frame-detail-panel dev-locator-host">
         <DeveloperLocator code="panel.video-player.scene-motion.mode" title="Scene Motion Mode Control" />
         <label className="video-frame-field-row" htmlFor="scene-motion-mode">
-          <span className="video-frame-field-label">Zoom mode</span>
+          <span className="video-frame-field-label">{t('panel.videoPlayer.sceneMotion.zoomMode')}</span>
           <select
             id="scene-motion-mode"
             className="video-frame-field-select"
             value={motionConfig.mode}
             onChange={(event) => applyMotion({ mode: event.target.value })}
           >
-            {SCENE_MOTION_MODE_OPTIONS.map((option) => (
+            {sceneMotionModeOptions.map((option) => (
               <option key={option.value} value={option.value}>{option.label}</option>
             ))}
           </select>
         </label>
         <div className="video-frame-image-note">
-          {SCENE_MOTION_MODE_SUMMARY[motionConfig.mode] || SCENE_MOTION_MODE_SUMMARY[SCENE_MOTION_MODES.NONE]}
+          {sceneMotionModeSummary[motionConfig.mode] || sceneMotionModeSummary[SCENE_MOTION_MODES.NONE]}
         </div>
       </div>
 
       <div className="video-frame-detail-panel dev-locator-host">
         <DeveloperLocator code="panel.video-player.scene-motion.zoom" title="Scene Motion Zoom Control" />
         <div>
-          <div className="video-frame-detail-title">Zoom ratio</div>
-          <p className="video-frame-detail-copy">Peak scale: {motionConfig.zoomScale.toFixed(2)}x</p>
+          <div className="video-frame-detail-title">{t('panel.videoPlayer.sceneMotion.zoomRatio')}</div>
+          <p className="video-frame-detail-copy">{t('panel.videoPlayer.sceneMotion.peakScale', { scale: motionConfig.zoomScale.toFixed(2) })}</p>
         </div>
         <div className="video-frame-field-row">
-          <label className="video-frame-field-label" htmlFor="scene-motion-zoom-scale">Zoom scale</label>
+          <label className="video-frame-field-label" htmlFor="scene-motion-zoom-scale">{t('panel.videoPlayer.sceneMotion.zoomScale')}</label>
           <div className="video-audio-slider-row">
             <input
               id="scene-motion-zoom-scale"
@@ -151,9 +158,12 @@ export default function VideoPlayerSceneMotionControls({
       <div className="video-frame-detail-panel dev-locator-host">
         <DeveloperLocator code="panel.video-player.scene-motion.face-target" title="Scene Motion Face Target Control" />
         <div>
-          <div className="video-frame-detail-title">Face target</div>
+          <div className="video-frame-detail-title">{t('panel.videoPlayer.sceneMotion.faceTarget')}</div>
           <p className="video-frame-detail-copy">
-            Target {formatPercent(motionConfig.focusX)} / {formatPercent(motionConfig.focusY)}
+            {t('panel.videoPlayer.sceneMotion.targetValue', {
+              x: formatPercent(motionConfig.focusX),
+              y: formatPercent(motionConfig.focusY),
+            })}
           </p>
         </div>
         <button
@@ -161,9 +171,9 @@ export default function VideoPlayerSceneMotionControls({
           className="video-frame-upload-btn"
           onClick={handleDetectFace}
           disabled={isDetectingFace}
-          title={faceDetectionAvailable ? 'Detect face in this scene' : 'Use center target because FaceDetector is unavailable'}
+          title={faceDetectionAvailable ? t('panel.videoPlayer.sceneMotion.detectFaceTitle') : t('panel.videoPlayer.sceneMotion.detectFaceUnavailableTitle')}
         >
-          {isDetectingFace ? 'Detecting...' : 'Detect face'}
+          {isDetectingFace ? t('panel.videoPlayer.sceneMotion.detectingFace') : t('panel.videoPlayer.sceneMotion.detectFace')}
         </button>
         <div className="scene-motion-target-grid">
           <label className="video-frame-field-row">
@@ -201,7 +211,7 @@ export default function VideoPlayerSceneMotionControls({
         className="video-frame-upload-btn scene-motion-reset-btn"
         onClick={() => onSceneMotionChange?.(scene.id, DEFAULT_SCENE_MOTION_CONFIG)}
       >
-        Reset scene motion
+        {t('panel.videoPlayer.sceneMotion.resetSceneMotion')}
       </button>
     </section>
   )

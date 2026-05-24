@@ -1,3 +1,27 @@
+x-whishper-environment: &whishper-environment
+  PUBLIC_INTERNAL_API_HOST: http://127.0.0.1:80
+  PUBLIC_TRANSLATION_API_HOST: ""
+  PUBLIC_WHISHPER_PROFILE: cpu
+  WHISPER_MODELS: ${WHISPER_MODELS:-base}
+  WHISPER_MODELS_DIR: /app/models
+  UPLOAD_DIR: /app/uploads
+  DB_USER: ${DB_USER:-whishper}
+  DB_PASS: ${DB_PASS:-whishper}
+  CPU_THREADS: ${CPU_THREADS:-4}
+
+x-whishper-service: &whishper-service
+  image: pluja/whishper:latest
+  restart: unless-stopped
+  env_file:
+    - .env
+  depends_on:
+    mongo:
+      condition: service_started
+    translate:
+      condition: service_started
+  expose:
+    - "80"
+
 services:
   web:
     build:
@@ -78,66 +102,224 @@ services:
       - "5000"
 
   whishper:
-    image: pluja/whishper:latest
+    <<: *whishper-service
     container_name: whishper
-    restart: unless-stopped
-    env_file:
-      - .env
-    depends_on:
-      mongo:
-        condition: service_started
-      translate:
-        condition: service_started
-    expose:
-      - "80"
-    ports:
-      - "8000:80"
     environment:
-      PUBLIC_INTERNAL_API_HOST: http://127.0.0.1:80
-      PUBLIC_TRANSLATION_API_HOST: ""
+      <<: *whishper-environment
       PUBLIC_API_HOST: ${WHISHPER_HOST:-http://whishper}
-      PUBLIC_WHISHPER_PROFILE: cpu
-      WHISPER_MODELS: ${WHISPER_MODELS:-base}
-      WHISPER_MODELS_DIR: /app/models
-      UPLOAD_DIR: /app/uploads
-      DB_USER: ${DB_USER:-whishper}
-      DB_PASS: ${DB_PASS:-whishper}
-      CPU_THREADS: ${CPU_THREADS:-4}
     volumes:
       - ./whishper_data/uploads:/app/uploads
       - ./whishper_data/models:/app/models
       - ./whishper_data/logs:/var/log/whishper
 
   whishper-2:
-    image: pluja/whishper:latest
+    <<: *whishper-service
     container_name: whishper-2
-    restart: unless-stopped
-    env_file:
-      - .env
-    depends_on:
-      mongo:
-        condition: service_started
-      translate:
-        condition: service_started
-    expose:
-      - "80"
-    ports:
-      - "8001:80"
     environment:
-      PUBLIC_INTERNAL_API_HOST: http://127.0.0.1:80
-      PUBLIC_TRANSLATION_API_HOST: ""
+      <<: *whishper-environment
       PUBLIC_API_HOST: ${WHISHPER_NODE_2_HOST:-http://whishper-2}
-      PUBLIC_WHISHPER_PROFILE: cpu
-      WHISPER_MODELS: ${WHISPER_MODELS:-base}
-      WHISPER_MODELS_DIR: /app/models
-      UPLOAD_DIR: /app/uploads
-      DB_USER: ${DB_USER:-whishper}
-      DB_PASS: ${DB_PASS:-whishper}
-      CPU_THREADS: ${CPU_THREADS:-4}
     volumes:
       - ./whishper_data/uploads-node-2:/app/uploads
       - ./whishper_data/models:/app/models
       - ./whishper_data/logs-node-2:/var/log/whishper
+
+  whishper-3:
+    <<: *whishper-service
+    container_name: whishper-3
+    environment:
+      <<: *whishper-environment
+      PUBLIC_API_HOST: ${WHISHPER_NODE_3_HOST:-http://whishper-3}
+    volumes:
+      - ./whishper_data/uploads-node-3:/app/uploads
+      - ./whishper_data/models:/app/models
+      - ./whishper_data/logs-node-3:/var/log/whishper
+
+  whishper-4:
+    <<: *whishper-service
+    container_name: whishper-4
+    environment:
+      <<: *whishper-environment
+      PUBLIC_API_HOST: ${WHISHPER_NODE_4_HOST:-http://whishper-4}
+    volumes:
+      - ./whishper_data/uploads-node-4:/app/uploads
+      - ./whishper_data/models:/app/models
+      - ./whishper_data/logs-node-4:/var/log/whishper
+
+  whishper-5:
+    <<: *whishper-service
+    container_name: whishper-5
+    environment:
+      <<: *whishper-environment
+      PUBLIC_API_HOST: ${WHISHPER_NODE_5_HOST:-http://whishper-5}
+    volumes:
+      - ./whishper_data/uploads-node-5:/app/uploads
+      - ./whishper_data/models:/app/models
+      - ./whishper_data/logs-node-5:/var/log/whishper
+
+  whishper-6:
+    <<: *whishper-service
+    container_name: whishper-6
+    environment:
+      <<: *whishper-environment
+      PUBLIC_API_HOST: ${WHISHPER_NODE_6_HOST:-http://whishper-6}
+    volumes:
+      - ./whishper_data/uploads-node-6:/app/uploads
+      - ./whishper_data/models:/app/models
+      - ./whishper_data/logs-node-6:/var/log/whishper
+
+  whishper-7:
+    <<: *whishper-service
+    container_name: whishper-7
+    environment:
+      <<: *whishper-environment
+      PUBLIC_API_HOST: ${WHISHPER_NODE_7_HOST:-http://whishper-7}
+    volumes:
+      - ./whishper_data/uploads-node-7:/app/uploads
+      - ./whishper_data/models:/app/models
+      - ./whishper_data/logs-node-7:/var/log/whishper
+
+  whishper-8:
+    <<: *whishper-service
+    container_name: whishper-8
+    environment:
+      <<: *whishper-environment
+      PUBLIC_API_HOST: ${WHISHPER_NODE_8_HOST:-http://whishper-8}
+    volumes:
+      - ./whishper_data/uploads-node-8:/app/uploads
+      - ./whishper_data/models:/app/models
+      - ./whishper_data/logs-node-8:/var/log/whishper
+
+  whishper-9:
+    <<: *whishper-service
+    container_name: whishper-9
+    environment:
+      <<: *whishper-environment
+      PUBLIC_API_HOST: ${WHISHPER_NODE_9_HOST:-http://whishper-9}
+    volumes:
+      - ./whishper_data/uploads-node-9:/app/uploads
+      - ./whishper_data/models:/app/models
+      - ./whishper_data/logs-node-9:/var/log/whishper
+
+  whishper-10:
+    <<: *whishper-service
+    container_name: whishper-10
+    environment:
+      <<: *whishper-environment
+      PUBLIC_API_HOST: ${WHISHPER_NODE_10_HOST:-http://whishper-10}
+    volumes:
+      - ./whishper_data/uploads-node-10:/app/uploads
+      - ./whishper_data/models:/app/models
+      - ./whishper_data/logs-node-10:/var/log/whishper
+
+  whishper-11:
+    <<: *whishper-service
+    container_name: whishper-11
+    environment:
+      <<: *whishper-environment
+      PUBLIC_API_HOST: ${WHISHPER_NODE_11_HOST:-http://whishper-11}
+    volumes:
+      - ./whishper_data/uploads-node-11:/app/uploads
+      - ./whishper_data/models:/app/models
+      - ./whishper_data/logs-node-11:/var/log/whishper
+
+  whishper-12:
+    <<: *whishper-service
+    container_name: whishper-12
+    environment:
+      <<: *whishper-environment
+      PUBLIC_API_HOST: ${WHISHPER_NODE_12_HOST:-http://whishper-12}
+    volumes:
+      - ./whishper_data/uploads-node-12:/app/uploads
+      - ./whishper_data/models:/app/models
+      - ./whishper_data/logs-node-12:/var/log/whishper
+
+  whishper-13:
+    <<: *whishper-service
+    container_name: whishper-13
+    environment:
+      <<: *whishper-environment
+      PUBLIC_API_HOST: ${WHISHPER_NODE_13_HOST:-http://whishper-13}
+    volumes:
+      - ./whishper_data/uploads-node-13:/app/uploads
+      - ./whishper_data/models:/app/models
+      - ./whishper_data/logs-node-13:/var/log/whishper
+
+  whishper-14:
+    <<: *whishper-service
+    container_name: whishper-14
+    environment:
+      <<: *whishper-environment
+      PUBLIC_API_HOST: ${WHISHPER_NODE_14_HOST:-http://whishper-14}
+    volumes:
+      - ./whishper_data/uploads-node-14:/app/uploads
+      - ./whishper_data/models:/app/models
+      - ./whishper_data/logs-node-14:/var/log/whishper
+
+  whishper-15:
+    <<: *whishper-service
+    container_name: whishper-15
+    environment:
+      <<: *whishper-environment
+      PUBLIC_API_HOST: ${WHISHPER_NODE_15_HOST:-http://whishper-15}
+    volumes:
+      - ./whishper_data/uploads-node-15:/app/uploads
+      - ./whishper_data/models:/app/models
+      - ./whishper_data/logs-node-15:/var/log/whishper
+
+  whishper-16:
+    <<: *whishper-service
+    container_name: whishper-16
+    environment:
+      <<: *whishper-environment
+      PUBLIC_API_HOST: ${WHISHPER_NODE_16_HOST:-http://whishper-16}
+    volumes:
+      - ./whishper_data/uploads-node-16:/app/uploads
+      - ./whishper_data/models:/app/models
+      - ./whishper_data/logs-node-16:/var/log/whishper
+
+  whishper-17:
+    <<: *whishper-service
+    container_name: whishper-17
+    environment:
+      <<: *whishper-environment
+      PUBLIC_API_HOST: ${WHISHPER_NODE_17_HOST:-http://whishper-17}
+    volumes:
+      - ./whishper_data/uploads-node-17:/app/uploads
+      - ./whishper_data/models:/app/models
+      - ./whishper_data/logs-node-17:/var/log/whishper
+
+  whishper-18:
+    <<: *whishper-service
+    container_name: whishper-18
+    environment:
+      <<: *whishper-environment
+      PUBLIC_API_HOST: ${WHISHPER_NODE_18_HOST:-http://whishper-18}
+    volumes:
+      - ./whishper_data/uploads-node-18:/app/uploads
+      - ./whishper_data/models:/app/models
+      - ./whishper_data/logs-node-18:/var/log/whishper
+
+  whishper-19:
+    <<: *whishper-service
+    container_name: whishper-19
+    environment:
+      <<: *whishper-environment
+      PUBLIC_API_HOST: ${WHISHPER_NODE_19_HOST:-http://whishper-19}
+    volumes:
+      - ./whishper_data/uploads-node-19:/app/uploads
+      - ./whishper_data/models:/app/models
+      - ./whishper_data/logs-node-19:/var/log/whishper
+
+  whishper-20:
+    <<: *whishper-service
+    container_name: whishper-20
+    environment:
+      <<: *whishper-environment
+      PUBLIC_API_HOST: ${WHISHPER_NODE_20_HOST:-http://whishper-20}
+    volumes:
+      - ./whishper_data/uploads-node-20:/app/uploads
+      - ./whishper_data/models:/app/models
+      - ./whishper_data/logs-node-20:/var/log/whishper
 
   phpmyadmin:
     image: phpmyadmin:5-apache

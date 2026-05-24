@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import DeveloperLocator from '../DeveloperLocator/DeveloperLocator';
+import { useI18n } from '../../i18n/useI18n';
 import './AuthDialog.css';
 
 const DEMO_EMAIL = 'demo@local';
@@ -10,6 +11,7 @@ const AUTH_MODES = Object.freeze({
 });
 
 export default function AuthDialog({ auth, open, onClose }) {
+  const { t } = useI18n();
   const [mode, setMode] = useState(AUTH_MODES.LOGIN);
   const [email, setEmail] = useState('');
   const [displayName, setDisplayName] = useState('');
@@ -30,12 +32,12 @@ export default function AuthDialog({ auth, open, onClose }) {
   const handleSubmit = async (event) => {
     event.preventDefault();
     if (!email.trim() || !password) {
-      setLocalError('Enter your email or username and password.');
+      setLocalError(t('auth.dialog.enterCredentials'));
       return;
     }
 
     if (isRegisterMode && password !== confirmPassword) {
-      setLocalError('Passwords do not match.');
+      setLocalError(t('auth.dialog.passwordsDoNotMatch'));
       return;
     }
 
@@ -62,7 +64,7 @@ export default function AuthDialog({ auth, open, onClose }) {
   };
 
   const errorMessage = localError || auth.error;
-  const title = isRegisterMode ? 'Create account' : 'Login';
+  const title = isRegisterMode ? t('auth.dialog.createAccount') : t('auth.login');
 
   return (
     <div className="auth-dialog-backdrop" role="presentation" onMouseDown={onClose}>
@@ -76,13 +78,13 @@ export default function AuthDialog({ auth, open, onClose }) {
         <DeveloperLocator code="auth.dialog" title="Auth Dialog" />
         <div className="auth-dialog-header">
           <div>
-            <p className="auth-dialog-kicker">Optional account</p>
+            <p className="auth-dialog-kicker">{t('auth.dialog.optionalAccount')}</p>
             <h2 id="auth-dialog-title">{title}</h2>
           </div>
-          <button type="button" className="auth-dialog-close" onClick={onClose} aria-label="Close login dialog">×</button>
+          <button type="button" className="auth-dialog-close" onClick={onClose} aria-label={t('auth.dialog.closeLoginDialog')}>×</button>
         </div>
 
-        <div className="auth-mode-tabs" role="tablist" aria-label="Authentication mode">
+        <div className="auth-mode-tabs" role="tablist" aria-label={t('auth.dialog.authenticationMode')}>
           <button
             type="button"
             className={`auth-mode-tab ${!isRegisterMode ? 'active' : ''}`}
@@ -90,7 +92,7 @@ export default function AuthDialog({ auth, open, onClose }) {
             role="tab"
             aria-selected={!isRegisterMode}
           >
-            Login
+            {t('auth.login')}
           </button>
           <button
             type="button"
@@ -99,14 +101,14 @@ export default function AuthDialog({ auth, open, onClose }) {
             role="tab"
             aria-selected={isRegisterMode}
           >
-            Create account
+            {t('auth.dialog.createAccount')}
           </button>
         </div>
 
         <form className="auth-form" onSubmit={handleSubmit}>
           {isRegisterMode && (
             <label className="auth-field">
-              <span>Name</span>
+              <span>{t('auth.dialog.name')}</span>
               <input
                 type="text"
                 value={displayName}
@@ -115,14 +117,14 @@ export default function AuthDialog({ auth, open, onClose }) {
                   setLocalError('');
                 }}
                 autoComplete="name"
-                placeholder="Editor name"
+                placeholder={t('auth.dialog.editorName')}
                 disabled={auth.isBusy}
               />
             </label>
           )}
 
           <label className="auth-field">
-            <span>{isRegisterMode ? 'Email' : 'Email or username'}</span>
+            <span>{isRegisterMode ? t('auth.dialog.email') : t('auth.dialog.emailOrUsername')}</span>
             <input
               type={isRegisterMode ? 'email' : 'text'}
               value={email}
@@ -131,13 +133,13 @@ export default function AuthDialog({ auth, open, onClose }) {
                 setLocalError('');
               }}
               autoComplete="username"
-              placeholder={isRegisterMode ? 'you@example.com' : 'you@example.com or admin-name'}
+              placeholder={isRegisterMode ? t('auth.dialog.emailPlaceholder') : t('auth.dialog.emailOrUsernamePlaceholder')}
               disabled={auth.isBusy}
             />
           </label>
 
           <label className="auth-field">
-            <span>Password</span>
+            <span>{t('auth.dialog.password')}</span>
             <input
               type="password"
               value={password}
@@ -153,7 +155,7 @@ export default function AuthDialog({ auth, open, onClose }) {
 
           {isRegisterMode && (
             <label className="auth-field">
-              <span>Confirm password</span>
+              <span>{t('auth.dialog.confirmPassword')}</span>
               <input
                 type="password"
                 value={confirmPassword}
@@ -173,11 +175,11 @@ export default function AuthDialog({ auth, open, onClose }) {
           <div className="auth-dialog-actions">
             {!isRegisterMode && (
               <button type="button" className="btn btn-ghost" onClick={handleDemoLogin} disabled={auth.isBusy}>
-                Demo
+                {t('auth.dialog.demo')}
               </button>
             )}
             <button type="submit" className="btn btn-primary" disabled={auth.isBusy}>
-              {auth.isBusy ? 'Please wait...' : title}
+              {auth.isBusy ? t('auth.dialog.pleaseWait') : title}
             </button>
           </div>
         </form>

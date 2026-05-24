@@ -12,12 +12,24 @@ export function formatDate(isoString) {
   });
 }
 
+export function formatDateByLocale(isoString, locale = 'en') {
+  if (!isoString) return '';
+  const localeName = locale === 'vi' ? 'vi-VN' : 'en-US';
+  return new Date(isoString).toLocaleString(localeName, {
+    day: '2-digit',
+    hour: '2-digit',
+    minute: '2-digit',
+    month: '2-digit',
+    year: 'numeric',
+  });
+}
+
 export function getProjectCreatedTime(project) {
   return Date.parse(project?.created_at || project?.updated_at || 0) || 0;
 }
 
 export function getProjectTitle(project) {
-  return String(project?.video_original_name || '').trim() || 'Untitled video';
+  return String(project?.video_original_name || '').trim() || '';
 }
 
 export function normalizeSeriesName(value) {

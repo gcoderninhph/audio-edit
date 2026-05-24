@@ -6,6 +6,7 @@ import {
   getExportDirectoryLabel,
   getExportFileNameLabel,
 } from '../../utils/exportOutputTarget';
+import { useI18n } from '../../i18n/useI18n';
 import './ExportPanel.css';
 
 function formatFileSize(bytes) {
@@ -27,18 +28,6 @@ function formatElapsedTime(milliseconds) {
   return formatTime(milliseconds / 1000);
 }
 
-const PHASE_LABELS = {
-  loading: '⏳ Loading video processing engine...',
-  preparing: '📦 Preparing files...',
-  cutting: '✂️ Cutting scenes...',
-  merging: '🔗 Merging video...',
-  framing: '🖼️ Rendering frame and subtitles...',
-  reading: '📖 Reading result...',
-  saving: '💾 Writing output file...',
-  done: '✅ Complete!',
-  error: '❌ Export failed',
-};
-
 export default function ExportPanel({
   scenes,
   keptScenes,
@@ -55,6 +44,7 @@ export default function ExportPanel({
   onOpenExportConfig,
   onExport,
 }) {
+  const { t } = useI18n();
   const hasScenes = scenes && scenes.length > 0;
   const hasDeletedScenes = deletedSceneIds && deletedSceneIds.size > 0;
   const canExport = keptScenes.length > 0 || duration > 0;
@@ -62,6 +52,19 @@ export default function ExportPanel({
   const exportSavedFilePath = exportResult?.savedFilePath || '';
   const exportSize = exportResult?.size || 0;
   const activeExportQualityProfile = getExportQualityProfileById(exportConfig?.qualityProfileId);
+  const getProfileLabel = (profile) => (profile?.labelKey ? t(profile.labelKey) : profile?.label);
+  const getProfileHelper = (profile) => (profile?.helperKey ? t(profile.helperKey) : profile?.helper);
+  const phaseLabels = {
+    loading: t('panel.export.phase.loading'),
+    preparing: t('panel.export.phase.preparing'),
+    cutting: t('panel.export.phase.cutting'),
+    merging: t('panel.export.phase.merging'),
+    framing: t('panel.export.phase.framing'),
+    reading: t('panel.export.phase.reading'),
+    saving: t('panel.export.phase.saving'),
+    done: t('panel.export.phase.done'),
+    error: t('panel.export.phase.error'),
+  };
 
   const handleExport = () => {
     if (canExport) onExport();
@@ -84,27 +87,33 @@ export default function ExportPanel({
       <DeveloperLocator code="panel.export.content" title="Export Panel" />
       <div className="export-panel-header">
         <div>
-          <div className="export-panel-title">Export Video</div>
+          <div className="export-panel-title">{t('panel.export.title')}</div>
           {hasScenes ? (
             <div className="export-panel-info">
-              {keptScenes.length}/{scenes.length} scenes • {formatTime(keptDuration)}
-              {hasDeletedScenes && ` • ${deletedSceneIds.size} deleted`}
+              {t('panel.export.scenesSummary', {
+                kept: keptScenes.length,
+                total: scenes.length,
+                duration: formatTime(keptDuration),
+              })}
+              {hasDeletedScenes && ` • ${t('panel.export.deletedSummary', { count: deletedSceneIds.size })}`}
             </div>
           ) : (
             <div className="export-panel-info">
-              {duration > 0 ? `Full video • ${formatTime(duration)} • no scene cuts yet` : 'Loading video duration...'}
+              {duration > 0
+                ? t('panel.export.fullVideoSummary', { duration: formatTime(duration) })
+                : t('panel.export.loadingDuration')}
             </div>
           )}
           <div className="export-frame-info">
-            Export frame: <strong>{frameSummary}</strong> • Cover background: <strong>{frameBackgroundLabel}</strong>
+            {t('panel.export.frameInfo', { frame: frameSummary, background: frameBackgroundLabel })}
           </div>
         </div>
         <div className="export-actions">
           <div className="export-quality-control dev-locator-host">
             <DeveloperLocator code="panel.export.quality" title="Export Quality Control" />
             <div className="export-quality-summary">
-              <span className="export-quality-label">Export config</span>
-              <strong className="export-quality-value">{activeExportQualityProfile.label}</strong>
+              <span className="export-quality-label">{t('panel.export.exportConfig')}</span>
+              <strong className="export-quality-value">{getProfileLabel(activeExportQualityProfile)}</strong>
             </div>
             <button
               type="button"
@@ -112,7 +121,7 @@ export default function ExportPanel({
               onClick={onOpenExportConfig}
               disabled={isExporting}
             >
-              ⚙️ Config
+              {t('panel.export.configButton')}
             </button>
           </div>
           <button
@@ -121,31 +130,35 @@ export default function ExportPanel({
             disabled={!canExport || isExporting}
             id="export-btn"
           >
-            {isExporting ? '⏳ Processing...' : '🎬 Export Video'}
+            {isExporting ? t('panel.export.processingButton') : t('panel.export.exportButton')}
           </button>
         </div>
       </div>
 
       <div className="export-quality-helper">
-        File size profile: <strong>{activeExportQualityProfile.label}</strong> • File: <strong>{getExportFileNameLabel(exportConfig?.fileName)}</strong> • Folder: <strong>{getExportDirectoryLabel(exportConfig?.outputDirectory)}</strong>
+        {t('panel.export.fileSizeProfile', {
+          profile: getProfileLabel(activeExportQualityProfile),
+          fileName: getExportFileNameLabel(exportConfig?.fileName),
+          folder: getExportDirectoryLabel(exportConfig?.outputDirectory),
+        })}
       </div>
 
       <div className="export-target-helper">
-        {activeExportQualityProfile.helper}
+        {getProfileHelper(activeExportQualityProfile)}
       </div>
 
       {/* Export Progress */}
       {isExporting && (
         <div className="export-progress">
           <div className="export-progress-phase">
-            {PHASE_LABELS[exportProgress.phase] || exportProgress.phase}
+            {phaseLabels[exportProgress.phase] || exportProgress.phase}
           </div>
           <div className="export-progress-meta">
-            <span><strong>{Math.round(exportProgress.percent || 0)}%</strong> tổng</span>
-            <span>{Math.round(exportProgress.stagePercent || 0)}% stage</span>
+            <span><strong>{t('panel.export.progressTotal', { percent: Math.round(exportProgress.percent || 0) })}</strong></span>
+            <span>{t('panel.export.progressStage', { percent: Math.round(exportProgress.stagePercent || 0) })}</span>
             <span>{formatElapsedTime(exportProgress.elapsedMs)}</span>
             {exportProgress.ffmpegTimeMicroseconds > 0 && (
-              <span>FFmpeg {formatElapsedTime(exportProgress.ffmpegTimeMicroseconds / 1000)}</span>
+              <span>{t('panel.export.ffmpegTime', { time: formatElapsedTime(exportProgress.ffmpegTimeMicroseconds / 1000) })}</span>
             )}
           </div>
           {exportProgress.detail && (
@@ -160,8 +173,8 @@ export default function ExportPanel({
       {exportProgress.logs?.length > 0 && (
         <div className="export-log-panel">
           <div className="export-log-header">
-              <span>Export log</span>
-              <span>{exportProgress.sceneCount || 0} scenes • {exportProgress.subtitleCount || 0} subtitles</span>
+              <span>{t('panel.export.logTitle')}</span>
+              <span>{t('panel.export.logSummary', { scenes: exportProgress.sceneCount || 0, subtitles: exportProgress.subtitleCount || 0 })}</span>
           </div>
           <div className="export-log-list">
             {exportProgress.logs.map((log, index) => (
@@ -180,7 +193,7 @@ export default function ExportPanel({
           <div className="export-result-info">
             <div className="export-result-icon">✅</div>
             <div>
-              <div className="export-result-text">{exportSavedFilePath ? 'Your video was written to the local export folder!' : 'Your video is ready!'}</div>
+              <div className="export-result-text">{exportSavedFilePath ? t('panel.export.videoWrittenLocal') : t('panel.export.yourVideoReady')}</div>
               <div className="export-result-size">{formatFileSize(exportSize)}</div>
               {exportSavedFilePath && (
                 <div className="export-result-size export-result-path">{exportSavedFilePath}</div>
@@ -189,11 +202,11 @@ export default function ExportPanel({
           </div>
           {exportSavedFilePath ? (
             <button className="download-btn" onClick={handleRevealSavedFile} id="download-btn">
-              📂 Show File
+              {t('panel.export.showFile')}
             </button>
           ) : (
             <button className="download-btn" onClick={handleDownload} id="download-btn">
-              📥 Download
+              {t('panel.export.download')}
             </button>
           )}
         </div>

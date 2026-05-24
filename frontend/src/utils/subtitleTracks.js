@@ -237,3 +237,12 @@ export function updateSubtitleTrackText(subtitleTracks = null, languageKey, subt
     )),
   )
 }
+
+export function removeSubtitleFromTrack(subtitleTracks = null, languageKey, subtitleId) {
+  const currentTrackSubtitles = getSubtitlesForLanguage(subtitleTracks, languageKey)
+  return setSubtitleTrackSubtitles(
+    subtitleTracks,
+    languageKey,
+    currentTrackSubtitles.filter((subtitle) => subtitle.id !== subtitleId),
+  )
+}

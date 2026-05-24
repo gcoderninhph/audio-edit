@@ -93,5 +93,5 @@
 - `.dockerignore` - Keeps Docker build context small by excluding git metadata, caches, logs, projects, and installed dependencies.
 - `.env` - Stores local Docker Compose secrets and backend runtime defaults.
 - `cleanup_whisper_queue.ps1` - Runs the safe Whisper queue cleanup command inside the `web` container, defaulting to dry-run mode and forwarding `-Apply` or `-Json` for Windows operators.
-- `docker-compose.yml` - Defines the containerized backend stack, internal service wiring, and published ports for the Flask backend, MySQL, Redis, two Whisper runtime nodes (`whishper` on `8000` and `whishper-2` on `8001`), the internal `translate` dependency required by the Whisper image nginx config, and related runtime services.
+- `docker-compose.yml` - Defines the containerized backend stack, internal service wiring, and published ports for the Flask backend, MySQL, Redis, twenty Whisper runtime nodes (`whishper` through `whishper-20`) using shared service anchors with per-node upload and log bind mounts, the internal `translate` dependency required by the Whisper image nginx config, and related runtime services.
 - `TASK.md` - Tracks active work, validation state, and follow-up refactors for the repository.
