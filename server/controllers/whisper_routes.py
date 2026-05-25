@@ -8,8 +8,10 @@ try:
         WhisperAdminValidationError,
         create_whisper_processing_node,
         delete_whisper_processing_node,
+        get_whisper_service_config,
         list_whisper_processing_nodes,
         list_whisper_requests_page,
+        update_whisper_service_config,
         update_whisper_processing_node,
     )
 except ImportError:
@@ -20,8 +22,10 @@ except ImportError:
         WhisperAdminValidationError,
         create_whisper_processing_node,
         delete_whisper_processing_node,
+        get_whisper_service_config,
         list_whisper_processing_nodes,
         list_whisper_requests_page,
+        update_whisper_service_config,
         update_whisper_processing_node,
     )
 
@@ -43,6 +47,20 @@ def register_whisper_routes(app):
                 page_size=request.args.get('pageSize'),
             )
             return jsonify(page)
+        except WhisperAdminError:
+            return _store_error_response()
+
+    @app.route('/api/admin/services/whisper/config', methods=['GET', 'PATCH'])
+    def admin_whisper_config_route():
+        _claims, auth_error = require_admin_access()
+        if auth_error:
+            return auth_error
+        try:
+            if request.method == 'GET':
+                return jsonify({'config': get_whisper_service_config()})
+            return jsonify({'config': update_whisper_service_config(request.get_json(silent=True) or {})})
+        except WhisperAdminValidationError as error:
+            return jsonify({'error': str(error)}), 400
         except WhisperAdminError:
             return _store_error_response()
 

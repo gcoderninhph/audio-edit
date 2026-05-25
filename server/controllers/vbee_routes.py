@@ -6,6 +6,7 @@ from flask import Response, jsonify, request, stream_with_context
 try:
     from services.admin_store import get_auth_user
     from services.vbee_asset_service import clear_all_vbee_segment_assets, delete_vbee_segment_asset, expire_vbee_segment_assets, get_vbee_segment_asset_download_url
+    from services.vbee_credit_service import estimate_voiceover_credit_cost
     from controllers.auth_routes import AuthStoreError, require_access_token, require_admin_access, verify_password
     from utils.proxy_credit_helpers import charge_user_credits_or_error, refund_credits_if_needed
     from services.vbee_service import apply_vbee_webhook, create_voiceover_request, get_voiceover_request_status, normalize_srt_subtitles, normalize_subtitles, refresh_processing_vbee_segments
@@ -17,6 +18,7 @@ try:
 except ImportError:
     from ..services.admin_store import get_auth_user
     from ..services.vbee_asset_service import clear_all_vbee_segment_assets, delete_vbee_segment_asset, expire_vbee_segment_assets, get_vbee_segment_asset_download_url
+    from ..services.vbee_credit_service import estimate_voiceover_credit_cost
     from .auth_routes import AuthStoreError, require_access_token, require_admin_access, verify_password
     from ..utils.proxy_credit_helpers import charge_user_credits_or_error, refund_credits_if_needed
     from ..services.vbee_service import apply_vbee_webhook, create_voiceover_request, get_voiceover_request_status, normalize_srt_subtitles, normalize_subtitles, refresh_processing_vbee_segments
@@ -25,10 +27,6 @@ except ImportError:
     from ..services.vbee_token_store import create_vbee_token, delete_vbee_token, get_vbee_config, get_vbee_token, list_vbee_tokens, update_vbee_config, update_vbee_token
     from ..utils.vbee_schema import VbeeNotFoundError, VbeeValidationError
     from ..utils.vbee_voice_catalog import list_vbee_supported_languages
-
-
-VOICEOVER_CREDIT_COST = 200
-
 
 def _store_error_response():
     return jsonify({'error': 'Vbee storage is unavailable'}), 503
@@ -62,6 +60,8 @@ def _public_config_payload():
     config = get_vbee_config()
     return {
         'audioType': config.get('audioType') or 'wav',
+        'cachedCreditPerCharacter': config.get('cachedCreditPerCharacter') or 0,
+        'creditPerCharacter': config.get('creditPerCharacter') or 0,
         'defaultLanguage': config.get('defaultLanguage') or 'vi',
         'enabledLanguageCodes': config.get('enabledLanguageCodes') or [],
         'supportedLanguages': list_vbee_supported_languages(),
@@ -151,19 +151,52 @@ def register_vbee_routes(app):
         except AuthStoreError:
             return _store_error_response()
 
+    @app.route('/api/voiceover/estimate', methods=['POST'])
+    def estimate_voiceover_route():
+        _claims, auth_error = require_access_token()
+        if auth_error:
+            return auth_error
+        try:
+            payload, subtitles = _read_start_payload()
+            credit_estimate = estimate_voiceover_credit_cost(
+                subtitles,
+                language=payload.get('languageCode') or payload.get('language'),
+                voice_code=payload.get('voiceCode') or payload.get('voice_code'),
+            )
+            return jsonify({'estimate': credit_estimate, **credit_estimate})
+        except VbeeValidationError as error:
+            return jsonify({'error': str(error)}), 400
+        except AuthStoreError:
+            return _store_error_response()
+
     @app.route('/api/voiceover/start', methods=['POST'])
     def start_voiceover_route():
         claims, auth_error = require_access_token()
         if auth_error:
             return auth_error
+        credit_cost = 0
         try:
             payload, subtitles = _read_start_payload()
+            credit_estimate = estimate_voiceover_credit_cost(
+                subtitles,
+                language=payload.get('languageCode') or payload.get('language'),
+                voice_code=payload.get('voiceCode') or payload.get('voice_code'),
+            )
+            credit_cost = int(credit_estimate.get('creditCost') or 0)
             charged_user, charge_error = charge_user_credits_or_error(
                 claims,
-                VOICEOVER_CREDIT_COST,
+                credit_cost,
                 'generate voiceover',
                 'voiceover_charge',
-                details={'provider': 'vbee', 'subtitleCount': len(subtitles)},
+                details={
+                    'provider': 'vbee',
+                    'subtitleCount': len(subtitles),
+                    'totalCharacters': credit_estimate.get('totalCharacters'),
+                    'cachedCharacters': credit_estimate.get('cachedCharacters'),
+                    'uncachedCharacters': credit_estimate.get('uncachedCharacters'),
+                    'creditPerCharacter': credit_estimate.get('creditPerCharacter'),
+                    'cachedCreditPerCharacter': credit_estimate.get('cachedCreditPerCharacter'),
+                },
             )
             if charge_error:
                 return charge_error
@@ -178,12 +211,13 @@ def register_vbee_routes(app):
                 **request_record,
                 'request_id': request_record['requestId'],
                 'creditBalance': charged_user.get('credits'),
-                'creditCost': VOICEOVER_CREDIT_COST,
+                'creditCost': credit_cost,
+                'creditEstimate': credit_estimate,
             }), 202
         except VbeeValidationError as error:
             return jsonify({'error': str(error)}), 400
         except AuthStoreError:
-            refund_credits_if_needed(claims.get('sub'), VOICEOVER_CREDIT_COST, 'voiceover_refund', 'Refunded voiceover credits', {'provider': 'vbee'})
+            refund_credits_if_needed(claims.get('sub'), credit_cost, 'voiceover_refund', 'Refunded voiceover credits', {'provider': 'vbee'})
             return _store_error_response()
 
     @app.route('/api/voiceover/status/<string:request_id>', methods=['GET'])
@@ -373,5 +407,7 @@ def register_vbee_routes(app):
                 return jsonify({'config': _config_payload()})
             update_vbee_config(request.get_json(silent=True) or {})
             return jsonify({'config': _config_payload()})
+        except VbeeValidationError as error:
+            return jsonify({'error': str(error)}), 400
         except AuthStoreError:
             return _store_error_response()

@@ -63,11 +63,23 @@ def ensure_openai_translation_tables():
                     prompt_template LONGTEXT NULL,
                     temperature DOUBLE NOT NULL DEFAULT 0.2,
                     timeout_seconds INT NOT NULL DEFAULT 120,
+                    credit_per_word DOUBLE NOT NULL DEFAULT 1,
                     created_at DOUBLE NOT NULL,
                     updated_at DOUBLE NOT NULL
                 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
                 """
             )
+            cursor.execute(
+                """
+                SELECT COUNT(*) AS column_count
+                FROM information_schema.columns
+                WHERE table_schema = %s AND table_name = %s AND column_name = %s
+                """,
+                (MYSQL_DATABASE, 'openai_translation_config', 'credit_per_word'),
+            )
+            row = cursor.fetchone() or {}
+            if int(row.get('column_count') or 0) == 0:
+                cursor.execute('ALTER TABLE openai_translation_config ADD COLUMN credit_per_word DOUBLE NOT NULL DEFAULT 1 AFTER timeout_seconds')
     finally:
         database_connection.close()
 
@@ -167,8 +179,8 @@ def upsert_openai_translation_config_row(config_row, updated_at):
             cursor.execute(
                 """
                 INSERT INTO openai_translation_config
-                    (id, api_base_url, model, system_prompt, prompt_template, temperature, timeout_seconds, created_at, updated_at)
-                VALUES (1, %s, %s, %s, %s, %s, %s, %s, %s)
+                    (id, api_base_url, model, system_prompt, prompt_template, temperature, timeout_seconds, credit_per_word, created_at, updated_at)
+                VALUES (1, %s, %s, %s, %s, %s, %s, %s, %s, %s)
                 ON DUPLICATE KEY UPDATE
                     api_base_url = VALUES(api_base_url),
                     model = VALUES(model),
@@ -176,6 +188,7 @@ def upsert_openai_translation_config_row(config_row, updated_at):
                     prompt_template = VALUES(prompt_template),
                     temperature = VALUES(temperature),
                     timeout_seconds = VALUES(timeout_seconds),
+                    credit_per_word = VALUES(credit_per_word),
                     updated_at = VALUES(updated_at)
                 """,
                 (
@@ -185,6 +198,7 @@ def upsert_openai_translation_config_row(config_row, updated_at):
                     config_row['promptTemplate'],
                     config_row['temperature'],
                     config_row['timeoutSeconds'],
+                    config_row['creditPerWord'],
                     float(updated_at),
                     float(updated_at),
                 ),

@@ -109,8 +109,10 @@ def row_to_request(row, segments=None):
 def row_to_segment(row):
     if not row:
         return None
+    segment_id = str(row.get('id') or '').strip()
+    token_id = str(row.get('token_id') or '').strip()
     return {
-        'id': int(row.get('id') or 0),
+        'id': segment_id,
         'requestId': row.get('request_id') or '',
         'index': int(row.get('segment_index') or 0),
         'text': row.get('text_content') or '',
@@ -119,7 +121,7 @@ def row_to_segment(row):
         'language': row.get('language') or '',
         'voiceCode': row.get('voice_code') or '',
         'cacheKey': row.get('cache_key') or '',
-        'tokenId': int(row.get('token_id') or 0) or None,
+        'tokenId': token_id or None,
         'providerRequestId': row.get('provider_request_id') or '',
         'status': row.get('status') or VBEE_STATUS_QUEUED,
         'audioUrl': row.get('audio_url') or '',
@@ -193,7 +195,7 @@ def ensure_vbee_schema():
                 cursor.execute(
                     """
                     CREATE TABLE IF NOT EXISTS vbee_voice_segments (
-                        id BIGINT NOT NULL AUTO_INCREMENT PRIMARY KEY,
+                        id VARCHAR(36) NOT NULL PRIMARY KEY,
                         request_id VARCHAR(128) NOT NULL,
                         segment_index INT NOT NULL,
                         text_content LONGTEXT NOT NULL,
@@ -202,7 +204,7 @@ def ensure_vbee_schema():
                         language VARCHAR(32) NOT NULL DEFAULT '',
                         voice_code VARCHAR(80) NOT NULL DEFAULT '',
                         cache_key VARCHAR(96) NOT NULL,
-                        token_id BIGINT NULL,
+                        token_id VARCHAR(36) NULL,
                         provider_request_id VARCHAR(160) NULL,
                         status VARCHAR(32) NOT NULL DEFAULT 'queued',
                         audio_url TEXT NULL,

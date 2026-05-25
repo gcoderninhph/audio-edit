@@ -17,6 +17,12 @@ try:
         list_whisper_request_rows,
         update_whisper_processing_node_row,
     )
+    from repositories.whisper_config_repository import (
+        WhisperConfigRepositoryError,
+        ensure_whisper_config_table,
+        get_whisper_service_config_row,
+        upsert_whisper_service_config_row,
+    )
     from utils.pagination import build_pagination, normalize_pagination
 except ImportError:
     from ..repositories.whisper_admin_repository import (
@@ -31,11 +37,18 @@ except ImportError:
         list_whisper_request_rows,
         update_whisper_processing_node_row,
     )
+    from ..repositories.whisper_config_repository import (
+        WhisperConfigRepositoryError,
+        ensure_whisper_config_table,
+        get_whisper_service_config_row,
+        upsert_whisper_service_config_row,
+    )
     from ..utils.pagination import build_pagination, normalize_pagination
 
 
 DEFAULT_WHISPER_BASE_URL = 'http://whishper:8000'
 DEFAULT_WHISPER_MAX_CONCURRENT_REQUESTS = max(1, min(20, int(os.environ.get('WHISPER_MAX_CONCURRENT_REQUESTS', '1') or '1')))
+DEFAULT_WHISPER_DETECT_CREDIT_PER_MINUTE = float(os.environ.get('WHISPER_DETECT_CREDIT_PER_MINUTE', '20') or '20')
 WHISPER_REQUEST_STATUS_OPTIONS = {'', 'queued', 'processing', 'running', 'success', 'failed'}
 
 _schema_ready = False
@@ -116,6 +129,16 @@ def _normalize_max_concurrent_requests(value):
         raise WhisperAdminValidationError('Max concurrent requests must be a whole number.') from None
     if safe_value < 1 or safe_value > 20:
         raise WhisperAdminValidationError('Max concurrent requests must be between 1 and 20.')
+    return safe_value
+
+
+def _normalize_detect_credit_per_minute(value):
+    try:
+        safe_value = float(value)
+    except (TypeError, ValueError):
+        raise WhisperAdminValidationError('Detect credit per minute must be a number.') from None
+    if safe_value < 0 or safe_value > 100000:
+        raise WhisperAdminValidationError('Detect credit per minute must be between 0 and 100000.')
     return safe_value
 
 
@@ -217,6 +240,34 @@ def list_whisper_requests_page(status='', page=1, page_size=20):
         'pagination': pagination,
         'requests': requests,
     }
+
+
+def get_whisper_service_config():
+    _ensure_whisper_admin_schema()
+    try:
+        ensure_whisper_config_table()
+        row = get_whisper_service_config_row()
+    except WhisperConfigRepositoryError as error:
+        raise WhisperAdminError('Unable to load Whisper config') from error
+    raw_rate = (row or {}).get('detect_credit_per_minute') if row else None
+    return {
+        'detectCreditPerMinute': max(0.0, float(DEFAULT_WHISPER_DETECT_CREDIT_PER_MINUTE if raw_rate is None else raw_rate)),
+    }
+
+
+def update_whisper_service_config(payload):
+    _ensure_whisper_admin_schema()
+    payload = payload if isinstance(payload, dict) else {}
+    current_config = get_whisper_service_config()
+    next_config = {
+        'detectCreditPerMinute': _normalize_detect_credit_per_minute(payload.get('detectCreditPerMinute', current_config['detectCreditPerMinute'])),
+    }
+    try:
+        ensure_whisper_config_table()
+        upsert_whisper_service_config_row(next_config, time.time())
+    except WhisperConfigRepositoryError as error:
+        raise WhisperAdminError('Unable to update Whisper config') from error
+    return get_whisper_service_config()
 
 
 def list_whisper_processing_nodes():

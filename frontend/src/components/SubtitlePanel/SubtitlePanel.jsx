@@ -1,18 +1,23 @@
 import { useState, useEffect, useRef, useMemo } from 'react';
 import DeveloperLocator from '../DeveloperLocator/DeveloperLocator';
 import SubtitleCardList from './SubtitleCardList';
+import SubtitleCreateControls from './SubtitleCreateControls';
 import SubtitleProgressPanel from './SubtitleProgressPanel';
+import { useCreateSubCreditEstimate } from './useCreateSubCreditEstimate';
 import {
   DEFAULT_SUBTITLE_LANGUAGE_KEY,
+  getSubtitleCreateLanguageSelection,
   getVoiceoverLanguageCode,
   isVoiceoverSubtitleLanguageSupported,
 } from '../../utils/subtitleTracks';
 import { fetchVoiceoverClientConfig } from '../../utils/voiceoverUtils';
 import { useI18n } from '../../i18n/useI18n';
+import { useVoiceoverCreditEstimate } from './useVoiceoverCreditEstimate';
 import './SubtitlePanel.css';
 
 export default function SubtitlePanel({
   subtitles,
+  originalSubtitles,
   currentTime,
   onDeleteSubtitle,
   onUpdateSubtitle,
@@ -21,13 +26,13 @@ export default function SubtitlePanel({
   onActiveSubtitleLanguageChange,
   subtitleLanguageOptions,
   // Transcription
-  onStartTranscription,
   isTranscribing,
   transcribeProgress,
   // Translation
   onStartTranslation,
   isTranslating,
   translateProgress,
+  videoDuration,
   onStartVoiceover,
   isGeneratingVoiceover,
   voiceoverProgress,
@@ -49,8 +54,8 @@ export default function SubtitlePanel({
     || subtitleLanguageOptions?.find((option) => option.id === DEFAULT_SUBTITLE_LANGUAGE_KEY)
     || { id: DEFAULT_SUBTITLE_LANGUAGE_KEY, label: t('panel.subtitleList.original'), hasSubtitles: false, translatable: false };
   const hasOriginalSubtitles = Boolean(subtitleLanguageOptions?.find((option) => option.id === DEFAULT_SUBTITLE_LANGUAGE_KEY)?.hasSubtitles);
+  const createSubSelection = getSubtitleCreateLanguageSelection(subtitleLanguageOptions, activeSubtitleLanguage, hasOriginalSubtitles);
   const isOriginalLanguageSelected = selectedLanguageOption.id === DEFAULT_SUBTITLE_LANGUAGE_KEY;
-  const canTranslateSelectedLanguage = hasOriginalSubtitles && selectedLanguageOption.translatable;
   const voiceoverLanguageCode = getVoiceoverLanguageCode(activeSubtitleLanguage);
   const isVoiceoverSupportedLanguage = isVoiceoverSubtitleLanguageSupported(activeSubtitleLanguage);
   const isVoiceoverEnabledByConfig = enabledVoiceoverLanguageCodes === null
@@ -59,10 +64,21 @@ export default function SubtitlePanel({
   const canGenerateVoiceover = isVoiceoverSupportedLanguage && isVoiceoverEnabledByConfig && hasVisibleSubs;
   const authRequiredLabel = t('panel.subtitleList.authRequired');
   const creditBalance = Math.max(0, Number(authCredits) || 0);
-  const transcriptionCreditCost = 20;
-  const translationCreditCost = 100;
-  const voiceoverCreditCost = 200;
+  const voiceoverCreditEstimate = useVoiceoverCreditEstimate({
+    enabled: isAuthenticated && canGenerateVoiceover,
+    languageCode: voiceoverLanguageCode,
+    subtitles,
+  });
+  const voiceoverCreditCost = Number.isFinite(Number(voiceoverCreditEstimate.creditCost)) ? Number(voiceoverCreditEstimate.creditCost) : null;
+  const voiceoverCreditLabel = voiceoverCreditCost === null ? '...' : voiceoverCreditCost;
+  const isVoiceoverEstimatePending = isAuthenticated && canGenerateVoiceover && voiceoverCreditCost === null && !voiceoverCreditEstimate.error;
   const missingSelectedTranslation = !hasVisibleSubs && hasOriginalSubtitles && !isOriginalLanguageSelected;
+  const createSubCreditEstimate = useCreateSubCreditEstimate({
+    enabled: isAuthenticated,
+    durationSeconds: videoDuration,
+    originSubtitles: originalSubtitles,
+    targetLanguageKey: createSubSelection.selectedLanguageKey,
+  })
 
   // Find the currently active subtitle index based on currentTime
   const activeSubIndex = useMemo(() => {
@@ -159,20 +175,12 @@ export default function SubtitlePanel({
     }
   };
 
-  const handleStartTranscription = () => {
+  const handleStartTranslation = (targetLanguageKey = activeSubtitleLanguage) => {
     if (!isAuthenticated) {
       onRequireAuth?.();
       return;
     }
-    onStartTranscription?.();
-  };
-
-  const handleStartTranslation = () => {
-    if (!isAuthenticated) {
-      onRequireAuth?.();
-      return;
-    }
-    onStartTranslation?.(activeSubtitleLanguage);
+    onStartTranslation?.(targetLanguageKey);
   };
 
   const handleStartVoiceover = () => {
@@ -248,54 +256,20 @@ export default function SubtitlePanel({
             </div>
           )}
 
-          <button
-            className="btn btn-primary btn-sm subtitle-tool-btn"
-            onClick={handleStartTranscription}
-          >
-            {!isAuthenticated
-              ? authRequiredLabel
-              : hasOriginalSubtitles
-                ? t('panel.subtitleList.recreateSubtitles', { credits: transcriptionCreditCost })
-                : t('panel.subtitleList.generateSubtitles', { credits: transcriptionCreditCost })}
-          </button>
+          <SubtitleCreateControls
+            activeSubtitleLanguage={activeSubtitleLanguage}
+            authRequiredLabel={authRequiredLabel}
+            createSubCreditEstimate={createSubCreditEstimate}
+            hasOriginalSubtitles={hasOriginalSubtitles}
+            isAuthenticated={isAuthenticated}
+            onCreateSub={handleStartTranslation}
+            onLanguageChange={onActiveSubtitleLanguageChange}
+            subtitleLanguageOptions={subtitleLanguageOptions}
+            t={t}
+          />
 
           {hasOriginalSubtitles && (
             <>
-              <div className="subtitle-language-row">
-                <label className="subtitle-tools-label" htmlFor="subtitle-language-select">{t('panel.subtitleList.displayLanguage')}</label>
-                <div className="subtitle-input-button-group">
-                  <select
-                    id="subtitle-language-select"
-                    value={activeSubtitleLanguage}
-                    onChange={(event) => onActiveSubtitleLanguageChange?.(event.target.value)}
-                    className="subtitle-lang-select subtitle-input-button-group-input"
-                  >
-                    {subtitleLanguageOptions?.map((option) => (
-                      <option key={option.id} value={option.id}>
-                        {option.label}{option.translatable && !option.hasSubtitles ? ` ${t('panel.subtitleList.notTranslatedSuffix')}` : ''}
-                      </option>
-                    ))}
-                  </select>
-
-                  <button
-                    className="btn btn-primary btn-sm subtitle-input-button-group-action"
-                    style={{ background: '#3b82f6' }}
-                    disabled={!canTranslateSelectedLanguage}
-                    onClick={handleStartTranslation}
-                  >
-                    {!isAuthenticated
-                      ? authRequiredLabel
-                      : selectedLanguageOption.hasSubtitles
-                        ? t('panel.subtitleList.retranslate', { credits: translationCreditCost })
-                        : t('panel.subtitleList.translate', { credits: translationCreditCost })}
-                  </button>
-                </div>
-              </div>
-
-              <div className="subtitle-tool-note">
-                {t('panel.subtitleList.translationHint')}
-              </div>
-
               {missingSelectedTranslation && (
                 <div className="subtitle-tool-note subtitle-tool-warning">
                   {t('panel.subtitleList.languageNotTranslated', { language: selectedLanguageOption.label })}
@@ -308,7 +282,7 @@ export default function SubtitlePanel({
                     className="btn btn-primary btn-sm subtitle-tool-btn subtitle-voiceover-btn"
                     style={{ background: '#f59e0b' }}
                     onClick={handleStartVoiceover}
-                    disabled={!canGenerateVoiceover}
+                    disabled={!canGenerateVoiceover || (isAuthenticated && (isVoiceoverEstimatePending || Boolean(voiceoverCreditEstimate.error)))}
                   >
                     {!isAuthenticated
                       ? authRequiredLabel
@@ -317,9 +291,15 @@ export default function SubtitlePanel({
                         : !isVoiceoverEnabledByConfig
                           ? t('panel.subtitleList.voiceoverDisabledByConfig')
                           : canGenerateVoiceover
-                            ? t('panel.subtitleList.generateVoiceover', { credits: voiceoverCreditCost })
+                            ? t('panel.subtitleList.generateVoiceover', { credits: voiceoverCreditLabel })
                             : t('panel.subtitleList.translateLanguageFirst')}
                   </button>
+
+                  {isAuthenticated && voiceoverCreditEstimate.error && (
+                    <div className="subtitle-tool-note subtitle-tool-warning">
+                      {voiceoverCreditEstimate.error}
+                    </div>
+                  )}
 
                   {!isOriginalLanguageSelected && isVoiceoverSupportedLanguage && !isVoiceoverEnabledByConfig && (
                     <div className="subtitle-tool-note subtitle-tool-warning">

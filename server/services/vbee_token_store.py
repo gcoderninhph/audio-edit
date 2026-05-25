@@ -14,7 +14,7 @@ try:
         update_vbee_token_row,
         upsert_vbee_config_row,
     )
-    from utils.vbee_schema import ensure_vbee_schema, json_dumps, json_loads, mask_secret, normalize_bool, normalize_positive_int, normalize_text, now_timestamp, VBEE_STATUS_COMPLETE, VBEE_STATUS_PROCESSING, VbeeNotFoundError
+    from utils.vbee_schema import ensure_vbee_schema, json_dumps, json_loads, mask_secret, normalize_bool, normalize_positive_int, normalize_text, now_timestamp, VBEE_STATUS_COMPLETE, VBEE_STATUS_PROCESSING, VbeeNotFoundError, VbeeValidationError
     from utils.vbee_voice_catalog import get_default_vbee_enabled_language_codes, normalize_vbee_enabled_language_codes
 except ImportError:
     from .auth_store import AuthStoreError, _require_driver
@@ -30,8 +30,28 @@ except ImportError:
         update_vbee_token_row,
         upsert_vbee_config_row,
     )
-    from ..utils.vbee_schema import ensure_vbee_schema, json_dumps, json_loads, mask_secret, normalize_bool, normalize_positive_int, normalize_text, now_timestamp, VBEE_STATUS_COMPLETE, VBEE_STATUS_PROCESSING, VbeeNotFoundError
+    from ..utils.vbee_schema import ensure_vbee_schema, json_dumps, json_loads, mask_secret, normalize_bool, normalize_positive_int, normalize_text, now_timestamp, VBEE_STATUS_COMPLETE, VBEE_STATUS_PROCESSING, VbeeNotFoundError, VbeeValidationError
     from ..utils.vbee_voice_catalog import get_default_vbee_enabled_language_codes, normalize_vbee_enabled_language_codes
+
+
+DEFAULT_VBEE_CREDIT_PER_CHARACTER = 1.0
+DEFAULT_VBEE_CACHED_CREDIT_PER_CHARACTER = 0.0
+
+
+def _normalize_credit_rate(value, field_name, default_value=0.0, strict=False):
+    if value in (None, ''):
+        return float(default_value)
+    try:
+        rate = float(value)
+    except (TypeError, ValueError):
+        if strict:
+            raise VbeeValidationError(f'{field_name} must be a number.')
+        return float(default_value)
+    if rate < 0:
+        if strict:
+            raise VbeeValidationError(f'{field_name} must be greater than or equal to 0.')
+        return float(default_value)
+    return rate
 
 
 def _row_to_token(row, include_secret=False, stats=None):
@@ -156,6 +176,8 @@ def get_vbee_config():
         'defaultLanguage': 'vi',
         'defaultVoiceCode': '',
         'enabledLanguageCodes': get_default_vbee_enabled_language_codes(),
+        'creditPerCharacter': DEFAULT_VBEE_CREDIT_PER_CHARACTER,
+        'cachedCreditPerCharacter': DEFAULT_VBEE_CACHED_CREDIT_PER_CHARACTER,
         'webhookHost': '',
         'webhookSecret': '',
     }
@@ -168,6 +190,12 @@ def get_vbee_config():
                 parsed_value = json_loads(config_value, config_value)
                 config[config_key] = normalize_vbee_enabled_language_codes(parsed_value, fallback=get_default_vbee_enabled_language_codes(), allow_empty=True)
                 continue
+            if config_key == 'creditPerCharacter':
+                config[config_key] = _normalize_credit_rate(config_value, 'Credit per character', DEFAULT_VBEE_CREDIT_PER_CHARACTER)
+                continue
+            if config_key == 'cachedCreditPerCharacter':
+                config[config_key] = _normalize_credit_rate(config_value, 'Cached credit per character', DEFAULT_VBEE_CACHED_CREDIT_PER_CHARACTER)
+                continue
             config[config_key] = config_value
     except driver.MySQLError as error:
         raise AuthStoreError('Unable to load Vbee config') from error
@@ -175,7 +203,7 @@ def get_vbee_config():
 
 
 def update_vbee_config(payload):
-    allowed_keys = {'apiBaseUrl', 'audioType', 'defaultLanguage', 'defaultVoiceCode', 'enabledLanguageCodes', 'webhookHost', 'webhookSecret'}
+    allowed_keys = {'apiBaseUrl', 'audioType', 'defaultLanguage', 'defaultVoiceCode', 'enabledLanguageCodes', 'creditPerCharacter', 'cachedCreditPerCharacter', 'webhookHost', 'webhookSecret'}
     now = now_timestamp()
     driver = _require_driver()
     ensure_vbee_schema()
@@ -186,6 +214,10 @@ def update_vbee_config(payload):
             if key == 'enabledLanguageCodes':
                 normalized_codes = normalize_vbee_enabled_language_codes(payload.get(key), allow_empty=True)
                 config_value = json_dumps(normalized_codes)
+            elif key == 'creditPerCharacter':
+                config_value = str(_normalize_credit_rate(payload.get(key), 'Credit per character', DEFAULT_VBEE_CREDIT_PER_CHARACTER, strict=True))
+            elif key == 'cachedCreditPerCharacter':
+                config_value = str(_normalize_credit_rate(payload.get(key), 'Cached credit per character', DEFAULT_VBEE_CACHED_CREDIT_PER_CHARACTER, strict=True))
             else:
                 config_value = str(payload.get(key) or '').strip()
             if key == 'webhookHost' and config_value:

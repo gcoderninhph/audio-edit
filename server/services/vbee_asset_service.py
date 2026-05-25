@@ -186,6 +186,27 @@ def get_active_vbee_segment_asset(cache_key):
     return asset_record
 
 
+def _get_reusable_segment_backfill_candidate(cache_key):
+    reusable_segment = get_latest_completed_vbee_segment_for_reuse(cache_key)
+    if not reusable_segment:
+        return None
+    if (_now() - int(reusable_segment.get('updatedAt') or 0)) > VBEE_SEGMENT_BACKFILL_MAX_AGE_SECONDS:
+        return None
+    token_id = reusable_segment.get('tokenId')
+    provider_request_id = reusable_segment.get('providerRequestId') or ''
+    if not token_id or not provider_request_id:
+        return None
+    return reusable_segment
+
+
+def has_reusable_vbee_segment_asset(cache_key, allow_backfill=True):
+    if get_active_vbee_segment_asset(cache_key):
+        return True
+    if not allow_backfill:
+        return False
+    return _get_reusable_segment_backfill_candidate(cache_key) is not None
+
+
 def reuse_vbee_segment_asset(cache_key, allow_backfill=True):
     active_asset = get_active_vbee_segment_asset(cache_key)
     if active_asset:
@@ -201,15 +222,11 @@ def reuse_vbee_segment_asset(cache_key, allow_backfill=True):
         return refreshed_payload
     if not allow_backfill:
         return None
-    reusable_segment = get_latest_completed_vbee_segment_for_reuse(cache_key)
+    reusable_segment = _get_reusable_segment_backfill_candidate(cache_key)
     if not reusable_segment:
-        return None
-    if (_now() - int(reusable_segment.get('updatedAt') or 0)) > VBEE_SEGMENT_BACKFILL_MAX_AGE_SECONDS:
         return None
     token_id = reusable_segment.get('tokenId')
     provider_request_id = reusable_segment.get('providerRequestId') or ''
-    if not token_id or not provider_request_id:
-        return None
     try:
         token = get_vbee_token(token_id, include_secret=True)
         config = get_vbee_config()

@@ -202,6 +202,33 @@ export function normalizeActiveSubtitleLanguage(languageKey, subtitleTracks = nu
     : DEFAULT_SUBTITLE_LANGUAGE_KEY
 }
 
+export function getSubtitleCreateLanguageSelection(subtitleLanguageOptions = null, activeSubtitleLanguage = DEFAULT_SUBTITLE_LANGUAGE_KEY, hasOriginalSubtitles = false) {
+  const normalizedActiveLanguage = normalizeSubtitleLanguageKey(activeSubtitleLanguage)
+  const availableOptions = Array.isArray(subtitleLanguageOptions)
+    ? subtitleLanguageOptions.filter((option) => hasOriginalSubtitles || option.translatable)
+    : []
+  const fallbackLanguageKey = DEFAULT_TRANSLATION_LANGUAGE_KEY
+  const fallbackOption = availableOptions.find((option) => option.id === fallbackLanguageKey) || availableOptions[0] || {
+    id: fallbackLanguageKey,
+    label: getSubtitleLanguageLabel(fallbackLanguageKey),
+    source: 'translation',
+    translatable: true,
+    hasSubtitles: false,
+  }
+  const selectedLanguageKey = hasOriginalSubtitles
+    ? normalizedActiveLanguage
+    : (normalizedActiveLanguage === DEFAULT_SUBTITLE_LANGUAGE_KEY ? fallbackOption.id : normalizedActiveLanguage)
+  const selectedLanguageOption = availableOptions.find((option) => option.id === selectedLanguageKey)
+    || fallbackOption
+
+  return {
+    availableOptions,
+    canCreateSelectedLanguage: Boolean(selectedLanguageOption.translatable),
+    selectedLanguageKey: selectedLanguageOption.id,
+    selectedLanguageOption,
+  }
+}
+
 export function getSubtitlesForLanguage(subtitleTracks = null, languageKey = DEFAULT_SUBTITLE_LANGUAGE_KEY) {
   const normalizedTracks = normalizeSubtitleTracks(subtitleTracks)
   const normalizedLanguageKey = normalizeSubtitleLanguageKey(languageKey)

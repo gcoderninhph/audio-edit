@@ -35,10 +35,11 @@ def create_vbee_voice_request_with_segments(request_payload, segment_payloads):
                 cursor.execute(
                     """
                     INSERT INTO vbee_voice_segments
-                        (request_id, segment_index, text_content, start_ms, end_ms, language, voice_code, cache_key, token_id, provider_request_id, status, audio_url, error_message, character_count, created_at, updated_at)
-                    VALUES (%s, %s, %s, %s, %s, %s, %s, %s, NULL, %s, %s, %s, %s, %s, %s, %s)
+                        (id, request_id, segment_index, text_content, start_ms, end_ms, language, voice_code, cache_key, token_id, provider_request_id, status, audio_url, error_message, character_count, created_at, updated_at)
+                    VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, NULL, %s, %s, %s, %s, %s, %s, %s)
                     """,
                     (
+                        segment['id'],
                         segment['request_id'],
                         int(segment['segment_index']),
                         segment['text_content'],
@@ -219,7 +220,7 @@ def update_vbee_segment_row(segment_id, updates):
     connection = _connect(MYSQL_DATABASE)
     try:
         with connection.cursor() as cursor:
-            cursor.execute(f'UPDATE vbee_voice_segments SET {assignments} WHERE id = %s', (*values, int(segment_id)))
+            cursor.execute(f'UPDATE vbee_voice_segments SET {assignments} WHERE id = %s', (*values, str(segment_id)))
     finally:
         connection.close()
 
@@ -228,7 +229,7 @@ def get_vbee_segment_row(segment_id):
     connection = _connect(MYSQL_DATABASE)
     try:
         with connection.cursor() as cursor:
-            cursor.execute('SELECT * FROM vbee_voice_segments WHERE id = %s LIMIT 1', (int(segment_id),))
+            cursor.execute('SELECT * FROM vbee_voice_segments WHERE id = %s LIMIT 1', (str(segment_id),))
             return cursor.fetchone()
     finally:
         connection.close()

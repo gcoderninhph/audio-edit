@@ -482,6 +482,7 @@ export function useVideoEditor() {
     videoVolume, voiceoverVolume, handleVideoVolumeChange, handleVoiceoverVolumeChange, handleToggleVideoMute,
     framePreset, frameSummary, frameBackgroundLabel, currentTime, setCurrentTime, seekToScene, setSceneMotionConfig, detectSceneFace, applySceneMotionBulkConfig, sceneBulkMotionRules, setSceneBulkMotionRules,
     activeSubtitleLanguage, setActiveSubtitleLanguage, subtitleLanguageOptions,
+    originalSubtitles,
     subtitles, filteredSubtitles, isTranscribing, transcribeProgress, startTranscription,
     isTranslating, translateProgress, startTranslation,
     isGeneratingVoiceover, voiceoverProgress, lastVoiceoverAudioName: localizedVoiceoverAudioName, voiceoverTrack: localizedVoiceoverTrack, clearSubtitles, clearVoiceover, startVoiceover, updateSubtitle, removeSubtitle,

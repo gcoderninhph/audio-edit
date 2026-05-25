@@ -118,26 +118,35 @@ export async function runTranslationJob({
   originalSubtitles,
   subtitleTracks,
   activeSubtitleLanguage,
+  videoFile,
+  videoDuration,
   sessionIdRef,
   pushState,
   getCurrentSnapshot,
   setIsTranslating,
   setTranslateProgress,
+  setTranscriptionJobId,
   setTranslationJobId,
   scenes,
   deletedSceneIds,
   transcriptionJobId,
+  translationJobId,
   performAutoSave,
   setSubtitleTracks,
   setActiveSubtitleLanguage,
   targetLanguageKey,
 }) {
-  if (!Array.isArray(originalSubtitles) || originalSubtitles.length === 0 || !isTranslatableSubtitleLanguage(targetLanguageKey)) {
+  if (!isTranslatableSubtitleLanguage(targetLanguageKey)) {
     return;
   }
 
   const normalizedTargetLanguageKey = targetLanguageKey;
   const targetLanguageLabel = getSubtitleLanguageLabel(normalizedTargetLanguageKey);
+  const hasCachedOriginalSubtitles = Array.isArray(originalSubtitles) && originalSubtitles.length > 0;
+
+  if (!hasCachedOriginalSubtitles && !videoFile) {
+    return;
+  }
 
   const currentSessionId = sessionIdRef.current;
   const updateTranslateProgress = (progress) => {
@@ -150,11 +159,65 @@ export async function runTranslationJob({
 
   pushState(getCurrentSnapshot());
   setIsTranslating(true);
-  setTranslateProgress({ phase: 'Starting translation...', percent: 0 });
+  setTranslateProgress({ phase: 'Starting Create Sub...', percent: 0 });
 
   try {
+    let sourceSubtitles = originalSubtitles;
+    let workingSubtitleTracks = subtitleTracks;
+    let currentTranscriptionJobId = transcriptionJobId;
+
+    if (!hasCachedOriginalSubtitles) {
+      setTranslateProgress({ phase: 'Loading tools...', percent: 0 });
+      const ffmpeg = await getFFmpeg((progress) => {
+        updateTranslateProgress({ phase: 'Loading tools...', percent: progress });
+      });
+      sourceSubtitles = await transcribeVideo(
+        ffmpeg,
+        videoFile,
+        videoDuration,
+        updateTranslateProgress,
+        (jobId) => {
+          if (sessionIdRef.current !== currentSessionId) {
+            return;
+          }
+
+          currentTranscriptionJobId = jobId;
+          setTranscriptionJobId?.(jobId);
+          performAutoSave({
+            activeSubtitleLanguageData: activeSubtitleLanguage,
+            deletedIdsData: Array.from(deletedSceneIds),
+            scenesData: scenes,
+            subtitleTracksData: workingSubtitleTracks,
+            transJobId: jobId,
+            translJobId: translationJobId,
+          });
+        },
+      );
+
+      if (sessionIdRef.current !== currentSessionId) {
+        return;
+      }
+
+      workingSubtitleTracks = setSubtitleTrackSubtitles(
+        workingSubtitleTracks,
+        DEFAULT_SUBTITLE_LANGUAGE_KEY,
+        sourceSubtitles,
+      );
+      setSubtitleTracks(workingSubtitleTracks);
+      currentTranscriptionJobId = null;
+      setTranscriptionJobId?.(null);
+      performAutoSave({
+        activeSubtitleLanguageData: activeSubtitleLanguage,
+        deletedIdsData: Array.from(deletedSceneIds),
+        scenesData: scenes,
+        subtitleTracksData: workingSubtitleTracks,
+        transJobId: null,
+        translJobId: translationJobId,
+      });
+    }
+
     const nextSubtitles = await translateSubtitles(
-      originalSubtitles,
+      sourceSubtitles,
       targetLanguageLabel,
       updateTranslateProgress,
       (requestId, outputFileName) => {
@@ -168,8 +231,8 @@ export async function runTranslationJob({
           activeSubtitleLanguageData: activeSubtitleLanguage,
           deletedIdsData: Array.from(deletedSceneIds),
           scenesData: scenes,
-          subtitleTracksData: subtitleTracks,
-          transJobId: transcriptionJobId,
+          subtitleTracksData: workingSubtitleTracks,
+          transJobId: currentTranscriptionJobId,
           translJobId: jobId,
         });
       },
@@ -180,7 +243,7 @@ export async function runTranslationJob({
     }
 
     const nextSubtitleTracks = setSubtitleTrackSubtitles(
-      subtitleTracks,
+      workingSubtitleTracks,
       normalizedTargetLanguageKey,
       nextSubtitles,
     );
@@ -193,7 +256,7 @@ export async function runTranslationJob({
       deletedIdsData: Array.from(deletedSceneIds),
       scenesData: scenes,
       subtitleTracksData: nextSubtitleTracks,
-      transJobId: transcriptionJobId,
+      transJobId: currentTranscriptionJobId,
       translJobId: null,
     });
   } catch (error) {
@@ -202,7 +265,8 @@ export async function runTranslationJob({
     }
 
     console.error(error);
-    alert(`Subtitle translation failed: ${error.message}`);
+    alert(`Create Sub failed: ${error.message}`);
+    setTranscriptionJobId?.(null);
     setTranslationJobId(null);
   } finally {
     if (sessionIdRef.current === currentSessionId) {
@@ -268,7 +332,7 @@ export async function runVoiceoverJob({
       return;
     }
 
-    updateVoiceoverProgress({ phase: 'Saving audio to project...', percent: 95 });
+    updateVoiceoverProgress({ phase: 'Saving audio to project...', percent: 100 });
     const savedVoiceover = await saveLocalProjectVoiceoverAudio(currentSessionId, {
       bytes: result.audioBlob,
       duration: result.duration,

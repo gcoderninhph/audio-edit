@@ -219,6 +219,27 @@ export async function downloadTranslatedSubtitles(requestId, outputFileName) {
   return srtToJson(translatedSrtText);
 }
 
+export async function estimateCreateSubCredits({ durationSeconds, originSubtitles, signal }) {
+  const response = await apiFetch('/api/subtitles/estimate', {
+    method: 'POST',
+    signal,
+    headers: {
+      'Content-Type': 'application/json',
+      ...getAuthRequestHeaders(),
+    },
+    body: JSON.stringify({
+      durationSeconds: Number.isFinite(Number(durationSeconds)) ? Number(durationSeconds) : null,
+      originSubtitles: Array.isArray(originSubtitles) ? originSubtitles : [],
+    }),
+  })
+
+  if (!response.ok) {
+    throw new Error(await readApiErrorMessage(response, 'Unable to estimate Create Sub credits'))
+  }
+
+  return await response.json()
+}
+
 async function pollTranslationJob(requestId, outputFileName, onProgress, { initialDelayMs = 3000 } = {}) {
   onProgress({ phase: 'Translating (this may take a few minutes)...', percent: 30 });
   let isFinished = false;

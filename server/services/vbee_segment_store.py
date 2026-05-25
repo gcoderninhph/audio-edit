@@ -48,6 +48,7 @@ def _segment_status_from_row(row):
 
 def _row_to_segment_summary(row):
     request_count = int(row.get('request_count') or 0)
+    token_id = str(row.get('token_id') or '').strip()
     return {
         'hash': row.get('cache_key') or '',
         'text': row.get('text_content') or '',
@@ -59,7 +60,7 @@ def _row_to_segment_summary(row):
         'audioUrl': row.get('audio_url') or '',
         'expiresAt': int(row.get('expires_at') or 0),
         'providerRequestId': row.get('provider_request_id') or '',
-        'tokenId': int(row.get('token_id') or 0) or None,
+        'tokenId': token_id or None,
         'characterCount': int(row.get('character_count') or 0),
         'errorMessage': row.get('error_message') or '',
         'createdAt': int(row.get('created_at') or 0),

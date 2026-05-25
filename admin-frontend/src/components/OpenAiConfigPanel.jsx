@@ -10,6 +10,7 @@ const DEFAULT_CONFIG = {
   systemPrompt: 'You translate subtitle files. Return only valid SRT content.',
   temperature: 0.2,
   timeoutSeconds: 120,
+  creditPerWord: 1,
 }
 
 const MODEL_OPTIONS = [
@@ -84,6 +85,7 @@ export default function OpenAiConfigPanel() {
           </label>
           <label className="field"><span>Temperature</span><input type="number" min="0" max="2" step="0.1" value={config.temperature} onChange={(event) => setConfig((current) => ({ ...current, temperature: Number(event.target.value) || 0 }))} /></label>
           <label className="field"><span>Timeout seconds</span><input type="number" min="10" max="600" step="1" value={config.timeoutSeconds} onChange={(event) => setConfig((current) => ({ ...current, timeoutSeconds: Number(event.target.value) || 120 }))} /></label>
+          <label className="field"><span>Credit per word</span><input type="number" min="0" max="100000" step="0.01" value={config.creditPerWord} onChange={(event) => setConfig((current) => ({ ...current, creditPerWord: Number(event.target.value) || 0 }))} /></label>
           <label className="field package-description-field"><span>System prompt</span><textarea value={config.systemPrompt} onChange={(event) => setConfig((current) => ({ ...current, systemPrompt: event.target.value }))} /></label>
           <label className="field package-description-field"><span>Prompt template</span><textarea value={config.promptTemplate} onChange={(event) => setConfig((current) => ({ ...current, promptTemplate: event.target.value }))} /></label>
         </div>

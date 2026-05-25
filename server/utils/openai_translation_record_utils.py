@@ -64,6 +64,7 @@ def serialize_config(row, *, defaults, legacy_default_model=''):
         'promptTemplate': str(row.get('prompt_template') or safe_defaults.get('promptTemplate') or ''),
         'temperature': safe_float(row.get('temperature'), safe_defaults.get('temperature') or 0.0),
         'timeoutSeconds': max(10, min(600, safe_int(row.get('timeout_seconds'), safe_defaults.get('timeoutSeconds') or 120))),
+        'creditPerWord': max(0.0, safe_float(row.get('credit_per_word'), safe_defaults.get('creditPerWord') or 0.0)),
     }
 
 

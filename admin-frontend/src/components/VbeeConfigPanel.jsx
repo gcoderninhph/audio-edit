@@ -6,7 +6,7 @@ import DeveloperMarker from './DeveloperMarker'
 const EMPTY_LIST = []
 
 export default function VbeeConfigPanel() {
-  const [config, setConfig] = useState({ apiBaseUrl: '', audioType: 'wav', defaultLanguage: 'vi', defaultVoiceCode: '', enabledLanguageCodes: [], supportedLanguages: [], webhookHost: '', webhookPath: '/api/vbee/webhook', webhookSecret: '', webhookUrl: '' })
+  const [config, setConfig] = useState({ apiBaseUrl: '', audioType: 'wav', defaultLanguage: 'vi', defaultVoiceCode: '', enabledLanguageCodes: [], supportedLanguages: [], webhookHost: '', webhookPath: '/api/vbee/webhook', webhookSecret: '', webhookUrl: '', creditPerCharacter: 1, cachedCreditPerCharacter: 0 })
   const [error, setError] = useState('')
   const [isLoading, setIsLoading] = useState(true)
   const [isSaving, setIsSaving] = useState(false)
@@ -81,6 +81,8 @@ export default function VbeeConfigPanel() {
           <label className="field"><span>Default voice</span><input value={config.defaultVoiceCode} onChange={(event) => setConfig((current) => ({ ...current, defaultVoiceCode: event.target.value }))} /></label>
           <label className="field"><span>Webhook host</span><input value={config.webhookHost || ''} placeholder="https://audio-test.accstore.pro.vn" onChange={(event) => setConfig((current) => ({ ...current, webhookHost: event.target.value }))} /></label>
           <label className="field"><span>Webhook path</span><input value={config.webhookPath || '/api/vbee/webhook'} readOnly /></label>
+          <label className="field"><span>Credit per character</span><input type="number" min="0" step="0.0001" value={config.creditPerCharacter ?? ''} onChange={(event) => setConfig((current) => ({ ...current, creditPerCharacter: event.target.value }))} /></label>
+          <label className="field"><span>Cached credit per character</span><input type="number" min="0" step="0.0001" value={config.cachedCreditPerCharacter ?? ''} onChange={(event) => setConfig((current) => ({ ...current, cachedCreditPerCharacter: event.target.value }))} /></label>
           <div className="field vbee-language-config-field">
             <span>Enabled voiceover languages</span>
             <div className="subtitle-tool-note">

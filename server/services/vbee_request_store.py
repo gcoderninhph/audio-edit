@@ -1,4 +1,5 @@
 import secrets
+import uuid
 
 try:
     from utils.pagination import build_pagination, normalize_pagination
@@ -90,6 +91,10 @@ def generate_request_id():
     return f'vbee-{now_timestamp()}-{secrets.token_hex(5)}'
 
 
+def generate_segment_id():
+    return str(uuid.uuid4())
+
+
 def create_vbee_request_record(user_id, language, voice_code, payload, segments):
     ensure_vbee_schema()
     request_id = generate_request_id()
@@ -122,6 +127,7 @@ def create_vbee_request_record(user_id, language, voice_code, payload, segments)
     for index, segment in enumerate(segments):
         segment_payloads.append(
             {
+                'id': str(segment.get('id') or generate_segment_id()),
                 'request_id': request_id,
                 'segment_index': index,
                 'text_content': segment['text'],
@@ -259,6 +265,9 @@ def mark_vbee_segment_processing(segment_id, token_id, provider_request_id, voic
 def update_vbee_segment(segment_id, status=None, token_id=None, provider_request_id=None, audio_url=None, error_message=None, language=None, voice_code=None):
     ensure_vbee_schema()
     driver = _require_driver()
+    safe_segment_id = str(segment_id or '').strip()
+    if not safe_segment_id:
+        raise VbeeNotFoundError('Vbee segment not found')
     updates = {'updated_at': now_timestamp()}
     if status is not None:
         updates['status'] = status
@@ -275,8 +284,8 @@ def update_vbee_segment(segment_id, status=None, token_id=None, provider_request
     if voice_code is not None:
         updates['voice_code'] = voice_code
     try:
-        update_vbee_segment_row(int(segment_id), updates)
-        row = get_vbee_segment_row(int(segment_id))
+        update_vbee_segment_row(safe_segment_id, updates)
+        row = get_vbee_segment_row(safe_segment_id)
         if row and (language is not None or voice_code is not None):
             request_updates = {'updated_at': now_timestamp()}
             if language is not None:

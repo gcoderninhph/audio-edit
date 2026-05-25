@@ -41,17 +41,17 @@
 - `admin-frontend/src/components/OpenAiRequestDetailPanel.jsx` - Renders the table-based OpenAI request detail view for a selected request record, including top-level fields and saved metadata rows.
 - `admin-frontend/src/components/OpenAiTokenUsagePanel.jsx` - Renders the OpenAI token-usage table with input, output, and total token counts per saved request, plus row navigation into request detail.
 - `admin-frontend/src/components/OpenAiTestPanel.jsx` - Renders the OpenAI admin test tool for uploading one `.srt`, choosing a target language, running a direct translation call, and reviewing the translated result panel inline.
-- `admin-frontend/src/components/OpenAiConfigPanel.jsx` - Renders the OpenAI provider config form for API base URL, model, system prompt, and prompt template placeholders.
+- `admin-frontend/src/components/OpenAiConfigPanel.jsx` - Renders the OpenAI provider config form for API base URL, model, timeout, credit-per-word subtitle translation billing, system prompt, and prompt template placeholders.
 - `admin-frontend/src/components/VbeeOperationsPanel.jsx` - Renders the Vbee left-nav and right-content operations layout.
 - `admin-frontend/src/components/VbeeTokensPanel.jsx` - Renders Vbee token CRUD, active-state controls, concurrency, and stats.
 - `admin-frontend/src/components/VbeeRequestsPanel.jsx` - Renders Vbee request list filters and request detail replacement views.
 - `admin-frontend/src/components/VbeeSegmentsPanel.jsx` - Renders the grouped Vbee segment list, status filter, cache-clear flow, and route handoff into the dedicated Vbee segment detail component while keeping the list surface under the 400-line guardrail.
 - `admin-frontend/src/components/VbeeSegmentDetailPanel.jsx` - Renders the Service/Vbee segment detail view with top-level failure reasons, a structured failure-detail section showing the latest failed stage and recent failure events, usage-level error visibility, delete confirmation, and inline audio preview for completed assets.
-- `admin-frontend/src/components/VbeeConfigPanel.jsx` - Renders the Vbee provider config form, shows webhook host/path info above the checkbox grid that enables or disables supported narration languages for desktop voiceover, and no longer exposes the saved webhook secret for inline editing.
+- `admin-frontend/src/components/VbeeConfigPanel.jsx` - Renders the Vbee provider config form, including webhook host/path info, per-character and cached per-character credit-rate inputs, and the checkbox grid that enables or disables supported narration languages for desktop voiceover, while no longer exposing the saved webhook secret for inline editing.
 - `admin-frontend/src/components/WhisperOperationsPanel.jsx` - Renders the Whisper left-nav and right-content operations layout for requests, processing nodes, and config.
 - `admin-frontend/src/components/WhisperNodesPanel.jsx` - Renders the Service/Whisper node-management panel with a toolbar, a shared add/edit modal for node `name`, URL, and `maxConcurrentRequests`, per-row `Edit` and `Delete` actions with processing-safe delete guarding, the queue-capacity notice, and a compact table of configured processing nodes.
 - `admin-frontend/src/components/WhisperRequestsPanel.jsx` - Renders the compact Vbee-token-style Whisper transcription request table with status filtering, queue position, node assignment, provider job hints, and pagination.
-- `admin-frontend/src/components/WhisperConfigPanel.jsx` - Renders the Whisper provider config placeholder (empty body until backend config is ready).
+- `admin-frontend/src/components/WhisperConfigPanel.jsx` - Renders the Whisper provider config form, including detect-credit-per-minute billing used by subtitle origin detection with floored video minutes.
 - `admin-frontend/src/components/UserDetailPage.jsx` - Renders the selected user detail screen with premium, lock, request, and credit history management.
 - `admin-frontend/src/components/Pagination.jsx` - Renders reusable pagination controls across admin lists.
 - `admin-frontend/src/utils/iapPackages.js` - Centralizes admin IAP package-type constants, labels, and derived behavior summaries.

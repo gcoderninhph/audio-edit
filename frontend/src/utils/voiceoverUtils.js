@@ -23,6 +23,41 @@ export async function fetchVoiceoverClientConfig() {
   return response.json()
 }
 
+export async function estimateVoiceoverCredits(subtitles, options = {}) {
+  const subtitlePayload = normalizeSubtitlePayload(subtitles)
+  if (!subtitlePayload.length) {
+    throw new Error('No subtitles available to estimate voiceover credits')
+  }
+
+  const requestPayload = { subtitles: subtitlePayload }
+  if (options.language) {
+    requestPayload.language = String(options.language)
+  }
+  if (options.languageCode) {
+    requestPayload.languageCode = String(options.languageCode)
+  }
+  if (options.voiceCode) {
+    requestPayload.voiceCode = String(options.voiceCode)
+  }
+
+  const response = await apiFetch('/api/voiceover/estimate', {
+    method: 'POST',
+    headers: {
+      ...getAuthRequestHeaders(),
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify(requestPayload),
+    signal: options.signal,
+  })
+
+  if (!response.ok) {
+    throw new Error(await readApiErrorMessage(response, 'Unable to estimate voiceover credits'))
+  }
+
+  const payload = await response.json()
+  return payload.estimate || payload
+}
+
 async function fetchVoiceoverStatus(requestId) {
   const statusResponse = await apiFetch(`/api/voiceover/status/${requestId}`, {
     headers: getAuthRequestHeaders(),
@@ -131,6 +166,30 @@ function isMatchingSegment(leftSegment, rightSegment) {
   return String(leftSegment?.index ?? '') === String(rightSegment?.index ?? '')
 }
 
+function resolveVoiceoverSegmentCount(statusData, completedSegments, downloadedSegments) {
+  const candidateCount = Number(statusData?.totalSegments || 0)
+  if (Number.isFinite(candidateCount) && candidateCount > 0) {
+    return Math.max(1, Math.round(candidateCount))
+  }
+  return Math.max(1, completedSegments.length, downloadedSegments.size)
+}
+
+function buildVoiceoverDownloadPercent(downloadedCount, totalSegments) {
+  if (!Number.isFinite(totalSegments) || totalSegments <= 0) {
+    return 0
+  }
+  return Math.max(0, Math.min(100, Math.round((Math.max(0, downloadedCount) / totalSegments) * 100)))
+}
+
+function reportVoiceoverDownloadProgress(onProgress, phase, downloadedCount, totalSegments) {
+  onProgress?.({
+    downloadedFiles: downloadedCount,
+    percent: buildVoiceoverDownloadPercent(downloadedCount, totalSegments),
+    phase: `${phase} (${Math.min(downloadedCount, totalSegments)}/${totalSegments})`,
+    totalFiles: totalSegments,
+  })
+}
+
 async function downloadSegmentWithRetry(requestId, segment, projectId) {
   try {
     return {
@@ -162,15 +221,16 @@ async function downloadSegmentWithRetry(requestId, segment, projectId) {
 
 async function downloadNewSegments(statusData, requestId, projectId, downloadedSegments, onProgress) {
   const completedSegments = getCompletedSegments(statusData)
-  const totalSegments = Number(statusData.totalSegments || completedSegments.length || 1)
+  const totalSegments = resolveVoiceoverSegmentCount(statusData, completedSegments, downloadedSegments)
   for (const segment of completedSegments) {
     const segmentKey = String(segment.index)
     const currentDownload = downloadedSegments.get(segmentKey)
     if (currentDownload?.audioUrl === segment.audioUrl) continue
-    onProgress?.({ phase: 'Downloading completed Vbee audio...', percent: Math.min(88, 68 + Math.round((downloadedSegments.size / totalSegments) * 20)) })
     const downloadResult = await downloadSegmentWithRetry(requestId, segment, projectId)
     downloadedSegments.set(segmentKey, downloadResult)
+    reportVoiceoverDownloadProgress(onProgress, 'Downloading completed Vbee audio files...', downloadedSegments.size, totalSegments)
   }
+  return { completedSegments, totalSegments }
 }
 
 async function composeDownloadedSegments(downloadedSegments, requestId, totalDurationMs, projectId) {
@@ -207,18 +267,18 @@ async function pollVoiceoverJob(requestId, subtitles, onProgress, options = {}) 
   while (true) {
     await new Promise((resolve) => window.setTimeout(resolve, 500))
     const statusData = await fetchVoiceoverStatus(requestId)
-    await downloadNewSegments(statusData, requestId, options.projectId, downloadedSegments, onProgress)
+    const { completedSegments, totalSegments } = await downloadNewSegments(statusData, requestId, options.projectId, downloadedSegments, onProgress)
+    const downloadedCount = downloadedSegments.size
 
     if (isFailedStatus(statusData.status)) {
       throw new Error(statusData.errorMessage || statusData.error_message || 'Voiceover generation failed')
     }
 
     if (isCompleteStatus(statusData.status)) {
-      const expectedSegments = Number(statusData.totalSegments || downloadedSegments.size)
-      if (downloadedSegments.size < expectedSegments) {
+      if (downloadedCount < totalSegments) {
         throw new Error('Vbee completed the request without returning every audio URL')
       }
-      onProgress?.({ phase: 'Composing narration audio...', percent: 94 })
+      onProgress?.({ downloadedFiles: downloadedCount, percent: 100, phase: `Composing narration audio... (${downloadedCount}/${totalSegments})`, totalFiles: totalSegments })
       const composedAudio = await composeDownloadedSegments(downloadedSegments, requestId, totalDurationMs, options.projectId)
       return {
         ...composedAudio,
@@ -228,10 +288,11 @@ async function pollVoiceoverJob(requestId, subtitles, onProgress, options = {}) 
     }
 
     if (String(statusData.status || '').toLowerCase() === 'queued') {
-      onProgress?.({ phase: 'Waiting for a Vbee token...', percent: 30 })
+      reportVoiceoverDownloadProgress(onProgress, 'Waiting for completed audio files...', downloadedCount, totalSegments)
+    } else if (completedSegments.length > downloadedCount) {
+      reportVoiceoverDownloadProgress(onProgress, 'Downloading completed Vbee audio files...', downloadedCount, totalSegments)
     } else {
-      const progress = Number(statusData.progress || 0)
-      onProgress?.({ phase: 'Vbee is generating audio...', percent: Math.max(45, Math.min(80, 40 + Math.round(progress * 0.4))) })
+      reportVoiceoverDownloadProgress(onProgress, 'Vbee is generating audio files...', downloadedCount, totalSegments)
     }
   }
 }
@@ -276,6 +337,6 @@ export async function createVoiceoverFromSubtitles(subtitles, onProgress, option
     throw new Error('Vbee did not return a request_id')
   }
 
-  onProgress?.({ phase: startData.status === 'queued' ? 'The job is queued at Vbee...' : 'Vbee accepted the job...', percent: 20 })
+  onProgress?.({ phase: startData.status === 'queued' ? 'Waiting for completed audio files...' : 'Vbee accepted the job...', percent: 0 })
   return pollVoiceoverJob(requestId, subtitlePayload, onProgress, options)
 }

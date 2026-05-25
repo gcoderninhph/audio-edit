@@ -48,6 +48,9 @@ export async function transcribeVideo(ffmpeg, videoFile, duration, onProgress, o
     // Gửi file lấy Job ID
     const formData = new FormData();
     formData.append('file', audioFile);
+    if (Number.isFinite(Number(duration))) {
+      formData.append('duration_seconds', String(Math.max(0, Number(duration))));
+    }
 
     const startRes = await apiFetch('/api/transcription/start', {
       method: 'POST',

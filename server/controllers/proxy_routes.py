@@ -1,4 +1,5 @@
 from flask import Response, jsonify, request
+import json
 
 try:
     from controllers.auth_routes import require_access_token
@@ -10,6 +11,8 @@ try:
         is_openai_translation_job,
     )
     from services.openai_translation_store import OpenAiTranslationError
+    from services.subtitle_credit_service import calculate_translation_credit
+    from services.subtitle_credit_service import calculate_create_sub_credit
     from utils.proxy_credit_helpers import charge_user_credits_or_error, refund_credits_if_needed
     from utils.proxy_route_helpers import get_claim_user_id, require_request_owner
     from controllers.proxy_transcription_routes import register_transcription_routes
@@ -29,6 +32,8 @@ except ImportError:
         is_openai_translation_job,
     )
     from ..services.openai_translation_store import OpenAiTranslationError
+    from ..services.subtitle_credit_service import calculate_translation_credit
+    from ..services.subtitle_credit_service import calculate_create_sub_credit
     from ..utils.proxy_credit_helpers import charge_user_credits_or_error, refund_credits_if_needed
     from utils.proxy_route_helpers import get_claim_user_id, require_request_owner
     from .proxy_transcription_routes import register_transcription_routes
@@ -39,11 +44,26 @@ except ImportError:
         RequestStoreError,
     )
 
-TRANSLATION_CREDIT_COST = 100
-
-
 def register_proxy_routes(app):
     register_transcription_routes(app)
+
+    @app.route('/api/subtitles/estimate', methods=['POST'])
+    def estimate_create_sub_credits():
+        claims, auth_error = require_access_token()
+        if auth_error:
+            return auth_error
+
+        payload = request.get_json(silent=True) or {}
+        origin_subtitles = payload.get('originSubtitles') if isinstance(payload, dict) else None
+        duration_seconds = payload.get('durationSeconds') if isinstance(payload, dict) else None
+        try:
+            estimate = calculate_create_sub_credit(duration_seconds=duration_seconds, origin_subtitles=origin_subtitles)
+        except OpenAiTranslationError:
+            return jsonify({'error': 'OpenAI credit config is unavailable'}), 503
+        return jsonify({
+            'estimate': estimate,
+            'creditCost': estimate.get('creditCost') or 0,
+        }), 200
 
     @app.route('/api/translation/start', methods=['POST'])
     def start_translation():
@@ -63,12 +83,17 @@ def register_proxy_routes(app):
             return jsonify({'error': 'Subtitle file is empty'}), 400
 
         user_id = get_claim_user_id(claims)
+        try:
+            credit_estimate = calculate_translation_credit(file_bytes)
+        except OpenAiTranslationError:
+            return jsonify({'error': 'OpenAI credit config is unavailable'}), 503
+        credit_cost = int(credit_estimate.get('creditCost') or 0)
         charged_user, charge_error = charge_user_credits_or_error(
             claims,
-            TRANSLATION_CREDIT_COST,
+            credit_cost,
             'translate subtitles',
             'translation_charge',
-            details={'feature': 'translation'},
+            details={'feature': 'translation', **credit_estimate},
         )
         if charge_error:
             return charge_error
@@ -78,24 +103,25 @@ def register_proxy_routes(app):
             return jsonify({
                 **response_payload,
                 'creditBalance': charged_user.get('credits'),
-                'creditCost': TRANSLATION_CREDIT_COST,
+                'creditCost': credit_cost,
+                'creditEstimate': credit_estimate,
             }), 202
         except OpenAiTranslationValidationError as error:
             refund_credits_if_needed(
                 user_id,
-                TRANSLATION_CREDIT_COST,
+                credit_cost,
                 'translation_refund',
                 'Refunded translation credits',
-                {'feature': 'translation'},
+                {'feature': 'translation', **credit_estimate},
             )
             return jsonify({'error': str(error)}), 400
         except (OpenAiTranslationError, RequestStoreError) as error:
             refund_credits_if_needed(
                 user_id,
-                TRANSLATION_CREDIT_COST,
+                credit_cost,
                 'translation_refund',
                 'Refunded translation credits',
-                {'feature': 'translation'},
+                {'feature': 'translation', **credit_estimate},
             )
             return jsonify({'error': str(error) or 'OpenAI translation service is unavailable'}), 503
 

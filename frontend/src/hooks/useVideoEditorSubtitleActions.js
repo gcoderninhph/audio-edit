@@ -57,21 +57,25 @@ export function useVideoEditorSubtitleActions({
       originalSubtitles,
       subtitleTracks,
       activeSubtitleLanguage,
+      videoFile,
+      videoDuration,
       sessionIdRef,
       pushState,
       getCurrentSnapshot,
       setIsTranslating,
       setTranslateProgress,
+      setTranscriptionJobId,
       setTranslationJobId,
       scenes,
       deletedSceneIds,
       transcriptionJobId,
+      translationJobId,
       performAutoSave,
       setSubtitleTracks,
       setActiveSubtitleLanguage,
       targetLanguageKey,
     })
-  }, [activeSubtitleLanguage, deletedSceneIds, getCurrentSnapshot, originalSubtitles, performAutoSave, pushState, scenes, setActiveSubtitleLanguage, setIsTranslating, setSubtitleTracks, setTranslateProgress, setTranslationJobId, sessionIdRef, subtitleTracks, transcriptionJobId])
+  }, [activeSubtitleLanguage, deletedSceneIds, getCurrentSnapshot, originalSubtitles, performAutoSave, pushState, scenes, setActiveSubtitleLanguage, setIsTranslating, setSubtitleTracks, setTranscriptionJobId, setTranslateProgress, setTranslationJobId, sessionIdRef, subtitleTracks, transcriptionJobId, translationJobId, videoDuration, videoFile])
 
   const startVoiceover = useCallback(async (targetLanguageKey) => {
     await runVoiceoverJob({

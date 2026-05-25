@@ -1,18 +1,17 @@
 import { useCallback, useState, useEffect, useMemo, useRef } from 'react';
-import { createPortal } from 'react-dom';
 import './App.css';
 import { useVideoEditor } from './hooks/useVideoEditor';
 import { useAuthSession } from './hooks/useAuthSession';
 import AuthDialog from './components/Auth/AuthDialog';
 import AppHeader from './components/AppShell/AppHeader';
 import AppEditorHeaderStatus from './components/AppShell/AppEditorHeaderStatus';
+import ProcessingLockModal from './components/AppShell/ProcessingLockModal';
 import AppEditorWorkspace from './components/AppShell/AppEditorWorkspace';
 import CreditPackagesDialog from './components/AppShell/CreditPackagesDialog';
 import PremiumPackagesDialog from './components/AppShell/PremiumPackagesDialog';
 import AdminBootstrapSetup from './components/Admin/AdminBootstrapSetup';
 import AdminConsole from './components/Admin/AdminConsole';
 import ProjectDashboard from './components/ProjectDashboard/ProjectDashboard';
-import DeveloperLocator from './components/DeveloperLocator/DeveloperLocator';
 import { useI18n } from './i18n/useI18n';
 
 function App() {
@@ -37,6 +36,29 @@ function App() {
   const [isDetectionOverlayLatched, setIsDetectionOverlayLatched] = useState(false);
   const { redo, setCurrentTime, undo, videoRef } = editor;
   const isDetectionOverlayVisible = editor.isDetecting || isDetectionOverlayLatched;
+  const voiceoverModalTitle = t('panel.subtitleList.voiceoverPhase');
+  const voiceoverModalMessage = editor.voiceoverProgress?.phase || '';
+  const processingLockConfig = isDetectionOverlayVisible
+    ? {
+        ariaLabel: 'Scene detection in progress',
+        code: 'panel.scene-list.detecting.modal',
+        locatorTitle: 'Scene Detection Blocking Modal',
+        progressPercent: editor.detectProgress,
+        title: 'Analyzing video...',
+      }
+    : editor.isGeneratingVoiceover
+      ? {
+          ariaLabel: 'Voiceover generation in progress',
+          code: 'panel.subtitle.voiceover.modal',
+          locatorTitle: 'Voiceover Blocking Modal',
+          message: voiceoverModalMessage === voiceoverModalTitle ? '' : voiceoverModalMessage,
+          progressFill: 'linear-gradient(90deg, #f59e0b, #fb7185)',
+          progressPercent: editor.voiceoverProgress?.percent ?? 0,
+          spinnerColor: '#f59e0b',
+          title: voiceoverModalTitle,
+        }
+      : null;
+  const isProcessingLockVisible = Boolean(processingLockConfig);
   const hasVideo = !!editor.videoUrl;
   const hasActiveBackgroundTask = Boolean(
     editor.isUploading
@@ -91,7 +113,7 @@ function App() {
   }, [editor.isDetecting]);
 
   useEffect(() => {
-    if (!isDetectionOverlayVisible) {
+    if (!isProcessingLockVisible) {
       return undefined;
     }
 
@@ -102,7 +124,7 @@ function App() {
 
     window.addEventListener('keydown', blockKeyDown, true);
     return () => window.removeEventListener('keydown', blockKeyDown, true);
-  }, [isDetectionOverlayVisible]);
+  }, [isProcessingLockVisible]);
 
   const handleTogglePlayerSidebarSection = useCallback((section) => {
     setActivePlayerSidebarSection((currentSection) => (currentSection === section ? null : section));
@@ -406,20 +428,7 @@ function App() {
         selectedSceneConfig={selectedSceneConfig}
         selectedSceneConfigIndex={selectedSceneConfigIndex}
       />
-      {isDetectionOverlayVisible && typeof document !== 'undefined' && createPortal(
-        <div className="export-modal-layer processing-lock-modal dev-locator-host" style={{ zIndex: 180 }} role="dialog" aria-modal="true" aria-label="Scene detection in progress">
-          <DeveloperLocator code="panel.scene-list.detecting.modal" title="Scene Detection Blocking Modal" />
-          <div className="processing-lock-dialog">
-            <div className="detecting-spinner" />
-            <div className="processing-lock-title">Analyzing video...</div>
-            <div className="processing-lock-progress-bar">
-              <div className="processing-lock-progress-fill" style={{ width: `${editor.detectProgress}%` }} />
-            </div>
-            <div className="processing-lock-progress-text">{editor.detectProgress}%</div>
-          </div>
-        </div>,
-        document.body,
-      )}
+      {processingLockConfig && <ProcessingLockModal {...processingLockConfig} />}
       {authDialog}
       {creditDialog}
       {premiumDialog}

@@ -224,6 +224,7 @@ export default function AppEditorWorkspace({
           >
             <SubtitlePanel
               subtitles={editor.filteredSubtitles}
+              originalSubtitles={editor.originalSubtitles}
               currentTime={editor.currentTime}
               onDeleteSubtitle={editor.removeSubtitle}
               onUpdateSubtitle={editor.updateSubtitle}
@@ -231,12 +232,12 @@ export default function AppEditorWorkspace({
               activeSubtitleLanguage={editor.activeSubtitleLanguage}
               onActiveSubtitleLanguageChange={editor.setActiveSubtitleLanguage}
               subtitleLanguageOptions={editor.subtitleLanguageOptions}
-              onStartTranscription={editor.startTranscription}
               isTranscribing={editor.isTranscribing}
               transcribeProgress={editor.transcribeProgress}
               onStartTranslation={editor.startTranslation}
               isTranslating={editor.isTranslating}
               translateProgress={editor.translateProgress}
+              videoDuration={editor.videoDuration}
               onStartVoiceover={editor.startVoiceover}
               isGeneratingVoiceover={editor.isGeneratingVoiceover}
               voiceoverProgress={editor.voiceoverProgress}

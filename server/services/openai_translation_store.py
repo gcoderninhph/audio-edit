@@ -86,6 +86,7 @@ DEFAULT_PROMPT_TEMPLATE = os.environ.get(
 )
 DEFAULT_TEMPERATURE = float(os.environ.get('OPENAI_TRANSLATION_TEMPERATURE', '0.2'))
 DEFAULT_TIMEOUT_SECONDS = int(os.environ.get('OPENAI_TRANSLATION_TIMEOUT_SECONDS', '120'))
+DEFAULT_CREDIT_PER_WORD = float(os.environ.get('OPENAI_TRANSLATION_CREDIT_PER_WORD', '1') or '1')
 
 _schema_ready = False
 
@@ -116,6 +117,7 @@ def _defaults():
         'promptTemplate': DEFAULT_PROMPT_TEMPLATE,
         'temperature': DEFAULT_TEMPERATURE,
         'timeoutSeconds': DEFAULT_TIMEOUT_SECONDS,
+        'creditPerWord': DEFAULT_CREDIT_PER_WORD,
     }
 
 
@@ -255,6 +257,7 @@ def update_openai_translation_config(payload):
         'promptTemplate': str((payload or {}).get('promptTemplate') or current_config['promptTemplate']).strip() or DEFAULT_PROMPT_TEMPLATE,
         'temperature': max(0.0, min(2.0, _safe_float((payload or {}).get('temperature'), current_config['temperature']))),
         'timeoutSeconds': max(10, min(600, _safe_int((payload or {}).get('timeoutSeconds'), current_config['timeoutSeconds']))),
+        'creditPerWord': max(0.0, min(100000.0, _safe_float((payload or {}).get('creditPerWord'), current_config['creditPerWord']))),
     }
     now = time.time()
     driver = _require_driver()
