@@ -17,8 +17,6 @@ x-whishper-service: &whishper-service
   depends_on:
     mongo:
       condition: service_started
-    translate:
-      condition: service_started
   expose:
     - "80"
 
@@ -28,6 +26,7 @@ services:
       context: .
       dockerfile: server/Dockerfile
     restart: unless-stopped
+    image: registry.gitlab.com/gcoder.ninhph1/audio-edit:latest
     depends_on:
       mysql:
         condition: service_started
@@ -94,12 +93,6 @@ services:
     expose:
       - "27017"
     command: [ "--logpath", "/var/log/mongodb/mongod.log" ]
-
-  translate:
-    image: libretranslate/libretranslate:latest
-    restart: unless-stopped
-    expose:
-      - "5000"
 
   whishper:
     <<: *whishper-service

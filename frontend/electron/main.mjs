@@ -27,7 +27,7 @@ const __dirname = path.dirname(__filename)
 
 const frontendDir = path.resolve(__dirname, '..')
 const distDir = path.join(frontendDir, 'dist')
-const isDeveloper = true
+const isDeveloper = false
 const serverUrl = 'https://audio-test.accstore.pro.vn'
 const sessionDataDir = path.join(app.getPath('userData'), 'session-data')
 

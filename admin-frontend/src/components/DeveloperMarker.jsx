@@ -1,5 +1,5 @@
 const DEVELOPER_OVERRIDE_KEY = 'videoforge-admin-react-is-developer'
-const ADMIN_REACT_IS_DEVELOPER = true
+const ADMIN_REACT_IS_DEVELOPER = false
 
 function normalizeDeveloperValue(value) {
   const normalizedValue = String(value || '').trim().toLowerCase()

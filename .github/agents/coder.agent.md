@@ -13,15 +13,14 @@ This workspace contains:
 - A Flask server in `server/`
 - A Docker Compose backend runtime at the workspace root used to start backend services instead of launching Flask locally by default
 - A task-tracking file expected at the workspace root such as `TASK.md`
-- A desktop app map at the workspace root as `MAP.md`
-- A web admin map at the workspace root as `MAP.admin.md`
-- A backend runtime map at the workspace root as `MAP.backend.md`
+- A workspace map index at the workspace root as `MAP.md`
+- Child map files under `map_md/` grouped by surface and domain
 - Role references for these documents in `.github/roles/task.role.md` and `.github/roles/map.role.md`
 
 ## Operating Rules
 - Start by checking for an existing task file or checklist before touching code.
 - Treat any task file as the source of truth for status, scope, and next steps.
-- Start repair or update work by choosing the workspace map that matches the requested surface before broad search: `MAP.md` for the desktop app and shared workspace files, `MAP.admin.md` for the standalone admin web app, and `MAP.backend.md` for Flask or runtime work.
+- Start repair or update work by reading `MAP.md` first, then choosing the child map files under `map_md/` that match the requested surface and domain before broad search.
 - If a repair or update request is underspecified, treat the matching map file as required context. Read it before asking follow-up questions unless the missing information is external to the repository.
 - If the task obviously spans multiple surfaces, read each relevant map before broad search instead of forcing everything through one map.
 - Before implementation, always create a short plan and assess feasibility.
@@ -48,10 +47,10 @@ This workspace contains:
 	- Search for likely task files such as TASK.md, tasks.md, todo.md, progress.md, checklist.md, or any path named by the user.
 	- If one exists, read it first and identify the next unfinished item that matches the request.
 	- If none exists, say that no task file was found and continue with a temporary plan in chat.
-	- Decide the most likely task surface before broad search: desktop app, web admin, backend/runtime, or multiple.
-	- Check the matching workspace map file before broad search. Use `MAP.md` for desktop app and shared workspace files, `MAP.admin.md` for `admin-frontend/`, and `MAP.backend.md` for `server/` plus backend runtime files.
-	- If the request is cross-surface or ambiguous, read the most likely map first and then any adjacent map that the request clearly touches.
-	- If a required map file is missing and the task involves creating files, adding features, or updating existing code, plan to create that map file using `.github/roles/map.role.md` as part of the same session.
+	- Decide the most likely task surface before broad search: desktop app, web admin, backend/runtime, shared workflow, or multiple.
+	- Read `MAP.md` first, then read the matching child map files under `map_md/` before broad search.
+	- If the request is cross-surface or ambiguous, read every adjacent child map that the task clearly touches.
+	- If a required child map file is missing and the task involves creating files, adding features, or updating existing code, plan to create it using `.github/roles/map.role.md` as part of the same session.
 
 2. Plan before action
 	- Restate the requested outcome.
@@ -63,7 +62,7 @@ This workspace contains:
 	- Produce a concise implementation plan before editing files or running invasive commands.
 
 3. Clarify when needed
-	- Use the matching map file first to reduce ambiguity about where the change belongs.
+	- Use the matching child map files first to reduce ambiguity about where the change belongs.
 	- Ask only the questions required to unblock safe execution.
 	- If the user must provide assets, credentials, expected behavior, or acceptance rules, wait for that information.
 
@@ -114,11 +113,10 @@ Always include:
 - When creating `TASK.md`, follow `.github/roles/task.role.md`.
 
 ## Map File Handling
-- Prefer the map file that matches the requested surface at the workspace root.
-- Use `MAP.md` for the desktop app and shared workspace files, `MAP.admin.md` for the standalone admin web app, and `MAP.backend.md` for Flask or runtime work.
-- Treat each map file as a routing index: every file entry explains that file's responsibility in English so future agents can find the right edit location quickly.
-- When a required map file is missing and the task adds files, updates responsibilities, or needs location disambiguation, create it and backfill that surface before concluding.
-- When a file is created, split, renamed, or gains a new responsibility, update the map file for that surface in the same session.
-- When a task spans multiple surfaces, read and update every relevant map file instead of collapsing everything into one map.
-- When using a map file, prefer it to broad exploration for repair and update tasks, then verify locally in code.
+- Read `MAP.md` first and then use the child map files under `map_md/` that match the requested surface and domain.
+- Treat `MAP.md` as the routing index and each child map file as the file-level responsibility map for one surface/domain slice.
+- When a required child map file is missing and the task adds files, updates responsibilities, or needs location disambiguation, create it and backfill that slice before concluding.
+- When a file is created, split, renamed, or gains a new responsibility, update the correct child map file in the same session.
+- When a task spans multiple surfaces, read and update every relevant child map instead of collapsing everything into one file.
+- When using the map system, prefer it to broad exploration for repair and update tasks, then verify locally in code.
 - When creating or updating map files, follow `.github/roles/map.role.md`.

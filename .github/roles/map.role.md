@@ -1,90 +1,109 @@
-# MAP.md Role
-
-Use this role whenever you create, rebuild, or update the repository map file at the workspace root.
-
-## Purpose
-- `MAP.md` is the query map for the repository.
-- It helps agents and humans find the correct file to change before editing.
-- Every file description in `MAP.md` must be written in English.
-
-## When To Create Or Rebuild MAP.md
-- Create `MAP.md` immediately if it does not exist and the task creates files, adds functionality, changes file responsibilities, or needs better location accuracy.
-- Rebuild the affected sections when files are split, merged, renamed, or moved.
-- Update it in the same session as the code change. Do not defer the map update.
-
-## Coverage Rules
-- Cover the whole active workspace, not just the file touched by the current task, when `MAP.md` is created for the first time.
-- After `MAP.md` exists, update only the affected entries unless the structure has drifted enough that a broader cleanup is faster and safer.
-- Include source files, key configs, important scripts, and entry points.
-- Skip generated artifacts, caches, uploads, and dependency folders unless the repository intentionally edits them.
-
-## Entry Format
-- Keep one entry per file.
-- Use workspace-relative paths.
-- Use concise English.
-- Explain the file's main responsibility and, when useful, what kind of changes should be made there.
-
-Recommended format:
 # Map Files Role
 
-Use this role whenever you create, rebuild, or update the workspace map files at the repository root.
+Use this role whenever you create, rebuild, or update the repository map system at the workspace root.
 
 ## Purpose
-- `MAP.md` is the desktop app and shared workspace map.
-- `MAP.admin.md` is the standalone admin web app map.
-- `MAP.backend.md` is the backend and runtime map.
-- These files help agents and humans find the correct file to change before editing.
-- Every file description in every map file must be written in English.
+- `MAP.md` is the top-level workspace map index.
+- `MAP.md` should not describe every source file directly.
+- `MAP.md` must list child map files grouped by project surface and domain.
+- Child maps live in `map_md/` and contain file-level responsibilities.
+- File responsibility descriptions inside child maps must be written in English.
 
-## Surface Ownership
-- `MAP.md` covers `.github`, `frontend/`, and shared root files that help route desktop app work.
-- `MAP.admin.md` covers `admin-frontend/`.
-- `MAP.backend.md` covers `server/` and backend runtime files at the workspace root.
-- If a task clearly spans more than one surface, update every affected map file in the same session.
+## Required Structure
+- Keep one primary `MAP.md` at the repository root.
+- Keep child map files under `map_md/`.
+- Name child map files by surface and domain.
 
-## When To Create Or Rebuild Map Files
-- Create the required map file immediately if it does not exist and the task creates files, adds functionality, changes file responsibilities, or needs better location accuracy on that surface.
-- Rebuild the affected sections when files are split, merged, renamed, or moved.
-- Update the relevant map file in the same session as the code change. Do not defer the map update.
+Recommended naming pattern:
+- `map_md/MAP.<surface>.<domain>.md`
+
+Examples:
+- `map_md/MAP.desktop_app.auth.md`
+- `map_md/MAP.desktop_app.user_manager.md`
+- `map_md/MAP.backend.auth.md`
+- `map_md/MAP.backend.user_manager.md`
+
+## When To Create Or Update `MAP.md`
+- Create `MAP.md` immediately if it does not exist and the task creates files, adds functionality, changes file responsibilities, or needs better routing accuracy.
+- Update `MAP.md` when a new child map is added.
+- Update `MAP.md` when a child map is renamed, moved, merged, or split.
+- Update it in the same session as the code change. Do not defer map updates.
+
+## When To Create Or Update Child Maps In `map_md/`
+- A new file is added within a domain.
+- A file gains or changes primary responsibility.
+- Files are split, merged, renamed, or moved.
+- Existing map coverage has drifted and causes routing ambiguity.
 
 ## Coverage Rules
-- When a map file is created for the first time, cover the whole surface that file owns, not just the touched file.
-- After a map file exists, update only the affected entries unless the structure has drifted enough that a broader cleanup is faster and safer.
+- When building the map system for the first time, cover the full active workspace using the index + child map model.
+- After maps exist, update only affected child maps unless broader cleanup is faster and safer.
 - Include source files, key configs, important scripts, and entry points.
-- Skip generated artifacts, caches, uploads, and dependency folders unless the repository intentionally edits them.
+- Exclude generated artifacts, caches, uploads, and dependency folders unless the repository intentionally edits them.
 
-## Entry Format
-- Keep one entry per file.
+## `MAP.md` Entry Format (Index)
 - Use workspace-relative paths.
-- Use concise English.
-- Explain the file's main responsibility and, when useful, what kind of changes should be made there.
+- One line per child map file.
+- Group entries by high-level surfaces such as Desktop app, Admin web, Backend, Shared.
+- Keep descriptions concise and action-oriented.
 
-Recommended format:
+Example:
 
 ```md
-# Desktop App Map
+# Workspace Map Index
 
-## frontend
-- `frontend/src/hooks/useVideoEditor.js` - Coordinates editor state, detection, subtitles, export flow, and session restore logic.
-- `frontend/src/utils/timeMapping.js` - Maps timestamps between original video time and kept-scene timeline after deletions.
+## Desktop app
+- map_md/MAP.desktop_app.auth.md: Desktop authentication surface and related files.
+- map_md/MAP.desktop_app.user_manager.md: Desktop user management surface.
+
+## Backend
+- map_md/MAP.backend.auth.md: Backend auth APIs, middleware, and token checks.
+- map_md/MAP.backend.user_manager.md: Backend user domain services and routes.
+```
+
+## Child Map Entry Format (File-Level)
+- One entry per file.
+- Use workspace-relative paths.
+- Describe the file's primary responsibility.
+- Mention where to edit when useful.
+- If a file is now a thin wrapper, point to the real owner file.
+
+Example:
+
+```md
+# MAP.backend.auth
+
+## server
+- server/app.py - Initializes the Flask app and registers auth-related routes.
+- server/auth/routes.py - Defines auth endpoints and request/response contracts.
+- server/auth/service.py - Implements login logic, credential checks, and token issuance.
+- server/auth/middleware.py - Enforces auth guards for protected endpoints.
 ```
 
 ## Writing Rules
-- Group entries by top-level area such as `frontend`, `server`, `notebooks`, or `.github`.
-- Keep descriptions short, specific, and action-oriented.
+- Keep entries short, specific, and action-oriented.
 - Describe current responsibility, not implementation trivia.
-- Mention split boundaries after refactors when that helps future routing.
-- If a file has become a thin wrapper, say where the real behavior lives.
+- Record split boundaries after refactors when this helps future routing.
+- Keep terminology consistent across maps.
 
 ## Update Rules
-- When creating a new file, add its entry to the map file that owns that surface in the same session.
-- When a file gains a new responsibility, rewrite the entry to reflect the new owner behavior.
-- When a file is split because of the 400-line rule, update the original entry and add entries for the new files so future edits route correctly.
-- When a file is removed or renamed, remove or rename its entry immediately.
+- New file: add it to the appropriate child map in the same session.
+- Responsibility change: rewrite the file entry immediately.
+- Split due to file-size/refactor: update the original entry and add entries for new files.
+- Rename/remove: rename/remove entries immediately.
+- New child map: add it to `MAP.md` immediately.
 
-## Agent Notes
-- Choose the map file that matches the requested surface before broad search.
-- Use `MAP.md` for desktop app or shared workspace work, `MAP.admin.md` for web admin work, and `MAP.backend.md` for backend or runtime work.
-- If a task is ambiguous or cross-surface, read the most likely map first and then any additional map the task clearly touches.
-- If a map file is missing or stale enough to misroute the task, fix that map file as part of the same session.
-- Do not treat a map file as a substitute for verification. It is the routing index, not proof of behavior.
+## Agent Routing Notes
+- Always read `MAP.md` first to choose the correct child maps.
+- Do not start broad search before reading the index.
+- For cross-surface tasks, read all relevant child maps before editing.
+- If `MAP.md` or child maps are missing/stale enough to risk misrouting, fix them in the same session.
+- Maps are routing indexes, not proof of runtime behavior. Verify in code.
+
+## Completion Checklist
+- Was `MAP.md` updated when needed?
+- Were the correct `map_md/*` child maps updated?
+- Were newly added child maps listed in `MAP.md`?
+- Are child-map file descriptions in English?
+- Are all paths workspace-relative?
+- Are create/rename/split/merge/delete changes fully reflected?

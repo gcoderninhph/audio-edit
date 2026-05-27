@@ -247,7 +247,7 @@ def record_iap_bank_hook_history(api_key_record, payload):
 def list_iap_bank_hook_history_page(page=1, page_size=20, search_term='', start_date='', end_date=''):
     ensure_iap_bank_hook_history_schema()
     driver = _require_driver()
-    safe_page, safe_page_size = _normalize_pagination(page, page_size)
+    safe_page, safe_page_size = normalize_pagination(page, page_size)
     where_clause, where_params, safe_search_term, safe_start_at, safe_end_at = _build_history_filters(
         search_term=search_term,
         start_date=start_date,
@@ -255,7 +255,7 @@ def list_iap_bank_hook_history_page(page=1, page_size=20, search_term='', start_
     )
     try:
         total_items = count_iap_bank_hook_history_rows(where_clause, where_params)
-        pagination = _build_pagination(safe_page, safe_page_size, total_items)
+        pagination = build_pagination(safe_page, safe_page_size, total_items)
         rows = list_iap_bank_hook_history_rows(
             where_clause,
             where_params,
